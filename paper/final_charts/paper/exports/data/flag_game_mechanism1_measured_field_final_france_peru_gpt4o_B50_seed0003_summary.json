@@ -1,0 +1,65 @@
+{
+  "truth_positive_sign_convention": "h_i = log((p_i(T)+epsilon)/(p_i(R)+epsilon))",
+  "empirical_panel_role": "Panel A motivates the signed-field abstraction; Panels B-D use abstract random fields without country identities, flag images, or LLM outputs.",
+  "probe_inputs": [
+    "results/flag_game/empirical_crop_field_probes/france_gpt4o_B50_crops96/results.csv"
+  ],
+  "model": "gpt-4o",
+  "panel_target_country": "France",
+  "rival_country": "Peru",
+  "n_values": [
+    4,
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "phase_n_grid_size": 300,
+  "phase_j_grid_size": 300,
+  "phase_j_min": 0.0,
+  "phase_j_max": 2.1,
+  "mixture_mode": "empirical_anchor",
+  "raw_empirical_anchor_masses": {
+    "w_T": 0.3930635838150289,
+    "w_R": 0.43352601156069365,
+    "w_0": 0.17341040462427743
+  },
+  "empirical_anchor_masses": {
+    "w_T": 0.566,
+    "w_R": 0.333,
+    "w_0": 0.10100000000000003
+  },
+  "empirical_anchor_truth_mass_override": 0.566,
+  "empirical_anchor_rival_mass_override": 0.333,
+  "empirical_anchor_ambiguous_mass_override": null,
+  "empirical_anchor_truth_tau": 22.0,
+  "empirical_anchor_rival_tau": 28.138,
+  "empirical_anchor_rival_power": 1.512,
+  "j_star": 1.785,
+  "j_msg": 1.785,
+  "finite_agent_trials_per_N": 600,
+  "alpha": 0.2,
+  "beta": 0.827,
+  "kappa": 12,
+  "h_truth": 1.374,
+  "h_rival": -1.066,
+  "h_ambiguous": 0.0,
+  "sigma_truth": 0.2,
+  "sigma_rival": 0.2,
+  "sigma_ambiguous": 0.408,
+  "max_informative_mass": 0.98,
+  "mean_field_m_threshold": 0.7,
+  "mean_field_q_threshold": 0.45,
+  "outputs": {
+    "abstract_field_mixture": "paper/exports/data/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003_abstract_field_mixture.csv",
+    "mean_field_phase_diagram": "paper/exports/data/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003_mean_field_phase_diagram.csv",
+    "finite_agent_votes": "paper/exports/data/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003_finite_agent_votes.csv",
+    "finite_agent_endpoint_regimes": "paper/exports/data/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003_finite_agent_endpoint_regimes.csv",
+    "figures": [
+      "paper/exports/figures/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003.png",
+      "paper/exports/figures/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003.pdf",
+      "paper/exports/figures/flag_game_mechanism1_measured_field_final_france_peru_gpt4o_B50_seed0003.svg"
+    ]
+  }
+}

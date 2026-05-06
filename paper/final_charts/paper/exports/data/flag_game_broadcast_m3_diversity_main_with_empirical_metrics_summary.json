@@ -1,0 +1,102 @@
+{
+  "source_summary_csv": "poster/exports/support_visuals/flag_broadcast_alpha_mix_N8_m3_summary.csv",
+  "outputs": [
+    "paper/exports/figures/flag_game_broadcast_m3_diversity_main_with_empirical_metrics.png",
+    "paper/exports/figures/flag_game_broadcast_m3_diversity_main_with_empirical_metrics.pdf"
+  ],
+  "description": "prompted social evidence uptake alpha=1, m=3 broadcast team diversity with initial accuracy, collective accuracy, majority-vote accuracy, and social uplift",
+  "definitions": {
+    "initial": "initial private observer accuracy",
+    "collective": "mean final group accuracy after broadcast social exchange",
+    "majority_vote": "1 when the unique top-voted final country is the truth country; ties receive 0",
+    "social_uplift": "collective - initial",
+    "high_ciq_region": "Dotted edges mark the contiguous composition region within 0.025 of the maximum collective accuracy."
+  },
+  "high_ciq_region_edges": {
+    "left": 3.5,
+    "right": 7.5
+  },
+  "data": [
+    {
+      "gpt54_count": 0.0,
+      "iiq": 0.325,
+      "ciq": 0.55,
+      "vote_accuracy": 0.5714285714285714,
+      "social_lift": 0.225,
+      "success85_rate": 0.4,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 1.0,
+      "iiq": 0.31326530612244896,
+      "ciq": 0.525,
+      "vote_accuracy": 0.5142857142857142,
+      "social_lift": 0.211734693877551,
+      "success85_rate": 0.3142857142857143,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 2.0,
+      "iiq": 0.3423469387755102,
+      "ciq": 0.575,
+      "vote_accuracy": 0.6,
+      "social_lift": 0.23265306122448978,
+      "success85_rate": 0.42857142857142855,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 3.0,
+      "iiq": 0.37142857142857144,
+      "ciq": 0.6571428571428571,
+      "vote_accuracy": 0.6571428571428571,
+      "social_lift": 0.2857142857142857,
+      "success85_rate": 0.5714285714285714,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 4.0,
+      "iiq": 0.39183673469387753,
+      "ciq": 0.7035714285714286,
+      "vote_accuracy": 0.7142857142857143,
+      "social_lift": 0.31173469387755104,
+      "success85_rate": 0.6571428571428571,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 5.0,
+      "iiq": 0.35153061224489796,
+      "ciq": 0.6928571428571428,
+      "vote_accuracy": 0.7142857142857143,
+      "social_lift": 0.3413265306122449,
+      "success85_rate": 0.6571428571428571,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 6.0,
+      "iiq": 0.3464285714285714,
+      "ciq": 0.6964285714285714,
+      "vote_accuracy": 0.6857142857142857,
+      "social_lift": 0.35,
+      "success85_rate": 0.6857142857142857,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 7.0,
+      "iiq": 0.375,
+      "ciq": 0.7035714285714286,
+      "vote_accuracy": 0.6857142857142857,
+      "social_lift": 0.32857142857142857,
+      "success85_rate": 0.6857142857142857,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 8.0,
+      "iiq": 0.37142857142857144,
+      "ciq": 0.6357142857142857,
+      "vote_accuracy": 0.6285714285714286,
+      "social_lift": 0.2642857142857143,
+      "success85_rate": 0.6285714285714286,
+      "n_trials": 35.0
+    }
+  ]
+}

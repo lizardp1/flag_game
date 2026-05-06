@@ -1,0 +1,33 @@
+{
+  "source_csv": "results/flag_game/memory_conflict_probe_pilot/results.csv",
+  "n_valid_trials": 1296,
+  "outputs": {
+    "alignment_png": "paper/exports/figures/flag_game_memory_conflict_probe_alignment.png",
+    "alignment_pdf": "paper/exports/figures/flag_game_memory_conflict_probe_alignment.pdf",
+    "main_panel_png": "paper/exports/figures/flag_game_memory_conflict_probe_main_panel.png",
+    "main_panel_pdf": "paper/exports/figures/flag_game_memory_conflict_probe_main_panel.pdf",
+    "choice_png": "paper/exports/figures/flag_game_memory_conflict_probe_choice_axis.png",
+    "choice_pdf": "paper/exports/figures/flag_game_memory_conflict_probe_choice_axis.pdf",
+    "alignment_summary_csv": "paper/exports/data/flag_game_memory_conflict_probe_alignment_summary.csv"
+  },
+  "key_findings": {
+    "gpt54_private_compatible_weak_compatible_m1": 0.2222222222222222,
+    "gpt54_private_compatible_weak_compatible_m3": 0.24074074074074073,
+    "gpt4o_private_compatible_weak_compatible_m1": 0.0,
+    "gpt4o_private_compatible_weak_compatible_m3": 0.0,
+    "gpt54_private_compatible_weak_incompatible_m1": 0.46296296296296297,
+    "gpt54_private_compatible_weak_incompatible_m3": 0.3888888888888889,
+    "gpt54_social_overall_m1": 0.1574074074074074,
+    "gpt54_social_overall_m3": 0.1111111111111111,
+    "gpt4o_social_overall_m1": 0.2191358024691358,
+    "gpt4o_social_overall_m3": 0.1728395061728395,
+    "gpt54_incompatible_strong_incompatible_m1": 0.07407407407407407,
+    "gpt54_incompatible_strong_incompatible_m3": 0.06481481481481481
+  },
+  "interpretation_notes": [
+    "The paper-facing alignment figure merges third-country answers into private-compatible versus incompatible outcomes.",
+    "GPT-5.4 more often leaves the target-social binary axis by choosing countries that remain compatible with the private crop.",
+    "m=3 mostly reduces direct social copying and increases private-target retention, especially for GPT-5.4 under contradictory social evidence.",
+    "The incompatible band should be framed as residual perceptual fragility, especially for GPT-5.4 in strong-private contradictory trials, not as a social-integration effect."
+  ]
+}

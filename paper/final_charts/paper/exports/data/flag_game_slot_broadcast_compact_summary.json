@@ -1,0 +1,82 @@
+{
+  "description": "Compact slot-panel data derived from the original broadcast alpha/composition batch summaries. This preserves the mini-panel means and SEM bands without shipping the raw sweep tree.",
+  "alpha_common_seed_summary": [
+    {
+      "alpha": 0.0,
+      "ciq": 0.5430555555555555,
+      "ciq_se": 0.07474952459120925,
+      "n_seeds": 10.0
+    },
+    {
+      "alpha": 0.25,
+      "ciq": 0.6722222222222223,
+      "ciq_se": 0.08934585472102163,
+      "n_seeds": 10.0
+    },
+    {
+      "alpha": 0.5,
+      "ciq": 0.725,
+      "ciq_se": 0.08919219087779068,
+      "n_seeds": 10.0
+    },
+    {
+      "alpha": 0.75,
+      "ciq": 0.8,
+      "ciq_se": 0.08840532046133341,
+      "n_seeds": 10.0
+    },
+    {
+      "alpha": 1.0,
+      "ciq": 0.8097222222222221,
+      "ciq_se": 0.09340041130142693,
+      "n_seeds": 10.0
+    }
+  ],
+  "diversity_alpha_1_ciq_se": [
+    {
+      "gpt54_count": 0.0,
+      "ciq_se": 0.07232629146427175,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 1.0,
+      "ciq_se": 0.06947431663765329,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 2.0,
+      "ciq_se": 0.07141281338783949,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 3.0,
+      "ciq_se": 0.06995325141087569,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 4.0,
+      "ciq_se": 0.07102300829367081,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 5.0,
+      "ciq_se": 0.0718057269649851,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 6.0,
+      "ciq_se": 0.07342279184657186,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 7.0,
+      "ciq_se": 0.07602342944599311,
+      "n_trials": 35.0
+    },
+    {
+      "gpt54_count": 8.0,
+      "ciq_se": 0.08140885062684618,
+      "n_trials": 35.0
+    }
+  ]
+}

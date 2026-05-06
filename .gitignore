@@ -24,7 +24,6 @@ checkpoints/
 logs/
 
 # Large experimental outputs — keep local, archive to Zenodo
-paper/final_charts/
 results/
 sweeps/
 

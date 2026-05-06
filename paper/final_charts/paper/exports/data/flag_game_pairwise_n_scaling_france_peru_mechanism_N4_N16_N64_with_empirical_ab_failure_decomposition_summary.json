@@ -1,0 +1,184 @@
+{
+  "source_root": "results/flag_game/proposal_core_remaining_seeds7_w6_h4_scale25_noexamples_stop5/04_model_mix_alpha_neutral",
+  "case": {
+    "truth": "France",
+    "rival": "Peru",
+    "description": "main-text France/Peru mechanism variant with empirical decomposition panels A/B and mechanism panels for N=4,16,64; with a B panel showing only the wrong-consensus/polarization failure decomposition"
+  },
+  "n_values": [
+    4,
+    16,
+    64
+  ],
+  "interaction_round_definition": "Interaction rounds are measured as t/N, where t is the number of directed pairwise speaker-listener updates and N is the population size.",
+  "map_panels": [
+    {
+      "N": 4,
+      "final_outcome": "polarization",
+      "final_accuracy": 0.0,
+      "final_vote_accuracy": 0.0,
+      "final_vote_country": "Peru",
+      "final_counts": {
+        "Peru": 3,
+        "Guinea": 1
+      },
+      "nearest_same_country_fraction": 0.75,
+      "mean_same_country_center_distance": 5.070367516975993,
+      "mean_different_country_center_distance": 11.456438958950992,
+      "mean_same_country_iou": 0.062111801242236024,
+      "mean_different_country_iou": 0.0,
+      "same_country_pair_count": 3,
+      "different_country_pair_count": 3
+    },
+    {
+      "N": 16,
+      "final_outcome": "correct_consensus",
+      "final_accuracy": 1.0,
+      "final_vote_accuracy": 1.0,
+      "final_vote_country": "France",
+      "final_counts": {
+        "France": 16
+      },
+      "nearest_same_country_fraction": 1.0,
+      "mean_same_country_center_distance": 8.500258873584183,
+      "mean_different_country_center_distance": null,
+      "mean_same_country_iou": 0.05721961041755092,
+      "mean_different_country_iou": null,
+      "same_country_pair_count": 120,
+      "different_country_pair_count": 0
+    },
+    {
+      "N": 64,
+      "final_outcome": "polarization",
+      "final_accuracy": 0.609375,
+      "final_vote_accuracy": 1.0,
+      "final_vote_country": "France",
+      "final_counts": {
+        "France": 39,
+        "Peru": 25
+      },
+      "nearest_same_country_fraction": 0.921875,
+      "mean_same_country_center_distance": 6.592581313782891,
+      "mean_different_country_center_distance": 10.625416307481332,
+      "mean_same_country_iou": 0.0769984555542099,
+      "mean_different_country_iou": 0.014884680898994782,
+      "same_country_pair_count": 1041,
+      "different_country_pair_count": 975
+    }
+  ],
+  "trace_panels": [
+    {
+      "N": 4,
+      "final_outcome": "polarization",
+      "time_to_correct_consensus": null,
+      "final_truth_share": 0.0,
+      "final_rival_share": 0.75,
+      "final_other_share": 0.25,
+      "final_interaction_round": 20.0
+    },
+    {
+      "N": 16,
+      "final_outcome": "correct_consensus",
+      "time_to_correct_consensus": 208,
+      "final_truth_share": 1.0,
+      "final_rival_share": 0.0,
+      "final_other_share": 0.0,
+      "final_interaction_round": 18.5
+    },
+    {
+      "N": 64,
+      "final_outcome": "polarization",
+      "time_to_correct_consensus": null,
+      "final_truth_share": 0.609375,
+      "final_rival_share": 0.390625,
+      "final_other_share": 0.0,
+      "final_interaction_round": 32.0
+    }
+  ],
+  "empirical_decomposition_panels": {
+    "source_stem": "flag_game_empirical_decomposition",
+    "included_panels": [
+      "a) Population-size sweep",
+      "b) Failure decomposition by N"
+    ],
+    "endpoint_mode": "failure_decomposition",
+    "panel_scope": {
+      "A_B": "aggregate over runs in the GPT-4o pairwise population-size sweep",
+      "C_D": "single representative France/Peru seed family (seed_0003)"
+    },
+    "pairwise_rows": [
+      {
+        "cut": "population",
+        "x": 4.0,
+        "label": "4",
+        "iiq": 0.2894736842105263,
+        "ciq": 0.5394736842105263,
+        "terminal": 0.5263157894736842,
+        "social_lift": 0.25,
+        "correct_consensus": 0.5,
+        "wrong_consensus": 0.2631578947368421,
+        "polarization": 0.23684210526315788
+      },
+      {
+        "cut": "population",
+        "x": 8.0,
+        "label": "8",
+        "iiq": 0.3618421052631579,
+        "ciq": 0.5855263157894737,
+        "terminal": 0.5263157894736842,
+        "social_lift": 0.22368421052631576,
+        "correct_consensus": 0.47368421052631576,
+        "wrong_consensus": 0.07894736842105263,
+        "polarization": 0.4473684210526316
+      },
+      {
+        "cut": "population",
+        "x": 16.0,
+        "label": "16",
+        "iiq": 0.31414473684210525,
+        "ciq": 0.6266447368421053,
+        "terminal": 0.5789473684210527,
+        "social_lift": 0.31250000000000006,
+        "correct_consensus": 0.5,
+        "wrong_consensus": 0.02631578947368421,
+        "polarization": 0.39473684210526316
+      },
+      {
+        "cut": "population",
+        "x": 32.0,
+        "label": "32",
+        "iiq": 0.33449172325976234,
+        "ciq": 0.6126644736842105,
+        "terminal": 0.6578947368421053,
+        "social_lift": 0.27817275042444817,
+        "correct_consensus": 0.4473684210526316,
+        "wrong_consensus": 0.0,
+        "polarization": 0.5
+      },
+      {
+        "cut": "population",
+        "x": 64.0,
+        "label": "64",
+        "iiq": 0.328125,
+        "ciq": 0.5879934210526315,
+        "terminal": 0.5789473684210527,
+        "social_lift": 0.2598684210526315,
+        "correct_consensus": 0.39473684210526316,
+        "wrong_consensus": 0.05263157894736842,
+        "polarization": 0.5
+      },
+      {
+        "cut": "population",
+        "x": 128.0,
+        "label": "128",
+        "iiq": 0.31087398914662695,
+        "ciq": 0.5899493243243243,
+        "terminal": 0.6216216216216216,
+        "social_lift": 0.2790753351776974,
+        "correct_consensus": 0.3783783783783784,
+        "wrong_consensus": 0.0,
+        "polarization": 0.5945945945945946
+      }
+    ]
+  }
+}
