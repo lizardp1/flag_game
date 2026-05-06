@@ -1,0 +1,26 @@
+backend: openai
+model: gpt-4o
+N: 8
+T: 160
+H: 8
+interaction_m: 3
+social_susceptibility: 0.5
+prompt_social_susceptibility: false
+prompt_style: open_country
+country_pool: world_rectangle_images
+canvas_width: 24
+canvas_height: 16
+tile_width: 6
+tile_height: 4
+render_scale: 25
+image_detail: high
+temperature: 0.2
+top_p: 1.0
+max_tokens: 250
+probe_every: 4
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+disable_memory_updates: false
+output:
+  save_crop_images: true
+  make_plots: true

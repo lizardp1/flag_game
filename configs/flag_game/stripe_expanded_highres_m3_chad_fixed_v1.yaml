@@ -1,0 +1,24 @@
+backend: openai
+model: gpt-5.4
+N: 16
+T: 0
+H: 0
+interaction_m: 3
+social_susceptibility: 0.5
+fixed_truth_country: Chad
+country_pool: stripe_expanded_24
+canvas_width: 24
+canvas_height: 16
+tile_width: 4
+tile_height: 3
+render_scale: 25
+temperature: 0.2
+top_p: 1.0
+max_tokens: 200
+probe_every: 1
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+disable_memory_updates: false
+output:
+  save_crop_images: true
+  make_plots: false

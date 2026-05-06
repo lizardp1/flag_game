@@ -1,0 +1,22 @@
+backend: openai
+model: gpt-4o
+N: 8
+T: 160
+H: 8
+interaction_m: 3
+country_pool: stripe_expanded_24
+canvas_width: 24
+canvas_height: 16
+tile_width: 3
+tile_height: 4
+render_scale: 8
+temperature: 0.2
+top_p: 1.0
+max_tokens: 200
+probe_every: 4
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+disable_memory_updates: false
+output:
+  save_crop_images: true
+  make_plots: true

@@ -1,0 +1,28 @@
+backend: openai
+model: gpt-4o
+prestige_model_label: gpt-5.4
+comparison_model_label: gpt-4o
+N: 8
+rounds: 10
+H: 8
+interaction_m: 3
+country_pool: stripe_expanded_24
+canvas_width: 24
+canvas_height: 16
+tile_width: 6
+tile_height: 4
+render_scale: 25
+image_detail: high
+temperature: 0.2
+top_p: 1.0
+max_tokens: 250
+max_influential_agents: 3
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+early_stop_round_window: 3
+agent_workers: 4
+seed_workers: 1
+condition_workers: 1
+output:
+  save_crop_images: true
+  make_plots: true
