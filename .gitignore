@@ -1,0 +1,37 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# ML artifacts
+*.pt
+*.ckpt
+*.safetensors
+*.pth
+*.bin
+wandb/
+runs/
+checkpoints/
+logs/
+
+# Large experimental outputs — keep local, archive to Zenodo
+results/
+sweeps/
+
+# Editors
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/
+
