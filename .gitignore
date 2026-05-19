@@ -30,3 +30,8 @@ sweeps/
 # Editors
 .vscode/
 .idea/
+
+# Node
+node_modules/
+dist/
+
