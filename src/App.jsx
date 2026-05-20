@@ -473,6 +473,23 @@ function MiniFlag({country}){const svg=FLAG_SVG[country];if(!svg)return null;
 function InlineFlag({country,w=18}){const svg=FLAG_SVG[country];if(!svg)return null;const h=Math.round(w*0.72);
   return(<span dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice" ')}} style={{display:'inline-block',width:w,height:h,lineHeight:0,borderRadius:2,border:`1px solid ${T.blt}`,overflow:'hidden',verticalAlign:'middle',flexShrink:0}}/>);}
 
+/* ═══════ FIRST-PERSON HELPERS ═══════ */
+function scoreFlagAgainstCrop(an,f){let p=0;const circC=typeof f.circ==='object'?f.circ?.color:f.circ;const allC=[...(f.s||[]),f.tri,f.cross,circC,f.canton,f.cantonCross,f.bend,f.bg,f.diamond,f.star,f.pstars?.color,...(f.diag||[])].filter(Boolean);
+  if(an.orientation&&f.s)p+=an.orientation===(f.o||'h')?1:-1;
+  an.colors.forEach(col=>{p+=allC.includes(col)?1.5:-0.5;});
+  if(an.ordered.length>0&&f.s)p+=isSubseq(f.s,an.ordered)?2:-0.5;
+  if(f.tri&&an.colors.includes(f.tri))p+=1.5;if(f.cross&&an.colors.includes(f.cross))p+=1.5;if(circC&&an.colors.includes(circC))p+=1.5;if(f.diamond&&an.colors.includes(f.diamond))p+=1.5;
+  return p;}
+function topCandidates(an,k=8){return F.map(f=>({c:f.c,score:scoreFlagAgainstCrop(an,f)})).sort((a,b)=>b.score-a.score||a.c.localeCompare(b.c)).slice(0,k).map(x=>x.c);}
+
+function CropView({country,top,left,w=300}){const svg=FLAG_SVG[country];if(!svg)return null;
+  const m=svg.match(/<svg[^>]*>([\s\S]+)<\/svg>/);if(!m)return null;
+  const vbX=left/GW*640,vbY=top/GH*480,vbW=TW/GW*640,vbH=TH/GH*480;
+  const h=Math.round(w*vbH/vbW);
+  return(<div style={{display:'inline-block',borderRadius:8,overflow:'hidden',border:`3px solid ${T.bdr}`,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',background:'#000',lineHeight:0}}>
+    <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} width={w} height={h} preserveAspectRatio="xMidYMid slice" dangerouslySetInnerHTML={{__html:m[1]}}/>
+  </div>);}
+
 /* ═══════ CHART ═══════ */
 function TrajChart({data,active,truth,onHover}){if(!data.length)return(<div style={{height:310,display:'flex',alignItems:'center',justifyContent:'center',color:T.fnt,fontSize:12,fontStyle:'italic'}}>Trajectory appears once the simulation runs</div>);
   const pk={};data.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));const shown=active.filter(c=>pk[c]>0.02||c===truth).sort((a,b)=>(pk[b]||0)-(pk[a]||0)).slice(0,14);
@@ -528,9 +545,11 @@ function FlagGame(){
   const removed=F_RAW.length-F.length;
 
   return(<div>
-    <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among minds that see only fragments.</p></header>
     <div style={S.main}>
+      <header style={{textAlign:'center',marginBottom:24,marginTop:24,paddingTop:8}}>
+        <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}><span style={{fontWeight:700,fontStyle:'italic'}}>Sandbox</span></h2>
+        <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Place agents on a known flag and watch consensus emerge — or fail — through pairwise gossip.</p>
+      </header>
       <div style={S.bar}>
         <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
@@ -637,11 +656,208 @@ function AdversarialGame(){
   </div>);
 }
 
+/* ═══════ FIRST-PERSON GAME ═══════ */
+function FirstPersonGame(){
+  const[lvl,setLvl]=useState(0);
+  const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
+  const[playerTop,setPlayerTop]=useState(0);
+  const[playerLeft,setPlayerLeft]=useState(0);
+  const[playerMem,setPlayerMem]=useState([]);
+  const[playerGuess,setPlayerGuess]=useState(null);
+  const[aiAgents,setAiAgents]=useState([]);
+  const[round,setRound]=useState(0);
+  const[phase,setPhase]=useState('init');
+  const[messages,setMessages]=useState([]);
+  const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);
+  const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
+  const aiGuesses=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
+  const candidates=useMemo(()=>{const an=analyzeCrop(grid,playerTop,playerLeft);const top=topCandidates(an,8);const out=[...top];aiGuesses.forEach(g=>{if(g&&!out.includes(g))out.push(g);});return out;},[grid,playerTop,playerLeft,aiGuesses]);
+
+  const setup=useCallback((newLvl)=>{
+    const useLvl=newLvl===undefined?lvl:newLvl;
+    const ts=LEVELS[useLvl].truth;
+    const newTruth=ts[Math.floor(Math.random()*ts.length)];
+    const pT=Math.floor(Math.random()*(GH-TH+1));
+    const pL=Math.floor(Math.random()*(GW-TW+1));
+    const ais=Array.from({length:5},()=>({top:Math.floor(Math.random()*(GH-TH+1)),left:Math.floor(Math.random()*(GW-TW+1)),memory:[]}));
+    setTruth(newTruth);setPlayerTop(pT);setPlayerLeft(pL);setPlayerMem([]);setPlayerGuess(null);
+    setAiAgents(ais);setRound(0);setMessages([]);setPhase('choose-initial');
+  },[lvl]);
+
+  useEffect(()=>{setup();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick=(c)=>{if(phase==='commit'||phase==='done')return;setPlayerGuess(c);if(phase==='choose-initial')setPhase('playing');};
+
+  const nextRound=()=>{
+    if(!playerGuess||phase!=='playing')return;
+    const rng=mkRng(Date.now()+round*1000);
+    const all=[{top:playerTop,left:playerLeft,memory:[...playerMem],isPlayer:true,idx:1},
+      ...aiAgents.map((a,i)=>({...a,memory:[...a.memory],isPlayer:false,idx:i+2}))];
+    const newMsgs=[...messages];
+    for(let step=0;step<3;step++){
+      let si,li;
+      if(step===0){if(rng()<0.5){si=0;li=1+Math.floor(rng()*5);}else{li=0;si=1+Math.floor(rng()*5);}}
+      else{si=Math.floor(rng()*6);li=Math.floor(rng()*5);if(li>=si)li++;}
+      const speaker=all[si],listener=all[li];
+      const sg=speaker.isPlayer?playerGuess:bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory);
+      if(listener.memory.length>=H_MEM)listener.memory.shift();
+      listener.memory.push(sg);
+      if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:sg});
+      else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:sg});
+    }
+    setPlayerMem(all[0].memory);
+    setAiAgents(all.slice(1).map(a=>({top:a.top,left:a.left,memory:a.memory})));
+    setMessages(newMsgs);
+    const nR=round+1;setRound(nR);if(nR>=5)setPhase('commit');
+  };
+
+  const lockIn=()=>setPhase('done');
+  const playAgain=()=>setup();
+  const isCorrect=phase==='done'&&playerGuess===truth;
+  const collectiveCorrect=phase==='done'?aiGuesses.filter(g=>g===truth).length+(playerGuess===truth?1:0):0;
+
+  return(<div style={{marginTop:48,marginBottom:32,borderTop:`1px solid ${T.bdr}`,paddingTop:36}}>
+    <header style={{textAlign:'center',marginBottom:24}}>
+      <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>Play <span style={{fontWeight:700,fontStyle:'italic'}}>as Agent</span></h2>
+      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>You see only a small fragment of a hidden flag. Five other AI agents see other fragments. Through gossip, can you figure out the truth?</p>
+    </header>
+
+    <div style={S.bar}>
+      <label style={{fontSize:10,color:T.dim}}>Level</label>
+      <select value={lvl} onChange={e=>{const nl=+e.target.value;setLvl(nl);setup(nl);}} style={S.sel}>
+        {LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}
+      </select>
+      <div style={S.sep}/>
+      <span style={{fontSize:11,color:T.fnt}}>Round {Math.min(round,5)} / 5</span>
+      {phase==='done'&&<><div style={S.sep}/><button onClick={playAgain} style={S.btn(true,'#5b86c4')}>→ Play Again</button></>}
+    </div>
+
+    {phase==='done'?(
+      <ResultPanel truth={truth} playerGuess={playerGuess} playerTop={playerTop} playerLeft={playerLeft} aiAgents={aiAgents} aiGuesses={aiGuesses} isCorrect={isCorrect} collectiveCorrect={collectiveCorrect}/>
+    ):(<>
+      <div style={S.row}>
+        <div style={{flex:'1 1 360px',minWidth:300}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>Your view</div>
+            <CropView country={truth} top={playerTop} left={playerLeft} w={320}/>
+            <div style={{marginTop:10,fontSize:11,color:T.fnt,fontStyle:'italic'}}>This is all you can see of the flag.</div>
+          </div>
+          <div style={{marginTop:18,padding:'14px 16px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
+            <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>Your current guess</div>
+            {playerGuess?(<div style={{display:'flex',alignItems:'center',gap:10}}><InlineFlag country={playerGuess} w={42}/><span style={{fontSize:20,fontFamily:T.ser,fontStyle:'italic',color:T.txt}}>{playerGuess}</span></div>):
+              (<p style={{fontSize:13,color:T.mut,margin:0,fontStyle:'italic'}}>Pick a country from the candidates below to start.</p>)}
+          </div>
+        </div>
+
+        <div style={{flex:'1 1 360px',minWidth:300}}>
+          <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>What the others think</div>
+          <div style={{padding:'10px 14px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
+            {aiAgents.map((a,i)=>{const g=aiGuesses[i];return(<div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',fontSize:13,color:T.txt}}>
+              <span style={{width:22,height:22,borderRadius:11,background:'#5b86c4',color:'#fff',fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+2}</span>
+              <span style={{fontSize:11,color:T.fnt,minWidth:54}}>Agent {i+2}:</span>
+              {g?(<><InlineFlag country={g} w={22}/><span style={{fontStyle:'italic',color:T.txt}}>{g}</span></>):<span style={{color:T.fnt,fontStyle:'italic'}}>—</span>}
+            </div>);})}
+          </div>
+
+          <div style={{marginTop:18,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>Recent messages</div>
+          <div style={{padding:'10px 14px',background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`,minHeight:90,maxHeight:160,overflowY:'auto'}}>
+            {messages.length===0?<p style={{fontSize:11,color:T.fnt,fontStyle:'italic',margin:0}}>No gossip yet — press Next Round to start.</p>:messages.slice(-6).map((m,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',fontSize:12,borderBottom:i<Math.min(messages.length,6)-1?`1px dashed ${T.bdr}`:'none'}}>
+                <span style={{color:T.fnt,fontSize:9,minWidth:22}}>R{m.r}</span>
+                <span style={{color:m.kind==='sent'?'#5b86c4':T.mut,minWidth:106}}>{m.kind==='sent'?`You → Agent ${m.other}`:`Agent ${m.other} → You`}</span>
+                <InlineFlag country={m.country} w={18}/>
+                <span style={{fontSize:11,color:T.txt}}>{m.country}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{marginTop:24,padding:'16px 18px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
+        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>Possible countries (color-matched to your view)</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
+          {candidates.map(c=>(<button key={c} onClick={()=>pick(c)} disabled={phase==='commit'}
+            style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:7,
+              border:`2px solid ${c===playerGuess?'#5b86c4':T.bdr}`,
+              background:c===playerGuess?'#e6efff':T.card,
+              cursor:phase==='commit'?'default':'pointer',
+              fontSize:13,color:T.txt,fontFamily:T.san,textAlign:'left',transition:'all .15s'}}>
+            <InlineFlag country={c} w={32}/>
+            <span style={{fontWeight:c===playerGuess?600:400}}>{c}</span>
+          </button>))}
+        </div>
+      </div>
+
+      <div style={{textAlign:'center',marginTop:24}}>
+        {phase==='playing'&&<button onClick={nextRound} disabled={!playerGuess}
+          style={{padding:'12px 32px',borderRadius:8,border:'none',cursor:playerGuess?'pointer':'default',
+            fontWeight:600,fontSize:14,background:playerGuess?'#6ec89b':T.card,color:playerGuess?'#fff':T.fnt,opacity:playerGuess?1:0.5,transition:'all .15s'}}>
+          Next Round →
+        </button>}
+        {phase==='choose-initial'&&<p style={{fontSize:12,color:T.mut,fontStyle:'italic',margin:0}}>↑ Choose a country to begin</p>}
+        {phase==='commit'&&<button onClick={lockIn}
+          style={{padding:'12px 32px',borderRadius:8,border:'none',cursor:'pointer',fontWeight:600,fontSize:14,background:'#e87b6f',color:'#fff'}}>
+          🔒 Lock in your final answer
+        </button>}
+      </div>
+    </>)}
+  </div>);
+}
+
+function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,isCorrect,collectiveCorrect}){
+  return(<div>
+    <div style={{textAlign:'center',padding:'24px 20px',background:isCorrect?'#6ec89b15':'#e87b6f15',borderRadius:12,border:`2px solid ${isCorrect?'#6ec89b':'#e87b6f'}`,marginBottom:24}}>
+      <div style={{fontSize:48,lineHeight:1,color:isCorrect?'#6ec89b':'#e87b6f',marginBottom:8}}>{isCorrect?'✓':'✗'}</div>
+      <h3 style={{fontSize:24,fontFamily:T.ser,fontStyle:'italic',color:isCorrect?'#3a8a64':'#a85047',margin:'0 0 6px'}}>{isCorrect?'You were right.':'You were misled.'}</h3>
+      <p style={{fontSize:13,color:T.mut,margin:0}}>
+        Truth: <strong style={{color:T.txt}}>{truth}</strong> · Your guess: <strong style={{color:T.txt}}>{playerGuess}</strong> · Collective: <strong style={{color:T.txt}}>{collectiveCorrect}/6</strong> correct
+      </p>
+    </div>
+
+    <div style={{textAlign:'center',marginBottom:24}}>
+      <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>The truth was</div>
+      <div style={{display:'inline-block',borderRadius:8,overflow:'hidden',border:`3px solid ${T.bdr}`,boxShadow:'0 4px 16px rgba(0,0,0,0.15)',lineHeight:0,width:360,maxWidth:'90%'}}>
+        <div dangerouslySetInnerHTML={{__html:(FLAG_SVG[truth]||'').replace('<svg ','<svg width="100%" ')}} style={{width:'100%'}}/>
+      </div>
+      <div style={{marginTop:10,fontSize:22,fontFamily:T.ser,fontStyle:'italic',color:T.txt}}>{truth}</div>
+    </div>
+
+    <div>
+      <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:12,textAlign:'center'}}>Everyone's view, now revealed</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:14}}>
+        <div style={{textAlign:'center',padding:'12px 10px',background:T.card,borderRadius:8,border:`2px solid #5b86c4`}}>
+          <div style={{fontSize:10,fontWeight:700,color:'#5b86c4',letterSpacing:'1.2px',marginBottom:8}}>YOU</div>
+          <CropView country={truth} top={playerTop} left={playerLeft} w={140}/>
+          <div style={{fontSize:10,marginTop:8,color:T.fnt}}>Guessed</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:3}}>
+            <InlineFlag country={playerGuess} w={16}/>
+            <span style={{fontSize:11,fontWeight:600,color:playerGuess===truth?'#3a8a64':'#a85047'}}>{playerGuess}</span>
+          </div>
+        </div>
+        {aiAgents.map((a,i)=>(<div key={i} style={{textAlign:'center',padding:'12px 10px',background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.mut,letterSpacing:'1.2px',marginBottom:8}}>AGENT {i+2}</div>
+          <CropView country={truth} top={a.top} left={a.left} w={140}/>
+          <div style={{fontSize:10,marginTop:8,color:T.fnt}}>Guessed</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:3}}>
+            <InlineFlag country={aiGuesses[i]} w={16}/>
+            <span style={{fontSize:11,fontWeight:600,color:aiGuesses[i]===truth?'#3a8a64':'#a85047'}}>{aiGuesses[i]}</span>
+          </div>
+        </div>))}
+      </div>
+    </div>
+  </div>);
+}
+
 /* ═══════ ROOT ═══════ */
 export default function App(){
   return(<div style={S.page}>
-    <FlagGame/>
-    <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}><AdversarialGame/></div>
+    <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among minds that see only fragments.</p></header>
+    <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
+      <FlagGame/>
+      <FirstPersonGame/>
+      <AdversarialGame/>
+    </div>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
   </div>);
 }
