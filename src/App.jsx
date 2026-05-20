@@ -183,7 +183,7 @@ function genPal(n){const o=[];for(let i=0;i<n;i++){const h=(i*137.508)%360;o.pus
 
 /* ═══════ CONFIG ═══════ */
 const GW=24,GH=16,TW=6,TH=4;
-const MAX_A=10,H_MEM=8,ALPHA=0.5,CON_T=0.85,CON_RUNS=5,POL_T=0.25;
+const MAX_A=10,H_MEM=8,ALPHA=0.5,CON_T=0.85,CON_RUNS=3,POL_T=0.25;
 function mkRng(seed){let s=seed|0;return()=>{s=(s*1664525+1013904223)&0x7fffffff;return s/0x7fffffff;};}
 
 /* ═══════ INTERNAL RENDERING (for agent scoring only — never displayed) ═══════ */
