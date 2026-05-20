@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, createContext
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { rasterizeFlag, cropAgentView, llmInteraction } from './llm';
 
-const ApiKeyContext = createContext({ apiKey: '', setApiKey: () => {} });
-const useApiKey = () => useContext(ApiKeyContext);
+const PasswordContext = createContext({ password: '', setPassword: () => {} });
+const usePassword = () => useContext(PasswordContext);
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -439,28 +439,28 @@ async function prepareAgents(agents,truthFlag){
   return agents.map(a=>({...a,memory:[],cropDataUrl:cropAgentView(canvas,a.top,a.left)}));
 }
 
-async function llmSpeak(agent,apiKey){
-  return llmInteraction({cropDataUrl:agent.cropDataUrl,memoryLines:agent.memory,model:agent.model,apiKey,m:INTERACTION_M,socialSusceptibility:SUSCEPTIBILITY,promptSocialSusceptibility:PROMPT_SUSCEPTIBILITY,catalog:CATALOG});
+async function llmSpeak(agent,password){
+  return llmInteraction({cropDataUrl:agent.cropDataUrl,memoryLines:agent.memory,model:agent.model,password,m:INTERACTION_M,socialSusceptibility:SUSCEPTIBILITY,promptSocialSusceptibility:PROMPT_SUSCEPTIBILITY,catalog:CATALOG});
 }
 
 function runStep(ag,grid,rng){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuess(analyzeCrop(grid,ag[si].top,ag[si].left),ag[si].memory,ag[si]);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
 function probeAll(ag,grid){return ag.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
-async function runStepLLM(ag,rng,apiKey,onCall){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si],listener=ag[li];
-  const msg=await llmSpeak(speaker,apiKey);onCall&&onCall();
+async function runStepLLM(ag,rng,password,onCall){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si],listener=ag[li];
+  const msg=await llmSpeak(speaker,password);onCall&&onCall();
   if(listener.memory.length>=H_MEM)listener.memory.shift();listener.memory.push(msg.memoryLine);
   return{speakerId:speaker.id,listenerId:listener.id,country:msg.country,memoryLine:msg.memoryLine};}
-async function runStepLLMAdv(ag,rng,apiKey,advTarget,onCall){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si],listener=ag[li];
+async function runStepLLMAdv(ag,rng,password,advTarget,onCall){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si],listener=ag[li];
   let memoryLine,country;
   if(speaker.adv){country=advTarget;memoryLine=advTarget;}
-  else{const msg=await llmSpeak(speaker,apiKey);onCall&&onCall();country=msg.country;memoryLine=msg.memoryLine;}
+  else{const msg=await llmSpeak(speaker,password);onCall&&onCall();country=msg.country;memoryLine=msg.memoryLine;}
   if(listener.memory.length>=H_MEM)listener.memory.shift();listener.memory.push(memoryLine);
   return{speakerId:speaker.id,listenerId:listener.id,country,memoryLine};}
-async function probeAllLLM(ag,apiKey,onCall){
-  const results=await Promise.all(ag.map(a=>llmSpeak(a,apiKey).then(r=>{onCall&&onCall();return r.country;})));
+async function probeAllLLM(ag,password,onCall){
+  const results=await Promise.all(ag.map(a=>llmSpeak(a,password).then(r=>{onCall&&onCall();return r.country;})));
   return results;}
-async function probeAllLLMAdv(ag,apiKey,advTarget,onCall){
-  const results=await Promise.all(ag.map(a=>a.adv?Promise.resolve(advTarget):llmSpeak(a,apiKey).then(r=>{onCall&&onCall();return r.country;})));
+async function probeAllLLMAdv(ag,password,advTarget,onCall){
+  const results=await Promise.all(ag.map(a=>a.adv?Promise.resolve(advTarget):llmSpeak(a,password).then(r=>{onCall&&onCall();return r.country;})));
   return results;}
 function compShares(gs){const ct={};gs.forEach(g=>{ct[g]=(ct[g]||0)+1;});const n=gs.length||1;const sh={};Object.entries(ct).forEach(([c,v])=>{sh[c]=v/n;});return sh;}
 function classifyOutcome(shares,truthC){const ent=Object.entries(shares).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);if(!ent.length)return{label:'Fragmentation',icon:'◇',color:'#9a9183',details:'No guesses'};const[topC,topS]=ent[0];
@@ -527,7 +527,7 @@ function AgentList({agents,guesses,phase,onRemove,onToggle}){const[hov,setHov]=u
 
 /* ═══════ MAIN ═══════ */
 function FlagGame(){
-  const{apiKey}=useApiKey();
+  const{password}=usePassword();
   const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(LEVELS[0].truth[0]);const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(60);const[active,setActive]=useState([]);
@@ -544,25 +544,25 @@ function FlagGame(){
   const[calls,setCalls]=useState(0);const cancelRef=useRef(false);
   const start=useCallback(async()=>{if(N<2||probing)return;setApiErr(null);setCalls(0);
     let sa=agents.map(a=>({...a,memory:[]}));
-    if(apiKey){setProbing(true);try{sa=await prepareAgents(sa,truthFlag);}catch(e){setApiErr(e.message||String(e));setProbing(false);return;}setProbing(false);}
+    if(password){setProbing(true);try{sa=await prepareAgents(sa,truthFlag);}catch(e){setApiErr(e.message||String(e));setProbing(false);return;}setProbing(false);}
     const rng=mkRng(Date.now());
-    let g0;if(apiKey){try{g0=await probeAllLLM(sa,apiKey,()=>setCalls(c=>c+1));}catch(e){setApiErr(e.message||String(e));return;}}else{g0=probeAll(sa,grid);}
-    const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey,truthFlag,probing]);
+    let g0;if(password){try{g0=await probeAllLLM(sa,password,()=>setCalls(c=>c+1));}catch(e){setApiErr(e.message||String(e));return;}}else{g0=probeAll(sa,grid);}
+    const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,password,truthFlag,probing]);
 
   useEffect(()=>{if(phase!=='running')return;cancelRef.current=false;
     const onCall=()=>setCalls(c=>c+1);
     const tick=async()=>{const s=sim.current;if(!s||s.done){setPhase('done');return;}
       if(cancelRef.current)return;
       s.step++;
-      if(s.step>maxT){let g;try{g=apiKey?await probeAllLLM(s.agents,apiKey,onCall):probeAll(s.agents,grid);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
+      if(s.step>maxT){let g;try{g=password?await probeAllLLM(s.agents,password,onCall):probeAll(s.agents,grid);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
         const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);return;}
-      try{if(apiKey)await runStepLLM(s.agents,s.rng,apiKey,onCall);else runStep(s.agents,grid,s.rng);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
+      try{if(password)await runStepLLM(s.agents,s.rng,password,onCall);else runStep(s.agents,grid,s.rng);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
       if(cancelRef.current)return;setStep(s.step);
-      if(s.step%pe===0){s.pr++;let g;try{g=apiKey?await probeAllLLM(s.agents,apiKey,onCall):probeAll(s.agents,grid);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
+      if(s.step%pe===0){s.pr++;let g;try{g=password?await probeAllLLM(s.agents,password,onCall):probeAll(s.agents,grid);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
         const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');return;}}else{s.conRuns=0;}}
       setTimeout(tick,spd);};
-    setTimeout(tick,spd);return()=>{cancelRef.current=true;};},[phase,spd,grid,maxT,pe,apiKey]);
+    setTimeout(tick,spd);return()=>{cancelRef.current=true;};},[phase,spd,grid,maxT,pe,password]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{cancelRef.current=true;setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);setCalls(0);sim.current=null;setAgents(p=>p.map(a=>({...a,memory:[]})));};
@@ -580,7 +580,7 @@ function FlagGame(){
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
         <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} disabled={probing} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||probing} style={{...S.btn(N>=2&&!probing,'#6ec89b'),opacity:(N<2||probing)?0.4:1}}>{probing?'⏳ Querying agents…':'▶ Run'}</button></>}
         {phase==='running'&&<button onClick={()=>{cancelRef.current=true;setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-        {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>{apiKey&&<span style={{fontSize:9,color:T.dim,marginLeft:6}}>· {calls} call{calls===1?'':'s'}</span>}
+        {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>{password&&<span style={{fontSize:9,color:T.dim,marginLeft:6}}>· {calls} call{calls===1?'':'s'}</span>}
       </div>
       <p style={{textAlign:'center',fontSize:10,color:T.fnt,margin:'-6px 0 10px'}}>{level.desc} · {F.length} countries total</p>
       {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
@@ -609,7 +609,7 @@ function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.f
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
 function AdversarialGame(){
-  const{apiKey}=useApiKey();
+  const{password}=usePassword();
   const[truth,setTruth]=useState(F[0].c);
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
@@ -632,10 +632,10 @@ function AdversarialGame(){
   const[calls,setCalls]=useState(0);const cancelRef=useRef(false);
   const start=useCallback(async()=>{if(N<2||nAdv<1||probing)return;setApiErr(null);setCalls(0);
     let sa=agents.map(a=>({...a,memory:[]}));
-    if(apiKey){setProbing(true);try{sa=await prepareAgents(sa,truthFlag);}catch(e){setApiErr(e.message||String(e));setProbing(false);return;}setProbing(false);}
+    if(password){setProbing(true);try{sa=await prepareAgents(sa,truthFlag);}catch(e){setApiErr(e.message||String(e));setProbing(false);return;}setProbing(false);}
     const rng=mkRng(Date.now());
-    let g0;if(apiKey){try{g0=await probeAllLLMAdv(sa,apiKey,advTarget,()=>setCalls(c=>c+1));}catch(e){setApiErr(e.message||String(e));return;}}else{g0=probeAllAdv(sa,grid,advTarget);}
-    const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,apiKey,truthFlag,probing]);
+    let g0;if(password){try{g0=await probeAllLLMAdv(sa,password,advTarget,()=>setCalls(c=>c+1));}catch(e){setApiErr(e.message||String(e));return;}}else{g0=probeAllAdv(sa,grid,advTarget);}
+    const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,password,truthFlag,probing]);
 
   useEffect(()=>{if(phase!=='running')return;
     cancelRef.current=false;
@@ -643,15 +643,15 @@ function AdversarialGame(){
     const tick=async()=>{const s=sim.current;if(!s||s.done){setPhase('done');return;}
       if(cancelRef.current)return;
       s.step++;
-      if(s.step>maxT){let g;try{g=apiKey?await probeAllLLMAdv(s.agents,apiKey,advTarget,onCall):probeAllAdv(s.agents,grid,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
+      if(s.step>maxT){let g;try{g=password?await probeAllLLMAdv(s.agents,password,advTarget,onCall):probeAllAdv(s.agents,grid,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
         const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);return;}
-      try{if(apiKey)await runStepLLMAdv(s.agents,s.rng,apiKey,advTarget,onCall);else runStepAdv(s.agents,grid,s.rng,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
+      try{if(password)await runStepLLMAdv(s.agents,s.rng,password,advTarget,onCall);else runStepAdv(s.agents,grid,s.rng,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
       if(cancelRef.current)return;setStep(s.step);
-      if(s.step%pe===0){s.pr++;let g;try{g=apiKey?await probeAllLLMAdv(s.agents,apiKey,advTarget,onCall):probeAllAdv(s.agents,grid,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
+      if(s.step%pe===0){s.pr++;let g;try{g=password?await probeAllLLMAdv(s.agents,password,advTarget,onCall):probeAllAdv(s.agents,grid,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
         const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');return;}}else{s.conRuns=0;}}
       setTimeout(tick,spd);};
-    setTimeout(tick,spd);return()=>{cancelRef.current=true;};},[phase,spd,grid,maxT,pe,advTarget,apiKey]);
+    setTimeout(tick,spd);return()=>{cancelRef.current=true;};},[phase,spd,grid,maxT,pe,advTarget,password]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{cancelRef.current=true;setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);setCalls(0);sim.current=null;setAgents(p=>p.map(a=>({...a,memory:[]})));};
@@ -671,7 +671,7 @@ function AdversarialGame(){
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
       <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} disabled={probing} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1||probing} style={{...S.btn(N>=2&&nAdv>=1&&!probing,'#6ec89b'),opacity:(N<2||nAdv<1||probing)?0.4:1}}>{probing?'⏳ Querying agents…':'▶ Run'}</button></>}
       {phase==='running'&&<button onClick={()=>{cancelRef.current=true;setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-      {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>{apiKey&&<span style={{fontSize:9,color:T.dim,marginLeft:6}}>· {calls} call{calls===1?'':'s'}</span>}
+      {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>{password&&<span style={{fontSize:9,color:T.dim,marginLeft:6}}>· {calls} call{calls===1?'':'s'}</span>}
     </div>
     <p style={{textAlign:'center',fontSize:10,color:T.fnt,margin:'-6px 0 10px'}}>Click agents in the list to toggle <span style={{color:'#e87b6f',fontWeight:600}}>adversary</span> status</p>
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
@@ -710,29 +710,28 @@ function AdversarialGame(){
 }
 
 /* ═══════ ROOT ═══════ */
-function ApiKeyBar(){
-  const{apiKey,setApiKey}=useApiKey();
+function PasswordBar(){
+  const{password,setPassword}=usePassword();
   const[show,setShow]=useState(false);
-  const masked=apiKey?apiKey.slice(0,3)+'…'+apiKey.slice(-4):'';
   return(<div style={{maxWidth:1400,margin:'0 auto',padding:'10px 14px 0'}}>
     <div style={{display:'flex',gap:8,alignItems:'center',padding:'8px 14px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:9,fontSize:11}}>
-      <span style={{color:T.dim,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',fontSize:9}}>OpenAI API Key</span>
-      <input type={show?'text':'password'} value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-..." style={{flex:1,minWidth:200,padding:'5px 9px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'monospace'}}/>
+      <span style={{color:T.dim,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',fontSize:9}}>Access password</span>
+      <input type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="shared password" style={{flex:1,minWidth:200,padding:'5px 9px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'monospace'}}/>
       <button onClick={()=>setShow(s=>!s)} style={S.btn(false)}>{show?'hide':'show'}</button>
-      {apiKey&&<button onClick={()=>setApiKey('')} style={S.btn(false,'#e87b6f')}>clear</button>}
-      <span style={{color:apiKey?'#6ec89b':T.fnt,fontSize:10}}>{apiKey?`set (${masked})`:'not set — agents will use heuristic fallback'}</span>
+      {password&&<button onClick={()=>setPassword('')} style={S.btn(false,'#e87b6f')}>clear</button>}
+      <span style={{color:password?'#6ec89b':T.fnt,fontSize:10}}>{password?'set — calls go through the proxy':'not set — agents will use heuristic fallback'}</span>
     </div>
-    <p style={{fontSize:10,color:T.fnt,margin:'6px 14px 0',lineHeight:1.5}}>Stored in your browser only (localStorage). Requests go directly from your browser to api.openai.com. Anyone with access to this device can read the key.</p>
+    <p style={{fontSize:10,color:T.fnt,margin:'6px 14px 0',lineHeight:1.5}}>Stored in your browser only (localStorage). Requests go to the same-origin <code>/api/chat</code> proxy, which attaches the OpenAI key server-side. Ask the site owner for the password.</p>
   </div>);
 }
 
 export default function App(){
-  const[apiKey,setApiKeyState]=useState(()=>{try{return localStorage.getItem('openai_api_key')||'';}catch{return'';}});
-  const setApiKey=useCallback(k=>{setApiKeyState(k);try{if(k)localStorage.setItem('openai_api_key',k);else localStorage.removeItem('openai_api_key');}catch{}},[]);
-  return(<ApiKeyContext.Provider value={{apiKey,setApiKey}}><div style={S.page}>
-    <ApiKeyBar/>
+  const[password,setPasswordState]=useState(()=>{try{return localStorage.getItem('app_password')||'';}catch{return'';}});
+  const setPassword=useCallback(k=>{setPasswordState(k);try{if(k)localStorage.setItem('app_password',k);else localStorage.removeItem('app_password');}catch{}},[]);
+  return(<PasswordContext.Provider value={{password,setPassword}}><div style={S.page}>
+    <PasswordBar/>
     <FlagGame/>
     <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}><AdversarialGame/></div>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
-  </div></ApiKeyContext.Provider>);
+  </div></PasswordContext.Provider>);
 }
