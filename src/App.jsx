@@ -520,7 +520,9 @@ function FlagGame(){
     },spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[phase,spd,grid,maxT,pe]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
-  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents(p=>p.map(a=>({...a,memory:[]})));};
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const nextFlag=()=>{reset();const ts=level.truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);};
+  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
   const stTxt=phase==='setup'?'Place agents on the flag, then press Run':phase==='done'?(cons?`✓ Stable consensus at round ${pr}`:`Done — ${maxT} steps`):`Step ${step}/${maxT} · Round ${pr}${sim.current?.conRuns>0?' · streak '+sim.current.conRuns+'/'+CON_RUNS:''}`;
   const removed=F_RAW.length-F.length;
@@ -536,7 +538,7 @@ function FlagGame(){
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
         <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-        {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
+        {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
       </div>
       {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
       <div style={S.row}>
@@ -590,7 +592,9 @@ function AdversarialGame(){
     },spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[phase,spd,grid,maxT,pe,advTarget]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
-  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents(p=>p.map(a=>({...a,memory:[]})));};
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const nextFlag=()=>{reset();const newTruth=F[Math.floor(Math.random()*F.length)].c;setTruth(newTruth);const others=F.filter(f=>f.c!==newTruth);setAdvTarget(others[Math.floor(Math.random()*others.length)].c);};
+  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
   const stTxt=phase==='setup'?'Place agents, mark adversaries, then press Run':phase==='done'?(cons?`✓ Stable consensus at round ${pr}`:`Done — ${maxT} steps`):`Step ${step}/${maxT} · Round ${pr}${sim.current?.conRuns>0?' · streak '+sim.current.conRuns+'/'+CON_RUNS:''}`;
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
@@ -607,7 +611,7 @@ function AdversarialGame(){
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
       <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
       {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-      {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
+      {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
     </div>
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
     <div style={S.row}>
