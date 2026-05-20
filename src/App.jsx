@@ -667,7 +667,7 @@ function FirstPersonGame(){
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);
   const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const aiGuesses=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
-  const candidates=useMemo(()=>{const an=analyzeCrop(grid,playerTop,playerLeft);const top=topCandidates(an,8);const out=[...top];aiGuesses.forEach(g=>{if(g&&!out.includes(g))out.push(g);});return out;},[grid,playerTop,playerLeft,aiGuesses]);
+  const candidates=useMemo(()=>{const an=analyzeCrop(grid,playerTop,playerLeft);const top=topCandidates(an,8);const set=new Set(top);if(truth)set.add(truth);aiGuesses.forEach(g=>{if(g)set.add(g);});return[...set].sort();},[grid,playerTop,playerLeft,aiGuesses,truth]);
 
   const setup=useCallback((newLvl)=>{
     const useLvl=newLvl===undefined?lvl:newLvl;
