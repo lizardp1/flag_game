@@ -664,6 +664,7 @@ function FirstPersonGame(){
   const[round,setRound]=useState(0);
   const[phase,setPhase]=useState('init');
   const[messages,setMessages]=useState([]);
+  const[peek,setPeek]=useState(false);
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);
   const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const aiGuesses=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
@@ -681,6 +682,7 @@ function FirstPersonGame(){
   },[lvl]);
 
   useEffect(()=>{setup();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{const kd=e=>{if(e.key==='Tab'){e.preventDefault();setPeek(true);}};const ku=e=>{if(e.key==='Tab'){e.preventDefault();setPeek(false);}};window.addEventListener('keydown',kd);window.addEventListener('keyup',ku);return()=>{window.removeEventListener('keydown',kd);window.removeEventListener('keyup',ku);};},[]);
 
   const pick=(c)=>{if(phase==='commit'||phase==='done')return;setPlayerGuess(c);if(phase==='choose-initial')setPhase('playing');};
 
@@ -741,12 +743,15 @@ function FirstPersonGame(){
         </div>
 
         <div style={{flex:'1 1 360px',minWidth:300}}>
-          <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>What the others think</div>
-          <div style={{padding:'10px 14px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+            <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px'}}>What the others think</div>
+            <div style={{fontSize:10,color:peek?'#e87b6f':T.fnt,fontStyle:'italic'}}>{peek?'peeking — agents cannot do this':'hold Tab to peek (cheat)'}</div>
+          </div>
+          <div style={{padding:'10px 14px',background:T.pan,borderRadius:10,border:`1px solid ${peek?'#e87b6f':T.bdr}`,transition:'border-color .1s'}}>
             {aiAgents.map((a,i)=>{const g=aiGuesses[i];return(<div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',fontSize:13,color:T.txt}}>
               <span style={{width:22,height:22,borderRadius:11,background:'#5b86c4',color:'#fff',fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+2}</span>
               <span style={{fontSize:11,color:T.fnt,minWidth:54}}>Agent {i+2}:</span>
-              {g?(<><InlineFlag country={g} w={22}/><span style={{fontStyle:'italic',color:T.txt}}>{g}</span></>):<span style={{color:T.fnt,fontStyle:'italic'}}>—</span>}
+              {peek&&g?(<><InlineFlag country={g} w={22}/><span style={{fontStyle:'italic',color:T.txt}}>{g}</span></>):<span style={{color:T.fnt,fontStyle:'italic'}}>{peek?'—':'hidden'}</span>}
             </div>);})}
           </div>
 
