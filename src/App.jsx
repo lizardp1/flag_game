@@ -394,9 +394,9 @@ const _LVL=[
   F.filter(f=>!_L1.has(f.c)&&!_L2.has(f.c)).map(f=>f.c),
 ];
 const LEVELS=[
-  {name:'Level 1',desc:'Pure stripes — '+_LVL[0].length+' flags with nothing but colored bands',truth:_LVL[0]},
-  {name:'Level 2',desc:'Stripes + symbol — '+_LVL[1].length+' flags with a star, circle, crescent, or triangle added',truth:_LVL[1]},
-  {name:'Level 3',desc:'Complex — '+_LVL[2].length+' flags with crosses, cantons, diagonals, multiple symbols, or detailed emblems',truth:_LVL[2]},
+  {name:'Level 1',desc:'Pure stripes — flags with nothing but colored bands',truth:_LVL[0]},
+  {name:'Level 2',desc:'Stripes + symbol — flags with a star, circle, crescent, or triangle added',truth:_LVL[1]},
+  {name:'Level 3',desc:'Complex — flags with crosses, cantons, diagonals, multiple symbols, or detailed emblems',truth:_LVL[2]},
 ];
 
 /* ═══════ ANALYSIS & SCORING ═══════ */
@@ -436,7 +436,7 @@ const S={page:{minHeight:'100vh',background:T.bg,color:T.txt,fontFamily:T.san},h
   h1:{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,letterSpacing:'-0.5px',marginBottom:6},h1b:{fontWeight:700,fontStyle:'italic'},
   sub:{fontSize:14,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.65},main:{maxWidth:1400,margin:'0 auto',padding:'16px 14px'},
   row:{display:'flex',gap:18,flexWrap:'wrap',justifyContent:'center'},pan:{flex:'1 1 520px',minWidth:310,background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:12,padding:16,overflow:'hidden'},
-  pt:{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'1.6px',color:T.dim,marginBottom:8},
+  pt:{fontSize:13,fontWeight:600,textTransform:'uppercase',letterSpacing:'1.4px',color:T.dim,marginBottom:10},
   bar:{display:'flex',flexWrap:'wrap',gap:7,alignItems:'center',justifyContent:'center',margin:'14px 0',padding:'10px 14px',background:T.pan,borderRadius:9,border:`1px solid ${T.bdr}`},
   btn:(on,c='#5b86c4')=>({padding:'6px 14px',borderRadius:7,border:'none',cursor:'pointer',fontWeight:600,fontSize:11,background:on?c:T.card,color:on?'#fff':T.mut,transition:'all .15s'}),
   sel:{padding:'6px 9px',borderRadius:7,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,cursor:'pointer'},
@@ -444,19 +444,25 @@ const S={page:{minHeight:'100vh',background:T.bg,color:T.txt,fontFamily:T.san},h
   ar:{display:'flex',gap:5,alignItems:'center',padding:'4px 6px',borderRadius:6,fontSize:10,background:T.card,marginBottom:2},sep:{width:1,height:18,background:T.bdr,flexShrink:0}};
 
 /* ═══════ FLAG DISPLAY — real SVG with agent overlay ═══════ */
-function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing}){
+function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing,hintExtra}){
   const wrapRef=useRef(null);
-  const click=useCallback(e=>{if(!placing||!wrapRef.current)return;const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;onClickCell(Math.max(0,Math.min(Math.floor(y),GH-TH)),Math.max(0,Math.min(Math.floor(x),GW-TW)));},[placing,onClickCell]);
+  const[hoverId,setHoverId]=useState(null);
+  const click=useCallback(e=>{if(!placing||!wrapRef.current)return;const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;onClickCell(Math.max(0,Math.min(Math.floor(y),GH-TH)),Math.max(0,Math.min(Math.floor(x),GW-TW)),e.shiftKey);},[placing,onClickCell]);
+  const move=useCallback(e=>{if(!placing||!wrapRef.current){if(hoverId!=null)setHoverId(null);return;}const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;const ex=agents.find(a=>a.top<=y&&y<a.top+TH&&a.left<=x&&x<a.left+TW);setHoverId(ex?ex.id:null);},[placing,agents,hoverId]);
+  const leave=useCallback(()=>setHoverId(null),[]);
+  const hovered=hoverId!=null?agents.find(a=>a.id===hoverId):null;
   return(<div style={{width:'100%',maxWidth:560,margin:'0 auto'}}>
-    <div ref={wrapRef} style={{position:'relative',cursor:placing?'crosshair':'default'}} onClick={click}>
+    <div ref={wrapRef} style={{position:'relative',cursor:hovered?'pointer':(placing?'crosshair':'default')}} onClick={click} onMouseMove={move} onMouseLeave={leave}>
       <div dangerouslySetInnerHTML={{__html:(FLAG_SVG[flag.c]||'').replace('<svg ','<svg width="100%" ')}} style={{width:'100%',lineHeight:0,borderRadius:4,overflow:'hidden'}}/>
       <svg viewBox={`0 0 ${GW} ${GH}`} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}}>
         <defs><filter id="agentglow"><feGaussianBlur stdDeviation="0.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-        {agents.map((a,i)=>{const run=phase!=='setup';const g=run?guesses[i]:null;const mc=a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';const bc=g?(CCOL[g]||T.mut):mc;
-          return(<g key={a.id}>{g&&<rect x={a.left} y={a.top} width={TW} height={TH} fill={bc} opacity={0.18} rx={0.3}/>}<rect x={a.left} y={a.top} width={TW} height={TH} fill="none" stroke={bc} strokeWidth={0.35} rx={0.3} opacity={0.95} filter={g?'url(#agentglow)':undefined}/><rect x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} rx={0.35} fill={mc} opacity={0.9}/><text x={a.left+1.1} y={a.top+1.25} textAnchor="middle" fontSize={1} fontWeight={700} fill="#fff">{i+1}</text></g>);})}
+        {agents.map((a,i)=>{const run=phase!=='setup';const g=run?guesses[i]:null;const mc=a.adv?'#e87b6f':(a.model==='gpt-5.4'?'#d4a94b':'#5b86c4');const bc=g?(CCOL[g]||T.mut):mc;const modelLabel=a.adv?'ADV':(a.model==='gpt-5.4'?'5.4':'4o');
+          return(<g key={a.id}><rect x={a.left} y={a.top} width={TW} height={TH} fill={bc} opacity={0.18} rx={0.3}/><rect x={a.left} y={a.top} width={TW} height={TH} fill="none" stroke={bc} strokeWidth={0.35} rx={0.3} opacity={0.95} filter="url(#agentglow)"/>{g&&FLAG_SVG[g]?<image x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} href={`data:image/svg+xml,${encodeURIComponent(FLAG_SVG[g])}`} preserveAspectRatio="xMidYMid slice"/>:<><rect x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} rx={0.35} fill={mc} opacity={0.9}/><text x={a.left+1.1} y={a.top+1.25} textAnchor="middle" fontSize={1} fontWeight={700} fill="#fff">{i+1}</text></>}<text x={a.left+2.2} y={a.top+1.2} textAnchor="start" fontSize={0.7} fontWeight={400} fill="#fff">{modelLabel}</text></g>);})}
       </svg>
+      {hovered&&<div style={{position:'absolute',left:`${(hovered.left+TW/2)/GW*100}%`,top:`${hovered.top/GH*100}%`,transform:'translate(-50%,-100%)',marginTop:-6,background:'rgba(40,30,20,0.92)',color:'#fff',fontSize:10,fontWeight:500,padding:'4px 9px',borderRadius:5,whiteSpace:'nowrap',pointerEvents:'none',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.3)'}}>Click to remove{hintExtra?' · Shift+click for adversary':''}</div>}
     </div>
-    {placing&&agents.length<MAX_A&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>Click the flag to place agent {agents.length+1}</div>}
+    <div style={{textAlign:'center',fontFamily:T.ser,fontSize:26,fontStyle:'italic',color:T.txt,marginTop:12,letterSpacing:'-0.3px'}}>{flag.c}</div>
+    {placing&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>{agents.length<MAX_A?`Click empty area to place agent ${agents.length+1} · Click an agent to remove`:'At max — click an agent to remove'}{hintExtra?` · ${hintExtra}`:''}</div>}
   </div>);}
 
 function MiniFlag({country}){const svg=FLAG_SVG[country];if(!svg)return null;
@@ -464,40 +470,42 @@ function MiniFlag({country}){const svg=FLAG_SVG[country];if(!svg)return null;
     <div dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" ')}} style={{width:130,lineHeight:0,borderRadius:3,border:`1px solid ${T.blt}`,overflow:'hidden'}}/>
     <div style={{fontSize:9,color:T.mut,textAlign:'center',marginTop:4,fontWeight:600}}>{country}</div></div>);}
 
+function InlineFlag({country,w=18}){const svg=FLAG_SVG[country];if(!svg)return null;const h=Math.round(w*0.72);
+  return(<span dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice" ')}} style={{display:'inline-block',width:w,height:h,lineHeight:0,borderRadius:2,border:`1px solid ${T.blt}`,overflow:'hidden',verticalAlign:'middle',flexShrink:0}}/>);}
+
 /* ═══════ CHART ═══════ */
 function TrajChart({data,active,truth,onHover}){if(!data.length)return(<div style={{height:310,display:'flex',alignItems:'center',justifyContent:'center',color:T.fnt,fontSize:12,fontStyle:'italic'}}>Trajectory appears once the simulation runs</div>);
   const pk={};data.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));const shown=active.filter(c=>pk[c]>0.02||c===truth).sort((a,b)=>(pk[b]||0)-(pk[a]||0)).slice(0,14);
-  return(<ResponsiveContainer width="100%" height={310}><LineChart data={data} margin={{top:4,right:6,left:0,bottom:18}} onMouseMove={e=>{if(e&&e.activeTooltipIndex!=null)onHover(e.activeTooltipIndex);}} onMouseLeave={()=>onHover(null)}>
-    <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/><XAxis dataKey="round" stroke={T.fnt} fontSize={9} label={{value:'Interaction rounds',position:'insideBottom',offset:-6,fill:T.dim,fontSize:9}}/><YAxis domain={[0,1]} stroke={T.fnt} fontSize={9} tickFormatter={v=>`${(v*100).toFixed(0)}%`}/>
-    <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:7,fontSize:10}} labelStyle={{color:T.mut}} formatter={(v,n)=>[`${(v*100).toFixed(1)}%`,n]} labelFormatter={v=>`Round ${v}`}/>
-    {shown.map(c=><Line key={c} type="monotone" dataKey={c} stroke={CCOL[c]||T.dim} strokeWidth={c===truth?3:1.5} strokeDasharray={c===truth?undefined:'5 3'} dot={false} isAnimationActive={false} opacity={c===truth?1:0.65}/>)}
+  return(<ResponsiveContainer width="100%" height={320}><LineChart data={data} margin={{top:6,right:8,left:14,bottom:22}} onMouseMove={e=>{if(e&&e.activeTooltipIndex!=null)onHover(e.activeTooltipIndex);}} onMouseLeave={()=>onHover(null)}>
+    <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/><XAxis dataKey="round" stroke={T.fnt} fontSize={13} axisLine={{strokeWidth:1.5}} tickLine={{strokeWidth:1.5}} label={{value:'Interaction rounds',position:'insideBottom',offset:-12,fill:T.dim,fontSize:13}}/><YAxis domain={[0,1]} stroke={T.fnt} fontSize={13} axisLine={{strokeWidth:1.5}} tickLine={{strokeWidth:1.5}} tickFormatter={v=>`${(v*100).toFixed(0)}%`} label={{value:'Country share',angle:-90,position:'insideLeft',offset:6,style:{textAnchor:'middle',fontSize:13,fill:T.dim}}}/>
+    <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:7,fontSize:12}} labelStyle={{color:T.mut}} formatter={(v,n)=>[`${(v*100).toFixed(1)}%`,n]} labelFormatter={v=>`Round ${v}`}/>
+    {shown.map(c=><Line key={c} type="monotone" dataKey={c} stroke={CCOL[c]||T.dim} strokeWidth={c===truth?4:2.5} strokeDasharray={c===truth?undefined:'5 3'} dot={false} isAnimationActive={false} opacity={c===truth?1:0.7}/>)}
   </LineChart></ResponsiveContainer>);}
 
 function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;const oc=classifyOutcome(shares,truthC);const ent=Object.entries(shares).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);const N=agents.length;const cc=guesses.filter(g=>g===truthC).length;
   return(<div style={{marginTop:14,padding:'14px 16px',background:T.card,borderRadius:10,border:`1px solid ${T.bdr}`}}>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}><span style={{fontSize:28,lineHeight:1,color:oc.color}}>{oc.icon}</span><div><div style={{fontSize:15,fontWeight:700,color:oc.color,fontFamily:T.ser}}>{oc.label}</div><div style={{fontSize:11,color:T.mut}}>{oc.details}</div></div></div>
-    <div style={{display:'flex',flexWrap:'wrap',gap:6,fontSize:10}}><span style={{color:T.dim}}>Accuracy: <strong style={{color:T.txt}}>{cc}/{N} ({(cc/N*100).toFixed(0)}%)</strong></span><span style={{color:T.bdr}}>·</span><span style={{color:T.dim}}>Countries in play: <strong style={{color:T.txt}}>{ent.length}</strong></span><span style={{color:T.bdr}}>·</span><span style={{color:T.dim}}>Truth: <strong style={{color:CCOL[truthC]||T.txt}}>{truthC}</strong></span></div>
+    <div style={{display:'flex',flexWrap:'wrap',gap:6,fontSize:10}}><span style={{color:T.dim}}>Accuracy: <strong style={{color:T.txt}}>{cc}/{N} ({(cc/N*100).toFixed(0)}%)</strong></span><span style={{color:T.bdr}}>·</span><span style={{color:T.dim}}>Countries in play: <strong style={{color:T.txt}}>{ent.length}</strong></span></div>
     {ent.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>{ent.slice(0,8).map(([c,s])=><span key={c} style={{...S.bdg(CCOL[c]),fontSize:9}}>{c} {(s*100).toFixed(0)}%</span>)}{ent.length>8&&<span style={{fontSize:9,color:T.fnt}}>+{ent.length-8} more</span>}</div>}
   </div>);}
 
-function AgentList({agents,guesses,phase,onRemove,onToggle}){const[hov,setHov]=useState(null);if(!agents.length)return null;const dis=phase!=='setup';
-  return(<div style={{marginTop:8}}>{agents.map((a,i)=>{const g=phase!=='setup'?guesses[i]:null;const mc=a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';
+function AgentList({agents,guesses,phase,onRemove,onToggle}){if(!agents.length||phase!=='setup')return null;
+  return(<div style={{marginTop:8}}>{agents.map((a,i)=>{const mc=a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';
     return(<div key={a.id} style={S.ar}><span style={{width:16,height:16,borderRadius:4,display:'inline-flex',alignItems:'center',justifyContent:'center',background:mc,fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{i+1}</span>
-      <button onClick={()=>onToggle(a.id)} disabled={dis} style={{...S.bdg(mc),cursor:dis?'default':'pointer'}}>{a.model}</button><span style={{color:T.fnt,fontSize:9}}>({a.top},{a.left})</span>
-      {g&&<span style={{position:'relative',marginLeft:'auto'}} onMouseEnter={()=>setHov(a.id)} onMouseLeave={()=>setHov(null)}><span style={{...S.bdg(CCOL[g]),cursor:'default'}}>{g}</span>{hov===a.id&&<MiniFlag country={g}/>}</span>}
-      {!dis&&<button onClick={()=>onRemove(a.id)} style={{marginLeft:g?3:'auto',background:'none',border:'none',color:'#e87b6f',cursor:'pointer',fontSize:12,padding:'0 2px'}}>×</button>}</div>);})}</div>);}
+      <button onClick={()=>onToggle(a.id)} style={{...S.bdg(mc),cursor:'pointer',fontSize:8,opacity:0.7}} title="Click to switch model">switch</button>
+      <button onClick={()=>onRemove(a.id)} style={{marginLeft:'auto',background:'none',border:'none',color:'#e87b6f',cursor:'pointer',fontSize:13,padding:'0 2px'}}>×</button></div>);})}</div>);}
 
 /* ═══════ MAIN ═══════ */
 function FlagGame(){
   const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(LEVELS[0].truth[0]);const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
-  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(60);const[active,setActive]=useState([]);
+  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
   const level=LEVELS[lvl];const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
   useEffect(()=>{if(!level.truth.includes(truth))setTruth(level.truth[0]);},[lvl]);
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
-  const place=useCallback((t,l)=>{if(N>=MAX_A||phase!=='setup')return;setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase]);
+  const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase,agents]);
   const remove=useCallback(id=>setAgents(p=>p.filter(a=>a.id!==id)),[]);
   const toggle=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,model:a.model==='gpt-4o'?'gpt-5.4':'gpt-4o'}:a)),[]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-5.4','gpt-5.4','gpt-4o'];setAgents(ms.map(m=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[]})));},[phase]);
@@ -521,7 +529,7 @@ function FlagGame(){
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1><p style={S.sub}>Place AI agents on a hidden flag. Each sees only a small crop. Watch them converge — or fail — through pairwise gossip.</p></header>
     <div style={S.main}>
       <div style={S.bar}>
-        <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){setLvl(+e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i}>{l.name} ({l.truth.length})</option>)}</select>
+        <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){setLvl(+e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
@@ -529,18 +537,15 @@ function FlagGame(){
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
         {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
       </div>
-      <p style={{textAlign:'center',fontSize:10,color:T.fnt,margin:'-6px 0 10px'}}>{level.desc} · {F.length} countries total</p>
       {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
       <div style={S.row}>
-        <div style={S.pan}><div style={S.pt}>Agent Positions{phase!=='setup'?' & Beliefs':''}<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>N={N}{cons?' · consensus':''}</span></div>
-          <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'&&N<MAX_A}/>
-          <AgentList agents={agents} guesses={dg} phase={phase} onRemove={remove} onToggle={toggle}/></div>
-        <div style={S.pan}><div style={S.pt}>Country Share Trajectories<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>{traj.length>0?`${traj.length} probes`:''}</span></div>
+        <div style={S.pan}>
+          <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'}/></div>
+        <div style={S.pan}>
           <TrajChart data={traj} active={active} truth={truthFlag.c} onHover={setHovIdx}/>
-          {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/>{c}{c===truthFlag.c?' (truth)':''}</span>)}</div>}
+          {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/><InlineFlag country={c}/><span>{c}{c===truthFlag.c?' (truth)':''}</span></span>)}</div>}
           {phase==='done'&&fShares&&<OutcomePanel shares={fShares} truthC={truthFlag.c} agents={agents} guesses={guesses}/>}</div>
       </div>
-      <div style={{textAlign:'center',padding:'7px 12px',background:T.card,borderRadius:7,border:`1px solid ${T.bdr}`,fontSize:11,color:cons?'#6ec89b':T.mut,marginTop:12}}>{stTxt}<span style={{marginLeft:10,color:T.fnt}}>Truth: <strong style={{color:CCOL[truthFlag.c]||T.txt}}>{truthFlag.c}</strong></span></div>
       <div style={{marginTop:24,padding:'18px 22px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:11,maxWidth:740,margin:'24px auto 0'}}>
         <h3 style={{fontSize:14,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>How it works</h3>
         <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>{F.length} real country flags are embedded as SVGs (from the flag-icons project). The simulation is entirely local — no API calls are made. Agents use a scripted heuristic that analyzes a {GW}×{GH} color grid, matching crop colors against flag definitions. Model labels are cosmetic; all agents use the same scoring algorithm. Each step a random speaker–listener pair meets and the speaker shares its best guess, entering the listener's memory (last {H_MEM}). Stops after {CON_RUNS} consecutive rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or N×14 steps. Hover the trajectory chart to time-travel after the run.</p>
@@ -559,7 +564,7 @@ function AdversarialGame(){
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
-  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(60);const[active,setActive]=useState([]);
+  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const others=useMemo(()=>F.filter(f=>f.c!==truth).map(f=>f.c),[truth]);
@@ -567,7 +572,7 @@ function AdversarialGame(){
   const nAdv=agents.filter(a=>a.adv).length;const nHon=N-nAdv;
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
 
-  const place=useCallback((t,l)=>{if(N>=MAX_A||phase!=='setup')return;setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase]);
+  const place=useCallback((t,l,shift)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){if(shift){setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));}else{setAgents(p=>p.filter(a=>a.id!==ex.id));}return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase,agents]);
   const remove=useCallback(id=>setAgents(p=>p.filter(a=>a.id!==id)),[]);
   const toggleModel=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,model:a.model==='gpt-4o'?'gpt-5.4':'gpt-4o'}:a)),[]);
   const toggleAdv=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,adv:!a.adv}:a)),[]);
@@ -603,24 +608,14 @@ function AdversarialGame(){
       {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
       {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
     </div>
-    <p style={{textAlign:'center',fontSize:10,color:T.fnt,margin:'-6px 0 10px'}}>Click agents in the list to toggle <span style={{color:'#e87b6f',fontWeight:600}}>adversary</span> status</p>
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
     <div style={S.row}>
-      <div style={S.pan}><div style={S.pt}>Agent Positions{phase!=='setup'?' & Beliefs':''}<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>N={N}{cons?' · consensus':''}</span></div>
-        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'&&N<MAX_A}/>
-        {agents.length>0&&<div style={{marginTop:8}}>{agents.map((a,i)=>{const g=phase!=='setup'?dg[i]:null;const mc=a.adv?'#e87b6f':a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';
-          return(<div key={a.id} style={S.ar}><span style={{width:16,height:16,borderRadius:4,display:'inline-flex',alignItems:'center',justifyContent:'center',background:mc,fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{i+1}</span>
-            {phase==='setup'&&<button onClick={()=>toggleAdv(a.id)} style={{...S.bdg(a.adv?'#e87b6f':'#5b86c4'),cursor:'pointer'}}>{a.adv?'adversary':'honest'}</button>}
-            {phase!=='setup'&&<span style={{...S.bdg(a.adv?'#e87b6f':'#5b86c4')}}>{a.adv?'adversary':'honest'}</span>}
-            {!a.adv&&phase==='setup'&&<button onClick={()=>toggleModel(a.id)} style={{...S.bdg(mc),cursor:'pointer',fontSize:8}}>{a.model}</button>}
-            <span style={{color:T.fnt,fontSize:9}}>({a.top},{a.left})</span>
-            {g&&<span style={{position:'relative',marginLeft:'auto'}}><span style={{...S.bdg(CCOL[g])}}>{g}</span></span>}
-            {phase==='setup'&&<button onClick={()=>remove(a.id)} style={{marginLeft:g?3:'auto',background:'none',border:'none',color:'#e87b6f',cursor:'pointer',fontSize:12,padding:'0 2px'}}>×</button>}
-          </div>);})}</div>}
+      <div style={S.pan}>
+        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'} hintExtra="Shift+click to toggle adversary"/>
       </div>
-      <div style={S.pan}><div style={S.pt}>Country Share Trajectories<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>{traj.length>0?`${traj.length} probes`:''}</span></div>
+      <div style={S.pan}>
         <TrajChart data={traj} active={active} truth={truthFlag.c} onHover={setHovIdx}/>
-        {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/>{c}{c===truthFlag.c?' (truth)':''}</span>)}</div>}
+        {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/><InlineFlag country={c}/><span>{c}{c===truthFlag.c?' (truth)':''}</span></span>)}</div>}
         {phase==='done'&&fShares&&<div style={{marginTop:14,padding:'14px 16px',background:T.card,borderRadius:10,border:`1px solid ${T.bdr}`}}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
             <span style={{fontSize:28,lineHeight:1,color:flipped?'#e87b6f':'#6ec89b'}}>{flipped?'✗':'✓'}</span>
@@ -634,7 +629,6 @@ function AdversarialGame(){
         </div>}
       </div>
     </div>
-    <div style={{textAlign:'center',padding:'7px 12px',background:T.card,borderRadius:7,border:`1px solid ${T.bdr}`,fontSize:11,color:cons?flipped?'#e87b6f':'#6ec89b':T.mut,marginTop:12}}>{stTxt}<span style={{marginLeft:10,color:T.fnt}}>Truth: <strong style={{color:CCOL[truthFlag.c]||T.txt}}>{truthFlag.c}</strong> · Adversary target: <strong style={{color:CCOL[advTarget]||T.txt}}>{advTarget}</strong></span></div>
   </div>);
 }
 
