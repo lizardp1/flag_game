@@ -106,7 +106,7 @@ export async function llmInteraction({
           role: 'user',
           content: [
             { type: 'text', text },
-            { type: 'image_url', image_url: { url: cropDataUrl, detail: 'low' } },
+            { type: 'image_url', image_url: { url: cropDataUrl, detail: 'high' } },
           ],
         },
       ],
