@@ -81,6 +81,35 @@ function fuzzyMatchCountry(raw, catalog) {
   return contains || null
 }
 
+function retryText(errMsg, catalog, m) {
+  return (
+    `Invalid answer: ${errMsg}\n` +
+    `Allowed countries are exactly: ${JSON.stringify(catalog)}\n` +
+    'Choose exactly one allowed country from that list. Any other country is invalid.\n' +
+    schemaLine(m)
+  )
+}
+
+function parseResponse(raw, catalog, m) {
+  let parsed
+  try { parsed = JSON.parse(raw) }
+  catch { throw new Error(`Could not parse JSON: ${raw.slice(0, 120)}`) }
+
+  const rawCountry = (parsed.country || '').trim()
+  if (!rawCountry) throw new Error(`Missing 'country' in response`)
+  const matched = catalog ? fuzzyMatchCountry(rawCountry, catalog) : rawCountry
+  if (!matched) throw new Error(`'${rawCountry}' is not in the allowed catalog`)
+
+  const clue = typeof parsed.clue === 'string' ? parsed.clue.trim() : null
+  const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : null
+
+  let memoryLine = matched
+  if (m === 2 && clue) memoryLine = `${matched} | ${clue}`
+  else if (m === 3 && reason) memoryLine = `${matched} | ${reason}`
+
+  return { country: matched, clue, reason, memoryLine }
+}
+
 export async function llmInteraction({
   cropDataUrl,
   memoryLines = [],
@@ -91,51 +120,49 @@ export async function llmInteraction({
   promptSocialSusceptibility = false,
   catalog,
   signal,
+  maxRetries = 2,
 }) {
   const text = userPrompt({ memoryLines, m, socialSusceptibility, promptSocialSusceptibility })
-
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-App-Password': password },
-    signal,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text },
-            { type: 'image_url', image_url: { url: cropDataUrl, detail: 'high' } },
-          ],
-        },
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text },
+        { type: 'image_url', image_url: { url: cropDataUrl, detail: 'high' } },
       ],
-      response_format: { type: 'json_object' },
-      max_completion_tokens: m === 1 ? 30 : 120,
-    }),
-  })
+    },
+  ]
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+  let lastErr = null
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Password': password },
+      signal,
+      body: JSON.stringify({
+        model,
+        messages,
+        response_format: { type: 'json_object' },
+        max_completion_tokens: m === 1 ? 30 : 120,
+      }),
+    })
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    const raw = (data.choices?.[0]?.message?.content || '').trim()
+
+    try {
+      return parseResponse(raw, catalog, m)
+    } catch (e) {
+      lastErr = e
+      if (attempt >= maxRetries) break
+      messages.push({ role: 'assistant', content: raw })
+      messages.push({ role: 'user', content: retryText(e.message, catalog, m) })
+    }
   }
-  const data = await res.json()
-  const raw = (data.choices?.[0]?.message?.content || '').trim()
-
-  let parsed
-  try { parsed = JSON.parse(raw) }
-  catch { throw new Error(`Could not parse JSON: ${raw.slice(0, 120)}`) }
-
-  const rawCountry = (parsed.country || '').trim()
-  if (!rawCountry) throw new Error(`Missing 'country' in response: ${raw.slice(0, 120)}`)
-  const country = (catalog && fuzzyMatchCountry(rawCountry, catalog)) || rawCountry
-
-  const clue = typeof parsed.clue === 'string' ? parsed.clue.trim() : null
-  const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : null
-
-  let memoryLine = country
-  if (m === 2 && clue) memoryLine = `${country} | ${clue}`
-  else if (m === 3 && reason) memoryLine = `${country} | ${reason}`
-
-  return { country, clue, reason, memoryLine }
+  throw new Error(`Model failed after ${maxRetries + 1} attempts: ${lastErr?.message || 'unknown'}`)
 }
