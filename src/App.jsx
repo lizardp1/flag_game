@@ -526,7 +526,9 @@ function FlagGame(){
   const removed=F_RAW.length-F.length;
 
   return(<div>
-    <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1><p style={S.sub}>Place AI agents on a hidden flag. Each sees only a small crop. Watch them converge — or fail — through pairwise gossip.</p></header>
+    <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.45}}>A model social organism to study coordination dynamics among minds that see only fragments.</p>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'18px auto 0',lineHeight:1.45}}>What does alignment even mean, when it&apos;s collective?</p></header>
     <div style={S.main}>
       <div style={S.bar}>
         <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){setLvl(+e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
