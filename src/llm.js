@@ -111,8 +111,7 @@ export async function llmInteraction({
         },
       ],
       response_format: { type: 'json_object' },
-      max_tokens: m === 1 ? 30 : 120,
-      temperature: 0,
+      max_completion_tokens: m === 1 ? 30 : 120,
     }),
   })
 
