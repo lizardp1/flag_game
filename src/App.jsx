@@ -497,7 +497,7 @@ function AgentList({agents,guesses,phase,onRemove,onToggle}){if(!agents.length||
 
 /* ═══════ MAIN ═══════ */
 function FlagGame(){
-  const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(LEVELS[0].truth[0]);const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
+  const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
@@ -527,11 +527,10 @@ function FlagGame(){
 
   return(<div>
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.45}}>A model social organism to study coordination dynamics among minds that see only fragments.</p>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'18px auto 0',lineHeight:1.45}}>What does alignment even mean, when it&apos;s collective?</p></header>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among minds that see only fragments.</p></header>
     <div style={S.main}>
       <div style={S.bar}>
-        <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){setLvl(+e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
+        <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
@@ -562,7 +561,7 @@ function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.f
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory));}
 
 function AdversarialGame(){
-  const[truth,setTruth]=useState(F[0].c);
+  const[truth,setTruth]=useState(()=>F[Math.floor(Math.random()*F.length)].c);
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
