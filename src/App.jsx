@@ -738,11 +738,6 @@ function FirstPersonGame(){
             <CropView country={truth} top={playerTop} left={playerLeft} w={320}/>
             <div style={{marginTop:10,fontSize:11,color:T.fnt,fontStyle:'italic'}}>This is all you can see of the flag.</div>
           </div>
-          <div style={{marginTop:18,padding:'14px 16px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
-            <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>Your current guess</div>
-            {playerGuess?(<div style={{display:'flex',alignItems:'center',gap:10}}><InlineFlag country={playerGuess} w={42}/><span style={{fontSize:20,fontFamily:T.ser,fontStyle:'italic',color:T.txt}}>{playerGuess}</span></div>):
-              (<p style={{fontSize:13,color:T.mut,margin:0,fontStyle:'italic'}}>Pick a country from the candidates below to start.</p>)}
-          </div>
         </div>
 
         <div style={{flex:'1 1 360px',minWidth:300}}>
@@ -770,7 +765,11 @@ function FirstPersonGame(){
       </div>
 
       <div style={{marginTop:24,padding:'16px 18px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
-        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>Possible countries (color-matched to your view)</div>
+        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:14,flexWrap:'wrap'}}>
+          <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px'}}>Your guess</div>
+          {playerGuess?(<div style={{display:'flex',alignItems:'center',gap:10}}><InlineFlag country={playerGuess} w={36}/><span style={{fontSize:20,fontFamily:T.ser,fontStyle:'italic',color:T.txt}}>{playerGuess}</span></div>):
+            (<span style={{fontSize:13,color:T.mut,fontStyle:'italic'}}>Pick a country from the candidates below to start.</span>)}
+        </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
           {candidates.map(c=>(<button key={c} onClick={()=>pick(c)} disabled={phase==='commit'}
             style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:7,
