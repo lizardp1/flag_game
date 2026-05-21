@@ -18,12 +18,9 @@ const SYSTEM_PROMPT =
   'Choose exactly one country.\n' +
   'Follow the exact output schema given in the user message.'
 
-// Map a UI label ("gpt-4o" / "gpt-5.4") to a real OpenAI model identifier.
-// `gpt-5.4` is a cosmetic name in the UI; route it to the small variant so a
-// user with an API key still gets a meaningful two-model comparison.
+// The UI label is sent verbatim as the OpenAI model identifier.
 export function realModelName(label) {
-  if (label === 'gpt-5.4') return 'gpt-4o-mini'
-  return 'gpt-4o'
+  return label
 }
 
 function memoryBlock(memoryLines) {
