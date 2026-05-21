@@ -1017,9 +1017,10 @@ const EF_STRATEGIES=[
 const EF_STRAT_MAP=Object.fromEntries(EF_STRATEGIES.map(s=>[s.id,s]));
 
 function ElFarolBar(){
-  const[N,setN]=useState(60);
+  const[counts,setCounts]=useState(()=>Object.fromEntries(EF_STRATEGIES.map(s=>[s.id,10])));
+  const N=Object.values(counts).reduce((a,b)=>a+b,0);
   const[capPct,setCapPct]=useState(60);
-  const capacity=Math.round(N*capPct/100);
+  const capacity=Math.max(1,Math.round(N*capPct/100));
   const[agents,setAgents]=useState([]);
   const[history,setHistory]=useState([]); // attendance counts per week
   const[scores,setScores]=useState({}); // strategy id -> cumulative score
@@ -1029,16 +1030,15 @@ function ElFarolBar(){
   const[decisions,setDecisions]=useState([]); // last week's per-agent decisions (true = went)
   const iRef=useRef(null);
 
-  // Initialize agents when N changes
+  // Rebuild agents whenever the mix changes
   useEffect(()=>{
-    const init=[];
-    for(let i=0;i<N;i++){
-      const strat=EF_STRATEGIES[i%EF_STRATEGIES.length].id;
-      init.push({id:i,strategy:strat});
-    }
+    const init=[];let id=0;
+    EF_STRATEGIES.forEach(s=>{for(let i=0;i<(counts[s.id]||0);i++)init.push({id:id++,strategy:s.id});});
     setAgents(init);
-    setHistory([]);setScores({});setWeek(0);setDecisions([]);
-  },[N]);
+    setHistory([]);setScores({});setWeek(0);setDecisions([]);setRunning(false);
+  },[counts]);
+
+  const adjust=(stratId,delta)=>{if(running)return;setCounts(c=>{const cur=c[stratId]||0;const nx=Math.max(0,Math.min(50,cur+delta));return{...c,[stratId]:nx};});};
 
   // Step one week
   const stepOnce=useCallback(()=>{
@@ -1094,9 +1094,7 @@ function ElFarolBar(){
     </header>
 
     <div style={S.bar}>
-      <label style={{fontSize:10,color:T.dim}}>Agents</label>
-      <input type="range" min={10} max={120} step={2} value={N} onChange={e=>setN(+e.target.value)} disabled={running} style={{width:80,accentColor:'#5b86c4'}}/>
-      <span style={{fontSize:11,color:T.fnt,minWidth:24}}>{N}</span>
+      <span style={{fontSize:11,color:T.fnt}}>Total <strong style={{color:T.txt}}>{N}</strong> agents</span>
       <div style={S.sep}/>
       <label style={{fontSize:10,color:T.dim}}>Capacity</label>
       <input type="range" min={20} max={80} step={5} value={capPct} onChange={e=>setCapPct(+e.target.value)} disabled={running} style={{width:80,accentColor:'#5b86c4'}}/>
@@ -1107,7 +1105,7 @@ function ElFarolBar(){
       <div style={S.sep}/>
       <span style={{fontSize:11,color:T.fnt}}>Week {week}</span>
       <div style={S.sep}/>
-      {!running?<><button onClick={stepOnce} style={S.btn(true,'#7a6db0')}>step</button><button onClick={()=>setRunning(true)} style={S.btn(true,'#6ec89b')}>▶ Run</button></>:<button onClick={()=>setRunning(false)} style={S.btn(true,'#e87b6f')}>■ Pause</button>}
+      {N>=2&&(!running?<><button onClick={stepOnce} style={S.btn(true,'#7a6db0')}>step</button><button onClick={()=>setRunning(true)} style={S.btn(true,'#6ec89b')}>▶ Run</button></>:<button onClick={()=>setRunning(false)} style={S.btn(true,'#e87b6f')}>■ Pause</button>)}
       <button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>
     </div>
 
@@ -1148,18 +1146,24 @@ function ElFarolBar(){
         </div>}
       </div>
 
-      {/* Strategies panel */}
-      <div style={{flex:'0 1 280px',minWidth:240,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
-        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:12}}>Strategies (score = went-when-comfortable minus went-when-crowded)</div>
-        {stratStats.map(s=>(
-          <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px dashed ${T.bdr}`,fontSize:12}}>
-            <span style={{width:14,height:14,borderRadius:7,background:s.color,flexShrink:0}}/>
-            <span style={{color:T.txt,minWidth:88,fontFamily:T.san}}>{s.label}</span>
-            <span style={{color:T.fnt,fontSize:10,minWidth:42}}>{s.count} agts</span>
-            <span style={{marginLeft:'auto',fontWeight:700,color:s.score>0?'#3a8a64':s.score<0?'#a85047':T.fnt}}>{s.score>0?'+':''}{s.score}</span>
-          </div>
-        ))}
-        {history.length>3&&<div style={{marginTop:14,fontSize:11,color:T.mut,lineHeight:1.5,fontStyle:'italic'}}>
+      {/* Strategy mix + scores */}
+      <div style={{flex:'0 1 320px',minWidth:280,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:4}}>Compose the crowd</div>
+        <div style={{fontSize:10,color:T.fnt,fontStyle:'italic',marginBottom:12}}>Click − / + to add or remove agents per strategy. Reset is automatic.</div>
+        {stratStats.map(s=>{const disabled=running;const btnStyle={width:22,height:22,borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:disabled?T.fnt:T.mut,cursor:disabled?'default':'pointer',fontWeight:700,fontSize:13,display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0};return(
+          <div key={s.id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 0',borderBottom:`1px dashed ${T.bdr}`,fontSize:12}}>
+            <span style={{width:12,height:12,borderRadius:6,background:s.color,flexShrink:0}}/>
+            <span style={{color:T.txt,minWidth:90,fontFamily:T.san,fontSize:11}}>{s.label}</span>
+            <button onClick={()=>adjust(s.id,-1)} disabled={disabled||s.count===0} style={{...btnStyle,opacity:s.count===0?0.3:1}}>−</button>
+            <span style={{minWidth:24,textAlign:'center',color:T.txt,fontWeight:600,fontSize:12,fontFamily:'ui-monospace,monospace'}}>{s.count}</span>
+            <button onClick={()=>adjust(s.id,1)} disabled={disabled} style={btnStyle}>+</button>
+            <span style={{marginLeft:'auto',fontWeight:700,minWidth:30,textAlign:'right',color:s.score>0?'#3a8a64':s.score<0?'#a85047':T.fnt,fontSize:11,fontFamily:'ui-monospace,monospace'}}>{s.score>0?'+':''}{s.score}</span>
+          </div>);
+        })}
+        <div style={{marginTop:10,fontSize:11,color:T.mut,fontStyle:'italic'}}>
+          Score = went-when-comfortable − went-when-crowded.
+        </div>
+        {history.length>3&&<div style={{marginTop:10,padding:'8px 10px',background:T.card,borderRadius:6,fontSize:11,color:T.mut,lineHeight:1.55,border:`1px solid ${T.bdr}`}}>
           Avg attendance: <strong style={{color:T.txt}}>{(history.reduce((a,b)=>a+b,0)/history.length).toFixed(1)}</strong> / {N}
           <br/>Crowded weeks: <strong style={{color:T.txt}}>{history.filter(h=>h>capacity).length}</strong> / {history.length}
         </div>}
