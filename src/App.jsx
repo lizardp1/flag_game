@@ -908,10 +908,11 @@ function FirstPersonGame({apiKey}){
     const newMsgs=[...messages];
     setLoading(true);setApiError(null);
     try{
+      const playerSpeaks=rng()<0.5;
       for(let step=0;step<3;step++){
         let si,li;
-        if(step===0){if(rng()<0.5){si=0;li=1+Math.floor(rng()*5);}else{li=0;si=1+Math.floor(rng()*5);}}
-        else{si=Math.floor(rng()*6);li=Math.floor(rng()*5);if(li>=si)li++;}
+        if(step===0){if(playerSpeaks){si=0;li=1+Math.floor(rng()*5);}else{li=0;si=1+Math.floor(rng()*5);}}
+        else{si=1+Math.floor(rng()*5);li=1+Math.floor(rng()*4);if(li>=si)li++;}
         const speaker=all[si],listener=all[li];
         let sg;
         if(speaker.isPlayer){sg=playerReason.trim()?`${playerGuess} | ${playerReason.trim()}`:playerGuess;}
