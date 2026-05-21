@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import REAL_GRIDS_RAW from './realGrids.json';
 import { rasterizeFlag, cropAgentView, llmInteraction } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
@@ -385,30 +386,24 @@ const F_RAW=[
 
 const F=F_RAW.filter(f=>FLAG_SVG[f.c]);
 
-function flagPalette(f){
-  const s=new Set();
-  if(f.s)f.s.forEach(c=>s.add(c));
-  if(f.bg)s.add(f.bg);
-  if(f.tri)s.add(f.tri);
-  if(f.cross)s.add(f.cross);
-  if(f.canton)s.add(f.canton);
-  if(f.cantonCross)s.add(f.cantonCross);
-  if(f.diamond)s.add(f.diamond);
-  if(f.bend)s.add(f.bend);
-  if(f.diag)f.diag.forEach(c=>s.add(c));
-  if(f.circ)s.add(typeof f.circ==='object'?f.circ.color:f.circ);
-  if(f.star)s.add(f.star);
-  if(f.pstars)s.add(f.pstars.color);
-  return s;
-}
-const FLAG_PALETTES=new Map(F.map(f=>[f.c,flagPalette(f)]));
+// Decode the precomputed rasterized 24×16 grids (built offline by rsvg + quantization).
+// Each flag is a 384-char string of single-letter color codes.
+const CODE_TO_NAME={k:'black',b:'blue',g:'green',r:'red',w:'white',y:'yellow',o:'orange',l:'light_blue',m:'maroon',n:'navy',d:'gold',c:'cyan'};
+const REAL_GRIDS={};
+for(const country in REAL_GRIDS_RAW){const s=REAL_GRIDS_RAW[country];const g=[];for(let y=0;y<GH;y++){const row=[];for(let x=0;x<GW;x++)row.push(CODE_TO_NAME[s[y*GW+x]]||s[y*GW+x]);g.push(row);}REAL_GRIDS[country]=g;}
 
-function compatibleCount(grid,top,left){
-  const crop=new Set();
-  for(let r=top;r<top+TH;r++)for(let c=left;c<left+TW;c++)crop.add(grid[r][c]);
-  let n=0;
-  for(const f of F){const pal=FLAG_PALETTES.get(f.c);let ok=true;for(const c of crop){if(!pal.has(c)){ok=false;break;}}if(ok)n++;}
-  return n;
+// Per-flag set of crop palettes (one entry per possible (top,left) position).
+const FLAG_CROP_PALETTES=new Map();
+for(const country in REAL_GRIDS){const g=REAL_GRIDS[country];const palettes=new Set();
+  for(let t=0;t<=GH-TH;t++)for(let l=0;l<=GW-TW;l++){const cs=new Set();for(let r=t;r<t+TH;r++)for(let c=l;c<l+TW;c++)cs.add(g[r][c]);palettes.add([...cs].sort().join('|'));}
+  FLAG_CROP_PALETTES.set(country,palettes);
+}
+
+function compatibleCount(country,top,left){
+  const grid=REAL_GRIDS[country];if(!grid)return F.length;
+  const cs=new Set();for(let r=top;r<top+TH;r++)for(let c=left;c<left+TW;c++)cs.add(grid[r][c]);
+  const key=[...cs].sort().join('|');
+  let n=0;for(const f of F){const palettes=FLAG_CROP_PALETTES.get(f.c);if(palettes&&palettes.has(key))n++;}return n;
 }
 
 const FP_LEVELS=[
@@ -420,14 +415,14 @@ const FP_LEVELS=[
 function samplePositionForDifficulty(level){
   const band=FP_LEVELS[level];
   const test=c=>(band.min===undefined||c>=band.min)&&(band.max===undefined||c<=band.max);
-  for(let i=0;i<300;i++){
-    const f=F[Math.floor(Math.random()*F.length)];
-    const g=renderGrid(f);
+  const pool=F.filter(f=>REAL_GRIDS[f.c]);
+  for(let i=0;i<400;i++){
+    const f=pool[Math.floor(Math.random()*pool.length)];
     const t=Math.floor(Math.random()*(GH-TH+1));
     const l=Math.floor(Math.random()*(GW-TW+1));
-    if(test(compatibleCount(g,t,l)))return{country:f.c,top:t,left:l};
+    if(test(compatibleCount(f.c,t,l)))return{country:f.c,top:t,left:l};
   }
-  const f=F[Math.floor(Math.random()*F.length)];
+  const f=pool[Math.floor(Math.random()*pool.length)];
   return{country:f.c,top:Math.floor(Math.random()*(GH-TH+1)),left:Math.floor(Math.random()*(GW-TW+1))};
 }
 
