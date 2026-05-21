@@ -81,10 +81,19 @@ function fuzzyMatchCountry(raw, catalog) {
   return contains || null
 }
 
+function shuffled(arr) {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 function retryText(errMsg, catalog, m) {
   return (
     `Invalid answer: ${errMsg}\n` +
-    `Allowed countries are exactly: ${JSON.stringify(catalog)}\n` +
+    `Allowed countries are exactly: ${JSON.stringify(shuffled(catalog))}\n` +
     'Choose exactly one allowed country from that list. Any other country is invalid.\n' +
     schemaLine(m)
   )
