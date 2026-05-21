@@ -655,7 +655,6 @@ function FlagGame({apiKey}){
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
   const nextFlag=()=>{reset();const ts=level.truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);};
-  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
 
   return(<div>
@@ -727,7 +726,6 @@ function AdversarialGame({apiKey}){
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
   const nextFlag=()=>{reset();const newTruth=F[Math.floor(Math.random()*F.length)].c;setTruth(newTruth);const others=F.filter(f=>f.c!==newTruth);setAdvTarget(others[Math.floor(Math.random()*others.length)].c);};
-  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
 
