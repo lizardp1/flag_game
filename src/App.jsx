@@ -390,7 +390,7 @@ function describeFlag(country){
   const norm=c=>String(c).replace(/_/g,' ');
   const list=arr=>{const a=arr.filter(Boolean).map(norm);if(!a.length)return'';if(a.length===1)return a[0];if(a.length===2)return a.join(' and ');return a.slice(0,-1).join(', ')+', and '+a[a.length-1];};
   let field='';
-  if(f.s&&f.s.length){const orient=f.o==='v'?'vertical':'horizontal';field=`${orient} bands of ${list(f.s)}`;}
+  if(f.s&&f.s.length){const uniq=[...new Set(f.s)];if(uniq.length===1)field=`a ${norm(uniq[0])} field`;else{const orient=f.o==='v'?'vertical':'horizontal';field=`${orient} bands of ${list(uniq)}`;}}
   else if(f.bg)field=`a ${norm(f.bg)} field`;
   let overlay='';
   if(f.tri)overlay=`a ${norm(f.tri)} triangle`;
