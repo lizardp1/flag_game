@@ -384,6 +384,29 @@ const F_RAW=[
 ];
 
 const F=F_RAW.filter(f=>FLAG_SVG[f.c]);
+
+function describeFlag(country){
+  const f=F.find(x=>x.c===country);if(!f)return 'The colors match.';
+  const norm=c=>String(c).replace(/_/g,' ');
+  const list=arr=>{const a=arr.filter(Boolean).map(norm);if(!a.length)return'';if(a.length===1)return a[0];if(a.length===2)return a.join(' and ');return a.slice(0,-1).join(', ')+', and '+a[a.length-1];};
+  let field='';
+  if(f.s&&f.s.length){const orient=f.o==='v'?'vertical':'horizontal';field=`${orient} bands of ${list(f.s)}`;}
+  else if(f.bg)field=`a ${norm(f.bg)} field`;
+  let overlay='';
+  if(f.tri)overlay=`a ${norm(f.tri)} triangle`;
+  else if(f.cross)overlay=`a ${norm(f.cross)} cross`;
+  else if(f.cantonCross)overlay=`a ${norm(f.cantonCross)} cross in the canton`;
+  else if(f.canton)overlay=`a ${norm(f.canton)} canton`;
+  else if(f.diamond)overlay=`a ${norm(f.diamond)} diamond`;
+  else if(f.bend)overlay=`a ${norm(f.bend)} diagonal band`;
+  else if(f.diag)overlay=`a diagonal ${norm(f.diag[2])} band`;
+  else if(f.circ){const c=typeof f.circ==='object'?f.circ.color:f.circ;overlay=`a ${norm(c)} circle`;}
+  else if(f.star)overlay=`a ${norm(f.star)} star`;
+  else if(f.pstars)overlay=`${norm(f.pstars.color)} stars`;
+  if(!field&&!overlay)return 'The colors match.';
+  if(field&&overlay)return `I see ${field} with ${overlay}.`;
+  return `I see ${field||overlay}.`;
+}
 const PAL=genPal(F.length+4);const CCOL={};F.forEach((f,i)=>{CCOL[f.c]=PAL[i];});
 const FLAG_DATA_URI={};F.forEach(f=>{FLAG_DATA_URI[f.c]=`data:image/svg+xml,${encodeURIComponent(FLAG_SVG[f.c])}`;});
 const FLAG_INNER={};F.forEach(f=>{const m=FLAG_SVG[f.c].match(/<svg[^>]*>([\s\S]+)<\/svg>/);if(m)FLAG_INNER[f.c]=m[1];});
@@ -704,6 +727,8 @@ function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGue
 function AdversarialGame({apiKey}){
   const[truth,setTruth]=useState(()=>F[Math.floor(Math.random()*F.length)].c);
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
+  const[advReason,setAdvReason]=useState(()=>describeFlag(F[1]?.c||F[0].c));
+  useEffect(()=>{setAdvReason(describeFlag(advTarget));},[advTarget]);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[parallel,setParallel]=useState(false);const[active,setActive]=useState([]);
@@ -727,9 +752,10 @@ function AdversarialGame({apiKey}){
       if(parallel&&n>=4){const perm=[...Array(n).keys()];for(let i=perm.length-1;i>0;i--){const j=Math.floor(s.rng()*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}const pairs=[];for(let i=0;i+1<perm.length;i+=2)pairs.push([perm[i],perm[i+1]]);return pairs;}
       const si=Math.floor(s.rng()*n);let li=Math.floor(s.rng()*(n-1));if(li>=si)li++;return[[si,li]];};
     const runRound=async(s)=>{const pairs=buildPairs(s);if(!pairs.length)return 0;
-      if(apiKey){const results=await Promise.all(pairs.map(async([si])=>{const sp=s.agents[si];if(sp.adv)return{country:advTarget,memoryLine:advTarget};const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');return await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});}));
+      const advLine=advReason.trim()?`${advTarget} | ${advReason.trim()}`:advTarget;
+      if(apiKey){const results=await Promise.all(pairs.map(async([si])=>{const sp=s.agents[si];if(sp.adv)return{country:advTarget,memoryLine:advLine};const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');return await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});}));
         pairs.forEach(([si,li],idx)=>{const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(results[idx].memoryLine);});}
-      else{pairs.forEach(([si,li])=>{const sp=s.agents[si];const g=sp.adv?advTarget:bestGuess(analyzeCrop(grid,sp.top,sp.left),sp.memory,sp);const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);});}
+      else{pairs.forEach(([si,li])=>{const sp=s.agents[si];const g=sp.adv?advLine:bestGuess(analyzeCrop(grid,sp.top,sp.left),sp.memory,sp);const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);});}
       return pairs.length;};
     const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{if(a.adv)return advTarget;const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAllAdv(s.agents,grid,advTarget);}};
     (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}
@@ -755,6 +781,7 @@ function AdversarialGame({apiKey}){
     <div style={S.bar}>
       <label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{F.map(f=><option key={f.c} value={f.c}>{f.c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
+      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary reason</label><input type="text" value={advReason} onChange={e=>{if(phase==='setup')setAdvReason(e.target.value);}} disabled={phase!=='setup'} title="Static reason appended after the country on every adversary message — keep it plausible to avoid signaling 'this is an adversary'." style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,width:260}}/>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={0} max={1} step={1} value={parallel?1:0} onChange={e=>setParallel(+e.target.value===1)} disabled={phase!=='setup'} title="Slow: one speaker–listener pair per round (research protocol). Fast: N/2 disjoint pairs gossip simultaneously per round." style={{width:60,accentColor:'#5b86c4'}}/>
       <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
@@ -794,6 +821,8 @@ function FirstPersonGame({apiKey}){
   const[playerLeft,setPlayerLeft]=useState(0);
   const[playerMem,setPlayerMem]=useState([]);
   const[playerGuess,setPlayerGuess]=useState(null);
+  const[playerReason,setPlayerReason]=useState('');
+  useEffect(()=>{if(playerGuess)setPlayerReason(describeFlag(playerGuess));},[playerGuess]);
   const[aiAgents,setAiAgents]=useState([]);
   const[aiGuessesLLM,setAiGuessesLLM]=useState([]);
   const[round,setRound]=useState(0);
@@ -842,12 +871,12 @@ function FirstPersonGame({apiKey}){
         else{si=Math.floor(rng()*6);li=Math.floor(rng()*5);if(li>=si)li++;}
         const speaker=all[si],listener=all[li];
         let sg;
-        if(speaker.isPlayer){sg=playerGuess;}
+        if(speaker.isPlayer){sg=playerReason.trim()?`${playerGuess} | ${playerReason.trim()}`:playerGuess;}
         else if(apiKey){const url=getCrop(speaker.top,speaker.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:speaker.memory,model:speaker.model,apiKey,catalog});sg=r.memoryLine;}
         else{sg=bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory);}
         if(listener.memory.length>=H_MEM)listener.memory.shift();
         listener.memory.push(sg);
-        if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:sg});
+        if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:playerGuess});
         else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:apiKey?(sg.split(' | ')[0]):sg});
       }
       const newAi=all.slice(1).map(a=>({top:a.top,left:a.left,memory:a.memory}));
@@ -936,6 +965,10 @@ function FirstPersonGame({apiKey}){
             <span style={{fontWeight:c===playerGuess?600:400}}>{c}</span>
           </button>))}
         </div>
+        {playerGuess&&<div style={{marginTop:12,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <label style={{fontSize:10,color:T.dim,textTransform:'uppercase',letterSpacing:'1.2px'}}>Your reasoning</label>
+          <input type="text" value={playerReason} onChange={e=>setPlayerReason(e.target.value)} disabled={phase==='commit'||loading} title="Appended after your guess on every message you send. Defaults to a description of the flag you picked." style={{flex:1,minWidth:240,padding:'5px 9px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11}}/>
+        </div>}
       </div>
 
       <div style={{textAlign:'center',marginTop:24}}>
