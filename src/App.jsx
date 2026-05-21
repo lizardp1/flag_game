@@ -1000,10 +1000,180 @@ function ApiKeyBar({apiKey,setApiKey}){
 /* ═══════ SERIES CATALOG ═══════ */
 const GAMES=[
   {slug:'flag-game',icon:'🏴',title:'The Flag Game',tagline:'Six agents see fragments of a hidden flag. Through gossip, can they agree on the country?',status:'live'},
+  {slug:'el-farol',icon:'🍺',title:'The El Farol Bar',tagline:'Go to the bar, or stay home? The right answer depends on what everyone else does.',status:'live'},
   {slug:'map-game',icon:'🗺️',title:'The Map Game',tagline:'Each agent sees one tile of the world. Where are we?',status:'soon'},
   {slug:'prediction-market',icon:'📈',title:'The Prediction Market',tagline:'Agents bet on an unknown event. Does the price converge to the truth?',status:'soon'},
-  {slug:'el-farol',icon:'🍺',title:'The El Farol Bar',tagline:'Go to the bar, or stay home? The right answer depends on what everyone else does.',status:'soon'},
 ];
+
+/* ═══════ EL FAROL BAR ═══════ */
+const EF_STRATEGIES=[
+  {id:'last-week',label:'last week',color:'#e87b6f',predict:(h,N)=>h.length?h[h.length-1]:Math.random()*N},
+  {id:'avg-4',label:'avg of 4',color:'#5b86c4',predict:(h,N)=>{if(!h.length)return N/2;const s=h.slice(-4);return s.reduce((a,b)=>a+b,0)/s.length;}},
+  {id:'trend',label:'trend',color:'#6ec89b',predict:(h,N)=>{if(h.length<2)return h[h.length-1]||N/2;return Math.max(0,Math.min(N,h[h.length-1]+(h[h.length-1]-h[h.length-2])));}},
+  {id:'mirror',label:'mirror',color:'#7a6db0',predict:(h,N)=>h.length?N-h[h.length-1]:Math.random()*N},
+  {id:'constant',label:'constant 50%',color:'#d4a94b',predict:(h,N)=>N/2},
+  {id:'random',label:'random',color:'#9a9183',predict:(h,N)=>Math.random()*N},
+];
+const EF_STRAT_MAP=Object.fromEntries(EF_STRATEGIES.map(s=>[s.id,s]));
+
+function ElFarolBar(){
+  const[N,setN]=useState(60);
+  const[capPct,setCapPct]=useState(60);
+  const capacity=Math.round(N*capPct/100);
+  const[agents,setAgents]=useState([]);
+  const[history,setHistory]=useState([]); // attendance counts per week
+  const[scores,setScores]=useState({}); // strategy id -> cumulative score
+  const[week,setWeek]=useState(0);
+  const[running,setRunning]=useState(false);
+  const[spd,setSpd]=useState(450);
+  const[decisions,setDecisions]=useState([]); // last week's per-agent decisions (true = went)
+  const iRef=useRef(null);
+
+  // Initialize agents when N changes
+  useEffect(()=>{
+    const init=[];
+    for(let i=0;i<N;i++){
+      const strat=EF_STRATEGIES[i%EF_STRATEGIES.length].id;
+      init.push({id:i,strategy:strat});
+    }
+    setAgents(init);
+    setHistory([]);setScores({});setWeek(0);setDecisions([]);
+  },[N]);
+
+  // Step one week
+  const stepOnce=useCallback(()=>{
+    setAgents(prevAgents=>{
+      setHistory(prevHist=>{
+        const decs=prevAgents.map(a=>{const p=EF_STRAT_MAP[a.strategy].predict(prevHist,N);return p<capacity;});
+        const attendance=decs.filter(Boolean).length;
+        const overcrowded=attendance>capacity;
+        const newHist=[...prevHist,attendance];
+        setDecisions(decs);
+        // Update scores: +1 if went and not overcrowded, -1 if went and overcrowded, 0 if stayed
+        setScores(prevSc=>{const out={...prevSc};decs.forEach((went,i)=>{const st=prevAgents[i].strategy;const delta=went?(overcrowded?-1:1):0;out[st]=(out[st]||0)+delta;});return out;});
+        return newHist;
+      });
+      return prevAgents;
+    });
+    setWeek(w=>w+1);
+  },[N,capacity]);
+
+  // Run loop
+  useEffect(()=>{
+    if(!running)return;
+    iRef.current=setInterval(()=>{stepOnce();},spd);
+    return()=>{if(iRef.current)clearInterval(iRef.current);};
+  },[running,spd,stepOnce]);
+
+  const reset=()=>{setRunning(false);setHistory([]);setScores({});setWeek(0);setDecisions([]);};
+
+  // Layout for the bar/home scene
+  const HOME_W=240,BAR_W=380,SCENE_H=200,DOT=10;
+  const placeDots=(count,boxW,boxH,padding=18)=>{
+    const innerW=boxW-padding*2,innerH=boxH-padding*2;
+    const cols=Math.ceil(Math.sqrt(count*innerW/Math.max(1,innerH)));
+    const rows=Math.ceil(count/cols);
+    const gx=innerW/Math.max(1,cols),gy=innerH/Math.max(1,rows);
+    return Array.from({length:count},(_,i)=>({col:i%cols,row:Math.floor(i/cols),gx,gy,padding,boxW,boxH}));
+  };
+
+  // Group agents by location
+  const goers=agents.map((a,i)=>({...a,went:decisions[i]})).filter(a=>a.went);
+  const stayers=agents.map((a,i)=>({...a,went:decisions[i]})).filter(a=>a.went===false);
+  const lastAttendance=history.length?history[history.length-1]:null;
+  const overcrowded=lastAttendance!=null&&lastAttendance>capacity;
+
+  // For chart
+  const chartData=history.map((a,i)=>({week:i+1,attendance:a,capacity}));
+  const stratStats=EF_STRATEGIES.map(s=>({...s,count:agents.filter(a=>a.strategy===s.id).length,score:scores[s.id]||0}));
+
+  return(<div style={{maxWidth:1200,margin:'0 auto',padding:'0 14px 48px'}}>
+    <header style={{textAlign:'center',padding:'16px 20px 28px'}}>
+      <h1 style={{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>The <span style={{fontWeight:700,fontStyle:'italic'}}>El Farol Bar</span></h1>
+      <p style={{fontSize:16,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.55}}>Each agent uses their own rule of thumb to predict whether the bar will be crowded. They go only if their guess is below capacity. The truth is endogenous — it&apos;s whatever the group decides.</p>
+    </header>
+
+    <div style={S.bar}>
+      <label style={{fontSize:10,color:T.dim}}>Agents</label>
+      <input type="range" min={10} max={120} step={2} value={N} onChange={e=>setN(+e.target.value)} disabled={running} style={{width:80,accentColor:'#5b86c4'}}/>
+      <span style={{fontSize:11,color:T.fnt,minWidth:24}}>{N}</span>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Capacity</label>
+      <input type="range" min={20} max={80} step={5} value={capPct} onChange={e=>setCapPct(+e.target.value)} disabled={running} style={{width:80,accentColor:'#5b86c4'}}/>
+      <span style={{fontSize:11,color:T.fnt,minWidth:38}}>{capacity} ({capPct}%)</span>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Speed</label>
+      <input type="range" min={80} max={1200} value={1280-spd} onChange={e=>setSpd(1280-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <div style={S.sep}/>
+      <span style={{fontSize:11,color:T.fnt}}>Week {week}</span>
+      <div style={S.sep}/>
+      {!running?<><button onClick={stepOnce} style={S.btn(true,'#7a6db0')}>step</button><button onClick={()=>setRunning(true)} style={S.btn(true,'#6ec89b')}>▶ Run</button></>:<button onClick={()=>setRunning(false)} style={S.btn(true,'#e87b6f')}>■ Pause</button>}
+      <button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>
+    </div>
+
+    <div style={{display:'flex',gap:18,marginTop:18,flexWrap:'wrap'}}>
+      {/* Scene */}
+      <div style={{flex:'1 1 640px',minWidth:520,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px'}}>
+          <span>🏠 At home ({stayers.length})</span>
+          <span style={{color:overcrowded?'#a85047':(lastAttendance!=null?'#3a8a64':T.dim)}}>🍺 At the bar ({goers.length})  {overcrowded?'· overcrowded':lastAttendance!=null?'· comfortable':''}</span>
+        </div>
+        <svg width="100%" viewBox={`0 0 ${HOME_W+BAR_W+24} ${SCENE_H}`} style={{background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`}}>
+          {/* Home box */}
+          <rect x={4} y={4} width={HOME_W} height={SCENE_H-8} fill="#fcf9f4" rx={8} stroke={T.bdr}/>
+          {/* Bar box (red tint when overcrowded) */}
+          <rect x={HOME_W+20} y={4} width={BAR_W} height={SCENE_H-8} fill={overcrowded?'#e87b6f15':'#6ec89b10'} rx={8} stroke={overcrowded?'#e87b6f':T.bdr}/>
+          {/* Capacity line inside bar */}
+          {(()=>{const ratio=capacity/N;const fillW=BAR_W*Math.min(1,ratio);return(<line x1={HOME_W+20+fillW} y1={10} x2={HOME_W+20+fillW} y2={SCENE_H-12} stroke="#e87b6f" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.6}/>);})()}
+          <text x={HOME_W+20+BAR_W*capacity/N+4} y={SCENE_H-6} fontSize={8} fill="#a85047">capacity</text>
+          {/* Stayers dots */}
+          {(()=>{const placements=placeDots(stayers.length,HOME_W,SCENE_H-8);return stayers.map((a,i)=>{const p=placements[i];const cx=4+p.padding+p.col*p.gx+p.gx/2;const cy=4+p.padding+p.row*p.gy+p.gy/2;return(<circle key={`s-${a.id}`} cx={cx} cy={cy} r={DOT/2} fill={EF_STRAT_MAP[a.strategy].color} opacity={0.4}/>);});})()}
+          {/* Goers dots */}
+          {(()=>{const placements=placeDots(goers.length,BAR_W,SCENE_H-8);return goers.map((a,i)=>{const p=placements[i];const cx=HOME_W+20+p.padding+p.col*p.gx+p.gx/2;const cy=4+p.padding+p.row*p.gy+p.gy/2;return(<circle key={`g-${a.id}`} cx={cx} cy={cy} r={DOT/2} fill={EF_STRAT_MAP[a.strategy].color} opacity={0.95}/>);});})()}
+        </svg>
+
+        {/* Attendance chart */}
+        {history.length>0&&<div style={{marginTop:18}}>
+          <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:6}}>Attendance over weeks</div>
+          <ResponsiveContainer width="100%" height={140}>
+            <LineChart data={chartData} margin={{top:6,right:8,left:0,bottom:6}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/>
+              <XAxis dataKey="week" stroke={T.fnt} fontSize={11}/>
+              <YAxis domain={[0,N]} stroke={T.fnt} fontSize={11}/>
+              <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:6,fontSize:11}}/>
+              <Line type="monotone" dataKey="capacity" stroke="#e87b6f" strokeWidth={1.5} strokeDasharray="5 3" dot={false} isAnimationActive={false}/>
+              <Line type="monotone" dataKey="attendance" stroke="#5b86c4" strokeWidth={2.5} dot={false} isAnimationActive={false}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>}
+      </div>
+
+      {/* Strategies panel */}
+      <div style={{flex:'0 1 280px',minWidth:240,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:12}}>Strategies (score = went-when-comfortable minus went-when-crowded)</div>
+        {stratStats.map(s=>(
+          <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px dashed ${T.bdr}`,fontSize:12}}>
+            <span style={{width:14,height:14,borderRadius:7,background:s.color,flexShrink:0}}/>
+            <span style={{color:T.txt,minWidth:88,fontFamily:T.san}}>{s.label}</span>
+            <span style={{color:T.fnt,fontSize:10,minWidth:42}}>{s.count} agts</span>
+            <span style={{marginLeft:'auto',fontWeight:700,color:s.score>0?'#3a8a64':s.score<0?'#a85047':T.fnt}}>{s.score>0?'+':''}{s.score}</span>
+          </div>
+        ))}
+        {history.length>3&&<div style={{marginTop:14,fontSize:11,color:T.mut,lineHeight:1.5,fontStyle:'italic'}}>
+          Avg attendance: <strong style={{color:T.txt}}>{(history.reduce((a,b)=>a+b,0)/history.length).toFixed(1)}</strong> / {N}
+          <br/>Crowded weeks: <strong style={{color:T.txt}}>{history.filter(h=>h>capacity).length}</strong> / {history.length}
+        </div>}
+      </div>
+    </div>
+
+    <div style={{marginTop:24,padding:'14px 18px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:10,maxWidth:800,margin:'24px auto 0'}}>
+      <h3 style={{fontSize:13,fontFamily:T.ser,fontStyle:'italic',color:T.txt,marginBottom:6}}>How it works</h3>
+      <p style={{fontSize:11,color:T.mut,lineHeight:1.65,margin:0}}>
+        {N} agents decide each week whether to go to El Farol. They go only if their personal prediction of attendance is below the comfort capacity ({capacity}). Each agent uses a different rule (last week&apos;s count, a running average, a trend extrapolation, the mirror, a constant, or pure randomness). Going is rewarded only if the bar isn&apos;t overcrowded — so any strategy that everyone starts using will self-defeat. Brian Arthur (1994) showed that <em>heterogeneous</em> strategy ecologies can stabilize attendance near capacity even though no single rule is correct.
+      </p>
+    </div>
+  </div>);
+}
 
 /* ═══════ LANDING PAGE ═══════ */
 function LandingPage(){
@@ -1085,7 +1255,7 @@ function AppShell(){
       <Route path="/flag-game" element={<FlagGameSeries apiKey={apiKey}/>}/>
       <Route path="/map-game" element={<GameStub/>}/>
       <Route path="/prediction-market" element={<GameStub/>}/>
-      <Route path="/el-farol" element={<GameStub/>}/>
+      <Route path="/el-farol" element={<ElFarolBar/>}/>
       <Route path="*" element={<LandingPage/>}/>
     </Routes>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
