@@ -491,7 +491,9 @@ function CropView({country,top,left,w=300}){const svg=FLAG_SVG[country];if(!svg)
 /* ═══════ MECHANISTIC TRACE ═══════ */
 function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
   const[cropPngs,setCropPngs]=useState({});
+  const[flagPngs,setFlagPngs]=useState({});
   useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg||!agents.length)return;rasterizeFlag(svg).then(c=>{if(cancelled)return;const out={};agents.forEach((a,i)=>{try{out[i]=cropAgentView(c,a.top,a.left);}catch(_){}});setCropPngs(out);}).catch(()=>{});return()=>{cancelled=true;};},[truth,agents]);
+  useEffect(()=>{let cancelled=false;const uniq=new Set();(allG||[]).forEach(round=>round.forEach(g=>{if(g&&FLAG_SVG[g])uniq.add(g);}));if(uniq.size===0)return;Promise.all([...uniq].map(c=>rasterizeFlag(FLAG_SVG[c]).then(can=>[c,can.toDataURL('image/png')]).catch(()=>[c,null]))).then(pairs=>{if(cancelled)return;setFlagPngs(p=>{const n={...p};pairs.forEach(([c,png])=>{if(png)n[c]=png;});return n;});});return()=>{cancelled=true;};},[allG]);
   if(!allG||allG.length<2)return null;
   const N=agents.length;const numProbes=allG.length;
   const ROW_H=44,COL_W=48,TOP_GUTTER=30;
@@ -531,7 +533,6 @@ function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
       <defs>
         <marker id="mt-arrow-bold" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={5} markerHeight={5} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor"/></marker>
         <marker id="mt-arrow-faint" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={4} markerHeight={4} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity={0.4}/></marker>
-        {finalCountries.map(c=>(<symbol key={`s-${c}`} id={fcId(c)} viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice" dangerouslySetInnerHTML={{__html:FLAG_INNER[c]||''}}/>))}
       </defs>
 
       {/* Pivot column band (behind cells) */}
@@ -570,8 +571,10 @@ function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
         if(!belief)return(<rect key={`b-${i}-${r}`} x={x} y={y} width={w} height={h} fill="none" stroke={T.bdr} strokeDasharray="2 2" rx={3}/>);
         const changed=r===0||allG[r-1][i]!==belief;
         const isTruth=belief===truth;
+        const png=flagPngs[belief];
         return(<g key={`b-${i}-${r}`}>
-          <rect x={x} y={y} width={w} height={h} fill={CCOL[belief]||T.fnt} opacity={changed?(isTruth?1:0.85):0.32} rx={3}/>
+          {changed&&png?<image href={png} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid slice"/>
+            :<rect x={x} y={y} width={w} height={h} fill={CCOL[belief]||T.fnt} opacity={changed?(isTruth?1:0.85):0.32} rx={3}/>}
           <rect x={x} y={y} width={w} height={h} fill="none"
             stroke={isTruth?'#2d2926':(changed?'#00000033':'transparent')}
             strokeWidth={isTruth?1.4:0.6} rx={3}/>
@@ -584,9 +587,9 @@ function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
         const final=allG[numProbes-1][i];if(!final)return null;
         const x=W-RIGHT_PAD+4,y=cellY(i)+(ROW_H-FINAL_H)/2;
         const isTruth=final===truth;
-        const hasFlag=!!FLAG_INNER[final];
+        const png=flagPngs[final];
         return(<g key={`f-${i}`}>
-          {hasFlag&&<use href={`#${fcId(final)}`} x={x} y={y} width={FINAL_W} height={FINAL_H}/>}
+          {png&&<image href={png} x={x} y={y} width={FINAL_W} height={FINAL_H} preserveAspectRatio="xMidYMid slice"/>}
           <rect x={x} y={y} width={FINAL_W} height={FINAL_H} fill="none"
             stroke={isTruth?'#3a8a64':'#a85047'} strokeWidth={1.8} rx={3}/>
           <title>{final}{isTruth?' ✓':' ✗'}</title>
