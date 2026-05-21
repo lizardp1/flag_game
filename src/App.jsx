@@ -1002,7 +1002,7 @@ const GAMES=[
   {slug:'flag-game',icon:'🏴',title:'The Flag Game',tagline:'Six agents see fragments of a hidden flag. Through gossip, can they agree on the country?',status:'live'},
   {slug:'el-farol',icon:'🍺',title:'The El Farol Bar',tagline:'Go to the bar, or stay home? The right answer depends on what everyone else does.',status:'live'},
   {slug:'map-game',icon:'🗺️',title:'The Map Game',tagline:'Each agent sees one tile of a stylized scene. Where in the world are we?',status:'live'},
-  {slug:'prediction-market',icon:'📈',title:'The Prediction Market',tagline:'Agents bet on an unknown event. Does the price converge to the truth?',status:'soon'},
+  {slug:'prediction-market',icon:'📈',title:'The Prediction Market',tagline:'Traders push the price toward their private beliefs. Does the market find the truth?',status:'live'},
 ];
 
 /* ═══════ MAP GAME ═══════ */
@@ -1140,6 +1140,164 @@ function MapGame(){
   </div>);
 }
 const _MAP_FLAG_SVG_OVERRIDE=(()=>{Object.entries(LOC_SVG).forEach(([k,v])=>{FLAG_SVG[k]=v;});return true;})();
+
+/* ═══════ PREDICTION MARKET ═══════ */
+const PM_TRADERS=[
+  {id:'informed',label:'informed',color:'#6ec89b',desc:'noisy signal around truth'},
+  {id:'noise',label:'noise',color:'#9a9183',desc:'uniform random belief'},
+  {id:'bullish',label:'bullish bias',color:'#e87b6f',desc:'systematically +0.25 above truth'},
+  {id:'bearish',label:'bearish bias',color:'#5b86c4',desc:'systematically -0.25 below truth'},
+  {id:'constant',label:'constant 50%',color:'#d4a94b',desc:'always thinks 0.50'},
+  {id:'trend',label:'trend follower',color:'#7a6db0',desc:'extrapolates recent price'},
+  {id:'contrarian',label:'contrarian',color:'#4a8aa8',desc:'bets against the trend'},
+];
+const PM_MAP=Object.fromEntries(PM_TRADERS.map(t=>[t.id,t]));
+function pmGauss(mu,sigma){const u1=Math.max(1e-6,Math.random()),u2=Math.random();return mu+sigma*Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);}
+const pmClamp=x=>Math.max(0.01,Math.min(0.99,x));
+function pmStaticBelief(type,truth){
+  switch(type){
+    case 'informed':return pmClamp(pmGauss(truth,0.08));
+    case 'noise':return pmClamp(Math.random());
+    case 'bullish':return pmClamp(pmGauss(truth+0.25,0.05));
+    case 'bearish':return pmClamp(pmGauss(truth-0.25,0.05));
+    case 'constant':return 0.5;
+    default:return null; // dynamic
+  }
+}
+function pmDynamicBelief(type,priceHist){
+  if(priceHist.length<2)return 0.5;
+  const last=priceHist[priceHist.length-1];
+  const win=priceHist.slice(-3);const trend=win[win.length-1]-win[0];
+  if(type==='trend')return pmClamp(last+trend);
+  if(type==='contrarian')return pmClamp(last-trend);
+  return last;
+}
+
+function PredictionMarket(){
+  const[trueProb,setTrueProb]=useState(0.7);
+  const[counts,setCounts]=useState(()=>({informed:5,noise:2,bullish:1,bearish:1,constant:1,trend:0,contrarian:0}));
+  const N=Object.values(counts).reduce((a,b)=>a+b,0);
+  const[agents,setAgents]=useState([]);
+  const[priceHist,setPriceHist]=useState([0.5]);
+  const[tick,setTick]=useState(0);
+  const[running,setRunning]=useState(false);
+  const[spd,setSpd]=useState(280);
+  const[impact,setImpact]=useState(0.08);
+  const iRef=useRef(null);
+
+  // Re-init agents whenever the mix or truth changes
+  useEffect(()=>{
+    const init=[];let id=0;
+    PM_TRADERS.forEach(t=>{for(let i=0;i<(counts[t.id]||0);i++)init.push({id:id++,type:t.id,staticBelief:pmStaticBelief(t.id,trueProb)});});
+    setAgents(init);setPriceHist([0.5]);setTick(0);setRunning(false);
+  },[counts,trueProb]);
+
+  const beliefFor=useCallback((a,ph)=>{return a.staticBelief!=null?a.staticBelief:pmDynamicBelief(a.type,ph);},[]);
+
+  const stepOnce=useCallback(()=>{
+    setPriceHist(h=>{const p=h[h.length-1];const net=agents.reduce((s,a)=>s+(beliefFor(a,h)-p),0);const np=Math.max(0,Math.min(1,p+impact*net/Math.max(1,N)));return[...h,np];});
+    setTick(t=>t+1);
+  },[agents,impact,N,beliefFor]);
+
+  useEffect(()=>{if(!running)return;iRef.current=setInterval(stepOnce,spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[running,spd,stepOnce]);
+
+  const reset=()=>{setRunning(false);setPriceHist([0.5]);setTick(0);};
+  const adjust=(typeId,delta)=>{if(running)return;setCounts(c=>{const cur=c[typeId]||0;return{...c,[typeId]:Math.max(0,Math.min(40,cur+delta))};});};
+
+  // Current beliefs (for the belief-line viz)
+  const beliefs=agents.map(a=>({...a,belief:beliefFor(a,priceHist),color:PM_MAP[a.type].color}));
+  const currentPrice=priceHist[priceHist.length-1];
+  const avgBelief=beliefs.length?beliefs.reduce((s,b)=>s+b.belief,0)/beliefs.length:0.5;
+
+  // Chart data
+  const chartData=priceHist.map((p,i)=>({tick:i,price:p,truth:trueProb}));
+  // Compute typeStats for the right panel
+  const typeStats=PM_TRADERS.map(t=>({...t,count:counts[t.id]||0}));
+
+  // Belief-line viz dims
+  const LINE_W=620,LINE_H=80,LINE_PAD=24;
+
+  return(<div style={{maxWidth:1200,margin:'0 auto',padding:'0 14px 48px'}}>
+    <header style={{textAlign:'center',padding:'16px 20px 24px'}}>
+      <h1 style={{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>The <span style={{fontWeight:700,fontStyle:'italic'}}>Prediction Market</span></h1>
+      <p style={{fontSize:16,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.55}}>Each trader privately believes the event&apos;s probability. They push the price toward their belief. Does the market converge to the truth, or to the loudest bias?</p>
+    </header>
+
+    <div style={S.bar}>
+      <label style={{fontSize:10,color:T.dim}}>True P(YES)</label>
+      <input type="range" min={5} max={95} step={1} value={Math.round(trueProb*100)} onChange={e=>setTrueProb(+e.target.value/100)} disabled={running} style={{width:120,accentColor:'#3a8a64'}}/>
+      <span style={{fontSize:11,color:T.txt,fontWeight:700,minWidth:40}}>{(trueProb*100).toFixed(0)}%</span>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Price impact α</label>
+      <input type="range" min={1} max={30} step={1} value={Math.round(impact*100)} onChange={e=>setImpact(+e.target.value/100)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <span style={{fontSize:11,color:T.fnt,minWidth:34}}>{impact.toFixed(2)}</span>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Speed</label>
+      <input type="range" min={50} max={800} value={850-spd} onChange={e=>setSpd(850-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <div style={S.sep}/>
+      <span style={{fontSize:11,color:T.fnt}}>Tick {tick}</span>
+      <div style={S.sep}/>
+      {N>=1&&(!running?<><button onClick={stepOnce} style={S.btn(true,'#7a6db0')}>step</button><button onClick={()=>setRunning(true)} style={S.btn(true,'#6ec89b')}>▶ Run</button></>:<button onClick={()=>setRunning(false)} style={S.btn(true,'#e87b6f')}>■ Pause</button>)}
+      <button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>
+    </div>
+
+    <div style={{display:'flex',gap:18,marginTop:18,flexWrap:'wrap'}}>
+      <div style={{flex:'1 1 640px',minWidth:520,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>Beliefs landscape</div>
+        <svg width="100%" viewBox={`0 0 ${LINE_W} ${LINE_H}`} style={{background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`}}>
+          {/* axis line */}
+          <line x1={LINE_PAD} y1={LINE_H/2} x2={LINE_W-LINE_PAD} y2={LINE_H/2} stroke={T.bdr} strokeWidth={2}/>
+          {/* ticks */}
+          {[0,0.25,0.5,0.75,1].map(t=>(<g key={t}><line x1={LINE_PAD+(LINE_W-2*LINE_PAD)*t} y1={LINE_H/2-5} x2={LINE_PAD+(LINE_W-2*LINE_PAD)*t} y2={LINE_H/2+5} stroke={T.bdr}/><text x={LINE_PAD+(LINE_W-2*LINE_PAD)*t} y={LINE_H-4} textAnchor="middle" fontSize={9} fill={T.fnt}>{(t*100).toFixed(0)}%</text></g>))}
+          {/* truth marker */}
+          <g><polygon points={`${LINE_PAD+(LINE_W-2*LINE_PAD)*trueProb-6},${LINE_H/2-22} ${LINE_PAD+(LINE_W-2*LINE_PAD)*trueProb+6},${LINE_H/2-22} ${LINE_PAD+(LINE_W-2*LINE_PAD)*trueProb},${LINE_H/2-12}`} fill="#3a8a64"/><text x={LINE_PAD+(LINE_W-2*LINE_PAD)*trueProb} y={LINE_H/2-26} textAnchor="middle" fontSize={9} fontWeight={700} fill="#3a8a64">truth</text></g>
+          {/* current price marker */}
+          <g><line x1={LINE_PAD+(LINE_W-2*LINE_PAD)*currentPrice} y1={LINE_H/2-10} x2={LINE_PAD+(LINE_W-2*LINE_PAD)*currentPrice} y2={LINE_H/2+10} stroke="#5b86c4" strokeWidth={3}/><text x={LINE_PAD+(LINE_W-2*LINE_PAD)*currentPrice} y={LINE_H/2+24} textAnchor="middle" fontSize={9} fontWeight={700} fill="#5b86c4">price {(currentPrice*100).toFixed(0)}%</text></g>
+          {/* agent dots stacked at their belief */}
+          {(()=>{const buckets={};beliefs.forEach(b=>{const k=Math.round(b.belief*200);(buckets[k]=buckets[k]||[]).push(b);});return Object.entries(buckets).flatMap(([k,arr])=>{const xp=LINE_PAD+(LINE_W-2*LINE_PAD)*(+k/200);return arr.map((b,i)=>(<circle key={`a-${b.id}`} cx={xp} cy={LINE_H/2-4-i*8} r={4} fill={b.color} opacity={0.92} stroke="#fff" strokeWidth={1}/>));});})()}
+        </svg>
+
+        <div style={{marginTop:18,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:6}}>Price over time</div>
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={chartData} margin={{top:6,right:8,left:0,bottom:6}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/>
+            <XAxis dataKey="tick" stroke={T.fnt} fontSize={11}/>
+            <YAxis domain={[0,1]} stroke={T.fnt} fontSize={11} tickFormatter={v=>`${(v*100).toFixed(0)}%`}/>
+            <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:6,fontSize:11}} formatter={(v)=>(v*100).toFixed(1)+'%'}/>
+            <Line type="monotone" dataKey="truth" stroke="#3a8a64" strokeWidth={1.5} strokeDasharray="5 3" dot={false} isAnimationActive={false}/>
+            <Line type="monotone" dataKey="price" stroke="#5b86c4" strokeWidth={2.5} dot={false} isAnimationActive={false}/>
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{flex:'0 1 320px',minWidth:280,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:4}}>Compose the market</div>
+        <div style={{fontSize:10,color:T.fnt,fontStyle:'italic',marginBottom:12}}>Click − / + to add or remove traders per type.</div>
+        {typeStats.map(t=>{const btnStyle={width:22,height:22,borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:running?T.fnt:T.mut,cursor:running?'default':'pointer',fontWeight:700,fontSize:13,display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0};return(
+          <div key={t.id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 0',borderBottom:`1px dashed ${T.bdr}`,fontSize:12}}>
+            <span style={{width:12,height:12,borderRadius:6,background:t.color,flexShrink:0}}/>
+            <span style={{color:T.txt,minWidth:96,fontFamily:T.san,fontSize:11}} title={t.desc}>{t.label}</span>
+            <button onClick={()=>adjust(t.id,-1)} disabled={running||t.count===0} style={{...btnStyle,opacity:t.count===0?0.3:1}}>−</button>
+            <span style={{minWidth:24,textAlign:'center',color:T.txt,fontWeight:600,fontSize:12,fontFamily:'ui-monospace,monospace'}}>{t.count}</span>
+            <button onClick={()=>adjust(t.id,1)} disabled={running} style={btnStyle}>+</button>
+          </div>);})}
+        <div style={{marginTop:14,padding:'8px 10px',background:T.card,borderRadius:6,fontSize:11,color:T.mut,lineHeight:1.55,border:`1px solid ${T.bdr}`}}>
+          Total <strong style={{color:T.txt}}>{N}</strong> traders<br/>
+          Price <strong style={{color:'#5b86c4'}}>{(currentPrice*100).toFixed(1)}%</strong><br/>
+          Truth <strong style={{color:'#3a8a64'}}>{(trueProb*100).toFixed(0)}%</strong><br/>
+          Avg belief <strong style={{color:T.txt}}>{(avgBelief*100).toFixed(1)}%</strong> · Gap to truth <strong style={{color:Math.abs(avgBelief-trueProb)<0.05?'#3a8a64':'#a85047'}}>{((avgBelief-trueProb)*100).toFixed(1)}%</strong>
+        </div>
+      </div>
+    </div>
+
+    <div style={{marginTop:20,padding:'14px 18px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:10,maxWidth:800,margin:'20px auto 0'}}>
+      <h3 style={{fontSize:13,fontFamily:T.ser,fontStyle:'italic',color:T.txt,marginBottom:6}}>How it works</h3>
+      <p style={{fontSize:11,color:T.mut,lineHeight:1.65,margin:0}}>
+        Each tick, every trader compares their private belief to the current price. The price moves by α × the average (belief − price). Equilibrium is where the price equals the <em>mean belief</em>, not the truth. So when informed traders dominate, the price tracks truth. Add enough bullish or bearish traders and the price drifts off. Add trend / contrarian agents and the system can oscillate. The market aggregates whatever beliefs are present — for better or worse (Hayek 1945, Hanson 2003).
+      </p>
+    </div>
+  </div>);
+}
 
 /* ═══════ EL FAROL BAR ═══════ */
 const EF_STRATEGIES=[
@@ -1394,7 +1552,7 @@ function AppShell(){
       <Route path="/" element={<LandingPage/>}/>
       <Route path="/flag-game" element={<FlagGameSeries apiKey={apiKey}/>}/>
       <Route path="/map-game" element={<MapGame/>}/>
-      <Route path="/prediction-market" element={<GameStub/>}/>
+      <Route path="/prediction-market" element={<PredictionMarket/>}/>
       <Route path="/el-farol" element={<ElFarolBar/>}/>
       <Route path="*" element={<LandingPage/>}/>
     </Routes>
