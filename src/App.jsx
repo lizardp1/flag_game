@@ -423,7 +423,7 @@ function bestGuess(an,mem){const votes={};mem.forEach(m=>{votes[m]=(votes[m]||0)
     if(sc>bestS||(sc===bestS&&(!best||f.c<best))){bestS=sc;best=f.c;}});return best;}
 
 /* ═══════ SIMULATION ═══════ */
-function runStep(ag,grid,rng){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuess(analyzeCrop(grid,ag[si].top,ag[si].left),ag[si].memory);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
+function runStep(ag,grid,rng){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuess(analyzeCrop(grid,ag[si].top,ag[si].left),ag[si].memory);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);return{si,li,g};}
 function probeAll(ag,grid){return ag.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory));}
 function compShares(gs){const ct={};gs.forEach(g=>{ct[g]=(ct[g]||0)+1;});const n=gs.length||1;const sh={};Object.entries(ct).forEach(([c,v])=>{sh[c]=v/n;});return sh;}
 function classifyOutcome(shares,truthC){const ent=Object.entries(shares).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);if(!ent.length)return{label:'Fragmentation',icon:'◇',color:'#9a9183',details:'No guesses'};const[topC,topS]=ent[0];
@@ -486,6 +486,48 @@ function CropView({country,top,left,w=300}){const svg=FLAG_SVG[country];if(!svg)
     <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} width={w} height={h} preserveAspectRatio="xMidYMid slice" dangerouslySetInnerHTML={{__html:m[1]}}/>
   </div>);}
 
+/* ═══════ MECHANISTIC TRACE ═══════ */
+function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
+  if(!allG||allG.length<2)return null;
+  const N=agents.length;const numProbes=allG.length;
+  const ROW_H=26,COL_W=44,LEFT_GUTTER=80,TOP_GUTTER=32,RIGHT_PAD=10;
+  const cellX=c=>LEFT_GUTTER+c*COL_W;
+  const cellY=r=>TOP_GUTTER+r*ROW_H;
+  const W=LEFT_GUTTER+numProbes*COL_W+RIGHT_PAD;
+  const H=TOP_GUTTER+N*ROW_H+10;
+  // Compute simple per-agent influence: how many times this agent's spoken country ended up being the final consensus
+  const finalRound=allG[allG.length-1];
+  const consensus=(()=>{const ct={};finalRound.forEach(g=>{if(g)ct[g]=(ct[g]||0)+1;});const ent=Object.entries(ct).sort((a,b)=>b[1]-a[1]);return ent[0]?.[0]||null;})();
+  const influence=agents.map((_,i)=>gossipLog.filter(g=>g.si===i&&g.g===consensus).length);
+  const maxInf=Math.max(1,...influence);
+  return(<div style={{marginTop:20,padding:'16px 18px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`,overflowX:'auto'}}>
+    <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:14}}>
+      Mechanistic Trace <span style={{textTransform:'none',letterSpacing:0,color:T.fnt,fontWeight:400,fontStyle:'italic'}}>· belief over time + gossip flow</span>
+    </div>
+    <svg width={W} height={H} style={{minWidth:W,display:'block'}}>
+      <defs>
+        <marker id="mt-arrow" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={5} markerHeight={5} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity={0.6}/></marker>
+      </defs>
+      {agents.map((a,i)=>(<g key={`row-${i}`}>
+        <text x={LEFT_GUTTER-8} y={cellY(i)+ROW_H/2+4} textAnchor="end" fontSize={11} fill={T.mut} fontFamily={T.san}>Agent {i+1}</text>
+        {/* influence bar at right of label */}
+        <rect x={LEFT_GUTTER-78} y={cellY(i)+ROW_H/2+8} width={68*influence[i]/maxInf} height={3} fill={consensus===truth?'#6ec89b':'#e87b6f'} opacity={0.5} rx={1.5}/>
+      </g>))}
+      {allG.map((_,r)=>(<text key={`col-${r}`} x={cellX(r)+COL_W/2} y={18} textAnchor="middle" fontSize={9} fill={T.fnt}>{r===0?'init':`R${r}`}</text>))}
+      {/* Gossip arrows in the gap before each probe */}
+      {gossipLog.map((g,idx)=>{const probeIdx=Math.floor(g.step/pe);if(probeIdx>=numProbes-1)return null;const x1=cellX(probeIdx)+COL_W-1,x2=cellX(probeIdx+1)+1,xm=(x1+x2)/2;const y1=cellY(g.si)+ROW_H/2,y2=cellY(g.li)+ROW_H/2;const sameRow=g.si===g.li;if(sameRow)return null;const isTruth=g.g===truth;const col=CCOL[g.g]||T.fnt;return(<path key={`arr-${idx}`} d={`M${xm-6},${y1} Q${xm+4},${(y1+y2)/2} ${xm-2},${y2}`} stroke={col} strokeWidth={isTruth?1.4:0.9} fill="none" opacity={isTruth?0.55:0.32} markerEnd="url(#mt-arrow)"/>);})}
+      {/* Belief cells */}
+      {agents.map((a,i)=>allG.map((round,r)=>{const belief=round[i];if(!belief)return(<rect key={`c-${i}-${r}`} x={cellX(r)+3} y={cellY(i)+2} width={COL_W-6} height={ROW_H-4} fill="none" stroke={T.bdr} strokeDasharray="2 2" rx={3}/>);const isTruth=belief===truth;return(<g key={`c-${i}-${r}`}>
+        <rect x={cellX(r)+3} y={cellY(i)+2} width={COL_W-6} height={ROW_H-4} fill={CCOL[belief]||T.fnt} opacity={isTruth?0.92:0.5} rx={3} stroke={isTruth?T.txt:'transparent'} strokeWidth={isTruth?1.2:0}/>
+        <title>{belief}</title>
+      </g>);}))}
+    </svg>
+    <div style={{marginTop:10,fontSize:11,color:T.mut,lineHeight:1.55,maxWidth:760}}>
+      Each cell is an agent's belief at that probe round (color = country). Arrows in the gaps are gossip — speaker → listener, country said. Cells matching the truth (<strong style={{color:CCOL[truth]||T.txt}}>{truth}</strong>) are outlined. Bars next to agent names rank how often their spoken claim matched the final consensus (<strong style={{color:consensus===truth?'#3a8a64':'#a85047'}}>{consensus||'—'}</strong>) — a rough "influence" proxy. Hover any cell for the country name.
+    </div>
+  </div>);
+}
+
 /* ═══════ CHART ═══════ */
 function TrajChart({data,active,truth,onHover}){if(!data.length)return(<div style={{height:310,display:'flex',alignItems:'center',justifyContent:'center',color:T.fnt,fontSize:12,fontStyle:'italic'}}>Trajectory appears once the simulation runs</div>);
   const pk={};data.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));const shown=active.filter(c=>pk[c]>0.02||c===truth).sort((a,b)=>(pk[b]||0)-(pk[a]||0)).slice(0,14);
@@ -517,10 +559,10 @@ function FlagGame({apiKey}){
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
   const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-5.4','gpt-5.4','gpt-4o'];setAgents(ms.map(m=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[]})));},[phase]);
-  const start=useCallback(()=>{if(N<2)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey]);
+  const start=useCallback(()=>{if(N<2)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0,gossipLog:[]};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey]);
 
   useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
-    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(r.memoryLine);}else{runStep(s.agents,grid,s.rng);}};
+    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(r.memoryLine);s.gossipLog.push({step:s.step,si,li,g:r.country});}else{const info=runStep(s.agents,grid,s.rng);if(info)s.gossipLog.push({step:s.step,...info});}};
     const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAll(s.agents,grid);}};
     (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
         try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
@@ -556,6 +598,7 @@ function FlagGame({apiKey}){
           {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/><InlineFlag country={c}/><span>{c}{c===truthFlag.c?' (truth)':''}</span></span>)}</div>}
           {phase==='done'&&fShares&&<OutcomePanel shares={fShares} truthC={truthFlag.c} agents={agents} guesses={guesses}/>}</div>
       </div>
+      {phase==='done'&&sim.current&&sim.current.gossipLog&&<MechanisticTrace agents={agents} allG={allG} gossipLog={sim.current.gossipLog} truth={truthFlag.c} pe={pe}/>}
       <div style={{marginTop:24,padding:'18px 22px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:11,maxWidth:740,margin:'24px auto 0'}}>
         <h3 style={{fontSize:14,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>How it works</h3>
         <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>{F.length} real country flags are embedded as SVGs (from the flag-icons project). The simulation is entirely local — no API calls are made. Agents use a scripted heuristic that analyzes a {GW}×{GH} color grid, matching crop colors against flag definitions. Model labels are cosmetic; all agents use the same scoring algorithm. Each step a random speaker–listener pair meets and the speaker shares its best guess, entering the listener's memory (last {H_MEM}). Stops after {CON_RUNS} consecutive rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or N×14 steps. Hover the trajectory chart to time-travel after the run.</p>
