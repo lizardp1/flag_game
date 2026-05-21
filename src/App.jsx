@@ -1001,9 +1001,145 @@ function ApiKeyBar({apiKey,setApiKey}){
 const GAMES=[
   {slug:'flag-game',icon:'🏴',title:'The Flag Game',tagline:'Six agents see fragments of a hidden flag. Through gossip, can they agree on the country?',status:'live'},
   {slug:'el-farol',icon:'🍺',title:'The El Farol Bar',tagline:'Go to the bar, or stay home? The right answer depends on what everyone else does.',status:'live'},
-  {slug:'map-game',icon:'🗺️',title:'The Map Game',tagline:'Each agent sees one tile of the world. Where are we?',status:'soon'},
+  {slug:'map-game',icon:'🗺️',title:'The Map Game',tagline:'Each agent sees one tile of a stylized scene. Where in the world are we?',status:'live'},
   {slug:'prediction-market',icon:'📈',title:'The Prediction Market',tagline:'Agents bet on an unknown event. Does the price converge to the truth?',status:'soon'},
 ];
+
+/* ═══════ MAP GAME ═══════ */
+const LOCATIONS=[
+  {name:'Paris, France',sky:'#a3c9e8',ground:'#7a9967',landmark:'eiffel',landmarkColor:'#2a2a2a',accent:'#cabe8e'},
+  {name:'Cairo, Egypt',sky:'#d8e8f0',ground:'#e0c489',landmark:'pyramids',landmarkColor:'#a8794c',accent:'#5a8c6e'},
+  {name:'Sydney, Australia',sky:'#9bc4e2',ground:'#4a8aa8',landmark:'opera',landmarkColor:'#f0eee2',accent:'#3a5a6e'},
+  {name:'Reykjavik, Iceland',sky:'#3a4a6a',ground:'#6a7a8a',landmark:'aurora',landmarkColor:'#9ad8a3',accent:'#bdc7d4'},
+  {name:'Marrakech, Morocco',sky:'#f5b88c',ground:'#b86a3a',landmark:'minaret',landmarkColor:'#c39656',accent:'#7a4030'},
+  {name:'New York, USA',sky:'#9bb8d0',ground:'#4a4a52',landmark:'skyline',landmarkColor:'#2a3340',accent:'#d8d4c8'},
+  {name:'Rio de Janeiro, Brazil',sky:'#b8d4e8',ground:'#3a7aa8',landmark:'christ',landmarkColor:'#d4d0c4',accent:'#5a8a4a'},
+  {name:'Swiss Alps',sky:'#a8c4d8',ground:'#5a6855',landmark:'mountains',landmarkColor:'#7a8590',accent:'#f0f0f0'},
+];
+function locationSvg(loc){
+  const sky=`<rect width="640" height="280" fill="${loc.sky}"/>`;
+  const ground=`<rect y="280" width="640" height="200" fill="${loc.ground}"/>`;
+  let lm='';
+  switch(loc.landmark){
+    case 'eiffel':lm=`<polygon points="320,90 305,440 335,440" fill="${loc.landmarkColor}"/><polygon points="280,440 360,440 350,470 290,470" fill="${loc.landmarkColor}"/><line x1="295" y1="240" x2="345" y2="240" stroke="${loc.landmarkColor}" stroke-width="6"/><line x1="290" y1="340" x2="350" y2="340" stroke="${loc.landmarkColor}" stroke-width="6"/>`;break;
+    case 'pyramids':lm=`<polygon points="60,440 200,200 340,440" fill="${loc.landmarkColor}"/><polygon points="280,440 420,180 560,440" fill="${loc.landmarkColor}" opacity="0.95"/><polygon points="440,440 540,260 640,440" fill="${loc.landmarkColor}" opacity="0.9"/><circle cx="530" cy="120" r="42" fill="${loc.accent}"/>`;break;
+    case 'opera':lm=`<path d="M 130 440 Q 200 200 270 440 Z" fill="${loc.landmarkColor}"/><path d="M 240 440 Q 310 220 380 440 Z" fill="${loc.landmarkColor}" opacity="0.95"/><path d="M 350 440 Q 420 250 490 440 Z" fill="${loc.landmarkColor}" opacity="0.9"/><rect y="430" width="640" height="14" fill="${loc.accent}"/>`;break;
+    case 'aurora':lm=`<path d="M 0 100 Q 160 30 320 110 T 640 60" stroke="${loc.landmarkColor}" stroke-width="60" fill="none" opacity="0.55"/><path d="M 0 180 Q 160 130 320 200 T 640 150" stroke="${loc.landmarkColor}" stroke-width="40" fill="none" opacity="0.45"/><polygon points="0,360 180,200 360,360" fill="${loc.accent}"/><polygon points="280,360 460,220 640,360" fill="${loc.accent}" opacity="0.9"/>`;break;
+    case 'minaret':lm=`<rect x="280" y="200" width="80" height="240" fill="${loc.landmarkColor}"/><polygon points="270,200 370,200 320,140" fill="${loc.landmarkColor}"/><rect x="295" y="220" width="50" height="20" fill="${loc.accent}"/><rect x="305" y="280" width="30" height="40" fill="${loc.accent}"/>`;break;
+    case 'skyline':lm=`<rect x="20" y="280" width="60" height="200" fill="${loc.landmarkColor}"/><rect x="90" y="220" width="80" height="260" fill="${loc.landmarkColor}"/><rect x="180" y="260" width="60" height="220" fill="${loc.landmarkColor}"/><rect x="250" y="180" width="100" height="300" fill="${loc.landmarkColor}"/><rect x="360" y="240" width="70" height="240" fill="${loc.landmarkColor}"/><rect x="440" y="200" width="80" height="280" fill="${loc.landmarkColor}"/><rect x="530" y="260" width="60" height="220" fill="${loc.landmarkColor}"/><rect x="600" y="240" width="40" height="240" fill="${loc.landmarkColor}"/>`;break;
+    case 'christ':lm=`<polygon points="240,440 320,180 400,440" fill="${loc.accent}"/><rect x="312" y="200" width="16" height="180" fill="${loc.landmarkColor}"/><rect x="280" y="240" width="80" height="16" fill="${loc.landmarkColor}"/><circle cx="320" cy="185" r="18" fill="${loc.landmarkColor}"/>`;break;
+    case 'mountains':lm=`<polygon points="40,440 200,140 360,440" fill="${loc.landmarkColor}"/><polygon points="240,440 420,90 600,440" fill="${loc.landmarkColor}"/><polygon points="180,440 280,200 380,440" fill="${loc.accent}"/><polygon points="380,440 480,180 580,440" fill="${loc.accent}" opacity="0.7"/>`;break;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">${sky}${ground}${lm}</svg>`;
+}
+const LOC_SVG={};LOCATIONS.forEach(l=>{LOC_SVG[l.name]=locationSvg(l);});
+
+function MapGame(){
+  const[truth,setTruth]=useState(()=>LOCATIONS[Math.floor(Math.random()*LOCATIONS.length)].name);
+  const[agents,setAgents]=useState([]);
+  const[phase,setPhase]=useState('setup');
+  const[guesses,setGuesses]=useState([]);
+  const[allG,setAllG]=useState([]);
+  const[traj,setTraj]=useState([]);
+  const[step,setStep]=useState(0);
+  const[pr,setPr]=useState(0);
+  const[spd,setSpd]=useState(120);
+  const[cons,setCons]=useState(false);
+  const[fShares,setFS]=useState(null);
+  const[hovIdx,setHovIdx]=useState(null);
+  const[active,setActive]=useState([]);
+  const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+
+  const truthLoc=useMemo(()=>LOCATIONS.find(l=>l.name===truth)||LOCATIONS[0],[truth]);
+  const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
+  const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
+
+  // Scoring: how well does a location match an agent's crop window
+  const scoreLocation=useCallback((agent,loc)=>{
+    let s=0;
+    // each crop window covers a region of the 24x16 grid
+    // sky is roughly rows 0..7, ground 8..15
+    const topRows=agent.top<8;
+    if(topRows){if(loc.sky===truthLoc.sky)s+=0.7;}
+    else{if(loc.ground===truthLoc.ground)s+=0.7;}
+    // landmark roughly at center
+    const inCenter=agent.left>=8&&agent.left<=15&&agent.top>=3&&agent.top<=14;
+    if(inCenter&&loc.landmark===truthLoc.landmark)s+=1.3;
+    // small noise
+    return s+Math.random()*0.6;
+  },[truthLoc]);
+  const bestGuessLoc=useCallback((agent,memory)=>{
+    const memC={};memory.forEach(m=>{memC[m]=(memC[m]||0)+1;});
+    let best=null,bestS=-Infinity;
+    LOCATIONS.forEach(loc=>{const s=scoreLocation(agent,loc)+(memC[loc.name]||0)*1.5;if(s>bestS){bestS=s;best=loc.name;}});
+    return best;
+  },[scoreLocation]);
+  const probeAllLoc=useCallback((ag)=>ag.map(a=>bestGuessLoc(a,a.memory)),[bestGuessLoc]);
+  const runStepLoc=useCallback((ag,rng)=>{if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuessLoc(ag[si],ag[si].memory);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);return{si,li,g};},[bestGuessLoc]);
+
+  const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,memory:[]}]);},[N,phase,agents]);
+  const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());setAgents(Array.from({length:6},()=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),memory:[]})));},[phase]);
+  const start=useCallback(()=>{if(N<2)return;const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());const g0=probeAllLoc(sa);const sh=compShares(g0);const d0={round:0};LOCATIONS.forEach(l=>{d0[l.name]=sh[l.name]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,N,probeAllLoc]);
+  useEffect(()=>{if(phase!=='running'){if(iRef.current)clearInterval(iRef.current);return;}
+    iRef.current=setInterval(()=>{const s=sim.current;if(!s||s.done){setPhase('done');clearInterval(iRef.current);return;}
+      s.step++;if(s.step>maxT){const g=probeAllLoc(s.agents);const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);clearInterval(iRef.current);return;}
+      runStepLoc(s.agents,s.rng);setStep(s.step);
+      if(s.step%pe===0){s.pr++;const g=probeAllLoc(s.agents);const sh=compShares(g);const dp={round:s.pr};LOCATIONS.forEach(l=>{dp[l.name]=sh[l.name]||0;if(sh[l.name])s.ac.add(l.name);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');clearInterval(iRef.current);}}else{s.conRuns=0;}}
+    },spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[phase,spd,maxT,pe,probeAllLoc,runStepLoc]);
+  useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const nextLoc=()=>{reset();setTruth(LOCATIONS[Math.floor(Math.random()*LOCATIONS.length)].name);};
+  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];return active.filter(c=>(last[c]||0)>0.01||c===truth).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,8);},[active,traj,truth]);
+
+  // Locations as F-equivalent for FlagDisplay
+  const locFlagShim={c:truth};
+  const flagSvgShim={[truth]:LOC_SVG[truth]};
+  const CCOL_LOC={};LOCATIONS.forEach((l,i)=>{CCOL_LOC[l.name]=PAL[i%PAL.length];});
+
+  return(<div style={{maxWidth:1200,margin:'0 auto',padding:'0 14px 48px'}}>
+    <header style={{textAlign:'center',padding:'16px 20px 24px'}}>
+      <h1 style={{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>The <span style={{fontWeight:700,fontStyle:'italic'}}>Map Game</span></h1>
+      <p style={{fontSize:16,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.55}}>Six agents see fragments of a stylized scene from some place on Earth. Through gossip, can they identify the city?</p>
+    </header>
+
+    <div style={S.bar}>
+      <label style={{fontSize:10,color:T.dim}}>Where</label>
+      <select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LOCATIONS.map(l=><option key={l.name} value={l.name}>{l.name}</option>)}</select>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Speed</label>
+      <input type="range" min={20} max={400} value={420-spd} onChange={e=>setSpd(420-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <div style={S.sep}/>
+      {phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
+      {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
+      {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextLoc} style={S.btn(true,'#5b86c4')}>→ Next Place</button></>}
+      <span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
+    </div>
+
+    <div style={S.row}>
+      <div style={S.pan}>
+        <FlagDisplay flag={locFlagShim} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'}
+          hintExtra={null}/>
+        <div style={{textAlign:'center',marginTop:14,fontFamily:T.ser,fontSize:26,fontStyle:'italic',color:T.txt}}>{truth}</div>
+      </div>
+      <div style={S.pan}>
+        <TrajChart data={traj} active={active} truth={truth} onHover={setHovIdx}/>
+        {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL_LOC[c]||T.dim}}><span style={{width:c===truth?12:7,height:c===truth?3:2,background:CCOL_LOC[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truth?`0 0 5px ${CCOL_LOC[c]}`:undefined}}/><span>{c}{c===truth?' (truth)':''}</span></span>)}</div>}
+      </div>
+    </div>
+
+    <div style={{marginTop:20,padding:'14px 18px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:10,maxWidth:760,margin:'20px auto 0'}}>
+      <h3 style={{fontSize:13,fontFamily:T.ser,fontStyle:'italic',color:T.txt,marginBottom:6}}>How it works</h3>
+      <p style={{fontSize:11,color:T.mut,lineHeight:1.65,margin:0}}>
+        Each location is a simplified scene (sky band + ground band + an iconic landmark). Each agent is dropped on a {TW}×{TH} tile of that scene and only sees those cells. Agents score every candidate location by what their tile reveals (sky color, ground color, landmark fragment) plus what they have been told. As in the Flag Game, a random speaker–listener pair meets each step and the speaker's current guess enters the listener&apos;s memory.
+      </p>
+    </div>
+
+    <div style={{display:'none'}}>{Object.entries(flagSvgShim).map(([k,v])=>k)}</div>
+  </div>);
+}
+const _MAP_FLAG_SVG_OVERRIDE=(()=>{Object.entries(LOC_SVG).forEach(([k,v])=>{FLAG_SVG[k]=v;});return true;})();
 
 /* ═══════ EL FAROL BAR ═══════ */
 const EF_STRATEGIES=[
@@ -1257,7 +1393,7 @@ function AppShell(){
     <Routes>
       <Route path="/" element={<LandingPage/>}/>
       <Route path="/flag-game" element={<FlagGameSeries apiKey={apiKey}/>}/>
-      <Route path="/map-game" element={<GameStub/>}/>
+      <Route path="/map-game" element={<MapGame/>}/>
       <Route path="/prediction-market" element={<GameStub/>}/>
       <Route path="/el-farol" element={<ElFarolBar/>}/>
       <Route path="*" element={<LandingPage/>}/>
