@@ -629,7 +629,7 @@ function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;con
 function FlagGame({apiKey}){
   const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
-  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
+  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[parallel,setParallel]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
   const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const level=LEVELS[lvl];const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
@@ -643,14 +643,23 @@ function FlagGame({apiKey}){
   const start=useCallback(()=>{if(N<2)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0,gossipLog:[]};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey]);
 
   useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
-    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(r.memoryLine);s.gossipLog.push({step:s.step,si,li,g:r.country});}else{const info=runStep(s.agents,grid,s.rng);if(info)s.gossipLog.push({step:s.step,...info});}};
+    const buildPairs=(s)=>{const n=s.agents.length;if(n<2)return[];
+      if(parallel&&n>=4){const perm=[...Array(n).keys()];for(let i=perm.length-1;i>0;i--){const j=Math.floor(s.rng()*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}const pairs=[];for(let i=0;i+1<perm.length;i+=2)pairs.push([perm[i],perm[i+1]]);return pairs;}
+      const si=Math.floor(s.rng()*n);let li=Math.floor(s.rng()*(n-1));if(li>=si)li++;return[[si,li]];};
+    const runRound=async(s)=>{const pairs=buildPairs(s);if(!pairs.length)return 0;
+      if(apiKey){const results=await Promise.all(pairs.map(async([si])=>{const sp=s.agents[si];const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');return await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});}));
+        pairs.forEach(([si,li],idx)=>{const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(results[idx].memoryLine);s.gossipLog.push({step:s.step+idx+1,si,li,g:results[idx].country});});}
+      else{pairs.forEach(([si,li],idx)=>{const sp=s.agents[si];const g=bestGuess(analyzeCrop(grid,sp.top,sp.left),sp.memory,sp);const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);s.gossipLog.push({step:s.step+idx+1,si,li,g});});}
+      return pairs.length;};
     const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAll(s.agents,grid);}};
-    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
-        try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
-        if(s.step%pe===0){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
-          const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-        await new Promise(r=>setTimeout(r,spd));}})();
-    return()=>{ctl.cancelled=true;};},[phase,spd,grid,maxT,pe,apiKey,getCrop]);
+    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}
+      let done=0;try{done=await runRound(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;
+      const prev=s.step;s.step+=done;setStep(s.step);
+      if(s.step>=maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
+      if(Math.floor(s.step/pe)>Math.floor(prev/pe)){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
+      await new Promise(r=>setTimeout(r,100));}})();
+    return()=>{ctl.cancelled=true;};},[phase,parallel,grid,maxT,pe,apiKey,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
@@ -663,7 +672,7 @@ function FlagGame({apiKey}){
         <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
-        <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+        <div style={S.sep}/><button onClick={()=>setParallel(p=>!p)} disabled={phase!=='setup'} style={S.btn(parallel,'#7a6db0')} title="N/2 disjoint pairs gossip simultaneously per round. Faster but not strictly research-faithful.">⇄ Parallel pairs</button>
         <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
         {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
@@ -697,7 +706,7 @@ function AdversarialGame({apiKey}){
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
-  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
+  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[parallel,setParallel]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
   const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
@@ -714,14 +723,23 @@ function AdversarialGame({apiKey}){
   const start=useCallback(()=>{if(N<2||nAdv<1)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAllAdv(sa,grid,advTarget);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,apiKey]);
 
   useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
-    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];let g;if(sp.adv){g=advTarget;}else{const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});g=r.memoryLine;}if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);}else{runStepAdv(s.agents,grid,s.rng,advTarget);}};
+    const buildPairs=(s)=>{const n=s.agents.length;if(n<2)return[];
+      if(parallel&&n>=4){const perm=[...Array(n).keys()];for(let i=perm.length-1;i>0;i--){const j=Math.floor(s.rng()*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}const pairs=[];for(let i=0;i+1<perm.length;i+=2)pairs.push([perm[i],perm[i+1]]);return pairs;}
+      const si=Math.floor(s.rng()*n);let li=Math.floor(s.rng()*(n-1));if(li>=si)li++;return[[si,li]];};
+    const runRound=async(s)=>{const pairs=buildPairs(s);if(!pairs.length)return 0;
+      if(apiKey){const results=await Promise.all(pairs.map(async([si])=>{const sp=s.agents[si];if(sp.adv)return{country:advTarget,memoryLine:advTarget};const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');return await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});}));
+        pairs.forEach(([si,li],idx)=>{const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(results[idx].memoryLine);});}
+      else{pairs.forEach(([si,li])=>{const sp=s.agents[si];const g=sp.adv?advTarget:bestGuess(analyzeCrop(grid,sp.top,sp.left),sp.memory,sp);const ls=s.agents[li];if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);});}
+      return pairs.length;};
     const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{if(a.adv)return advTarget;const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAllAdv(s.agents,grid,advTarget);}};
-    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
-        try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
-        if(s.step%pe===0){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
-          const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-        await new Promise(r=>setTimeout(r,spd));}})();
-    return()=>{ctl.cancelled=true;};},[phase,spd,grid,maxT,pe,advTarget,apiKey,getCrop]);
+    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}
+      let done=0;try{done=await runRound(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;
+      const prev=s.step;s.step+=done;setStep(s.step);
+      if(s.step>=maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
+      if(Math.floor(s.step/pe)>Math.floor(prev/pe)){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
+      await new Promise(r=>setTimeout(r,100));}})();
+    return()=>{ctl.cancelled=true;};},[phase,parallel,grid,maxT,pe,advTarget,apiKey,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
@@ -738,7 +756,7 @@ function AdversarialGame({apiKey}){
       <label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{F.map(f=><option key={f.c} value={f.c}>{f.c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
-      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <div style={S.sep}/><button onClick={()=>setParallel(p=>!p)} disabled={phase!=='setup'} style={S.btn(parallel,'#7a6db0')} title="N/2 disjoint pairs gossip simultaneously per round. Faster but not strictly research-faithful.">⇄ Parallel pairs</button>
       <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
       {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
       {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
