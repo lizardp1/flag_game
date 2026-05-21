@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { rasterizeFlag, cropAgentView, llmInteraction } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -502,26 +503,31 @@ function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;con
   </div>);}
 
 /* ═══════ MAIN ═══════ */
-function FlagGame(){
+function FlagGame({apiKey}){
   const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
-  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const level=LEVELS[lvl];const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
   useEffect(()=>{if(!level.truth.includes(truth))setTruth(level.truth[0]);},[lvl]);
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
+  const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
   const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-5.4','gpt-5.4','gpt-4o'];setAgents(ms.map(m=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[]})));},[phase]);
-  const start=useCallback(()=>{if(N<2)return;const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());const g0=probeAll(sa,grid);const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N]);
+  const start=useCallback(()=>{if(N<2)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey]);
 
-  useEffect(()=>{if(phase!=='running'){if(iRef.current)clearInterval(iRef.current);return;}
-    iRef.current=setInterval(()=>{const s=sim.current;if(!s||s.done){setPhase('done');clearInterval(iRef.current);return;}
-      s.step++;if(s.step>maxT){const g=probeAll(s.agents,grid);const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);clearInterval(iRef.current);return;}
-      runStep(s.agents,grid,s.rng);setStep(s.step);
-      if(s.step%pe===0){s.pr++;const g=probeAll(s.agents,grid);const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
-        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');clearInterval(iRef.current);}}else{s.conRuns=0;}}
-    },spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[phase,spd,grid,maxT,pe]);
+  useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
+    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(r.memoryLine);}else{runStep(s.agents,grid,s.rng);}};
+    const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAll(s.agents,grid);}};
+    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
+        try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
+        if(s.step%pe===0){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+          const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
+        await new Promise(r=>setTimeout(r,spd));}})();
+    return()=>{ctl.cancelled=true;};},[phase,spd,grid,maxT,pe,apiKey,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
@@ -540,6 +546,7 @@ function FlagGame(){
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
         {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
       </div>
+      {apiError&&<div style={{textAlign:'center',padding:'8px 14px',margin:'8px auto',maxWidth:620,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12}}>{apiError}</div>}
       {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
       <div style={S.row}>
         <div style={S.pan}>
@@ -562,31 +569,36 @@ function FlagGame(){
 function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si];const g=speaker.adv?advTarget:bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory));}
 
-function AdversarialGame(){
+function AdversarialGame({apiKey}){
   const[truth,setTruth]=useState(()=>F[Math.floor(Math.random()*F.length)].c);
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
-  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const others=useMemo(()=>F.filter(f=>f.c!==truth).map(f=>f.c),[truth]);
   const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
   const nAdv=agents.filter(a=>a.adv).length;const nHon=N-nAdv;
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
+  const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
 
   const place=useCallback((t,l,shift)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){if(shift){setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));}else{setAgents(p=>p.filter(a=>a.id!==ex.id));}return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-4o','gpt-4o','gpt-4o'];setAgents(ms.map((m,i)=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[],adv:i>=4})));},[phase]);
 
-  const start=useCallback(()=>{if(N<2||nAdv<1)return;const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());const g0=probeAllAdv(sa,grid,advTarget);const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget]);
+  const start=useCallback(()=>{if(N<2||nAdv<1)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAllAdv(sa,grid,advTarget);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,apiKey]);
 
-  useEffect(()=>{if(phase!=='running'){if(iRef.current)clearInterval(iRef.current);return;}
-    iRef.current=setInterval(()=>{const s=sim.current;if(!s||s.done){setPhase('done');clearInterval(iRef.current);return;}
-      s.step++;if(s.step>maxT){const g=probeAllAdv(s.agents,grid,advTarget);const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);clearInterval(iRef.current);return;}
-      runStepAdv(s.agents,grid,s.rng,advTarget);setStep(s.step);
-      if(s.step%pe===0){s.pr++;const g=probeAllAdv(s.agents,grid,advTarget);const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
-        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');clearInterval(iRef.current);}}else{s.conRuns=0;}}
-    },spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[phase,spd,grid,maxT,pe,advTarget]);
+  useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
+    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];let g;if(sp.adv){g=advTarget;}else{const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});g=r.memoryLine;}if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);}else{runStepAdv(s.agents,grid,s.rng,advTarget);}};
+    const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{if(a.adv)return advTarget;const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAllAdv(s.agents,grid,advTarget);}};
+    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
+        try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
+        if(s.step%pe===0){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+          const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
+        await new Promise(r=>setTimeout(r,spd));}})();
+    return()=>{ctl.cancelled=true;};},[phase,spd,grid,maxT,pe,advTarget,apiKey,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
@@ -609,6 +621,7 @@ function AdversarialGame(){
       {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
       {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
     </div>
+    {apiError&&<div style={{textAlign:'center',padding:'8px 14px',margin:'8px auto',maxWidth:620,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12}}>{apiError}</div>}
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
     <div style={S.row}>
       <div style={S.pan}>
@@ -634,7 +647,7 @@ function AdversarialGame(){
 }
 
 /* ═══════ FIRST-PERSON GAME ═══════ */
-function FirstPersonGame(){
+function FirstPersonGame({apiKey}){
   const[lvl,setLvl]=useState(0);
   const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
   const[playerTop,setPlayerTop]=useState(0);
@@ -642,14 +655,21 @@ function FirstPersonGame(){
   const[playerMem,setPlayerMem]=useState([]);
   const[playerGuess,setPlayerGuess]=useState(null);
   const[aiAgents,setAiAgents]=useState([]);
+  const[aiGuessesLLM,setAiGuessesLLM]=useState([]);
   const[round,setRound]=useState(0);
   const[phase,setPhase]=useState('init');
   const[messages,setMessages]=useState([]);
   const[peek,setPeek]=useState(false);
+  const[loading,setLoading]=useState(false);
+  const[apiError,setApiError]=useState(null);
+  const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);
   const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
-  const aiGuesses=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
+  const aiGuessesScripted=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
+  const aiGuesses=apiKey?aiGuessesLLM:aiGuessesScripted;
   const candidates=useMemo(()=>{const an=analyzeCrop(grid,playerTop,playerLeft);const top=topCandidates(an,8);const set=new Set(top);if(truth)set.add(truth);aiGuesses.forEach(g=>{if(g)set.add(g);});return[...set].sort();},[grid,playerTop,playerLeft,aiGuesses,truth]);
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
+  const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
 
   const setup=useCallback((newLvl)=>{
     const useLvl=newLvl===undefined?lvl:newLvl;
@@ -659,35 +679,44 @@ function FirstPersonGame(){
     const pL=Math.floor(Math.random()*(GW-TW+1));
     const ais=Array.from({length:5},()=>({top:Math.floor(Math.random()*(GH-TH+1)),left:Math.floor(Math.random()*(GW-TW+1)),memory:[]}));
     setTruth(newTruth);setPlayerTop(pT);setPlayerLeft(pL);setPlayerMem([]);setPlayerGuess(null);
-    setAiAgents(ais);setRound(0);setMessages([]);setPhase('choose-initial');
+    setAiAgents(ais);setAiGuessesLLM(ais.map(()=>null));setRound(0);setMessages([]);setPhase('choose-initial');setApiError(null);
   },[lvl]);
 
   useEffect(()=>{setup();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{const kd=e=>{if(e.key==='Tab'){e.preventDefault();setPeek(true);}};const ku=e=>{if(e.key==='Tab'){e.preventDefault();setPeek(false);}};window.addEventListener('keydown',kd);window.addEventListener('keyup',ku);return()=>{window.removeEventListener('keydown',kd);window.removeEventListener('keyup',ku);};},[]);
 
-  const pick=(c)=>{if(phase==='commit'||phase==='done')return;setPlayerGuess(c);if(phase==='choose-initial')setPhase('playing');};
+  const pick=(c)=>{if(phase==='commit'||phase==='done'||loading)return;setPlayerGuess(c);if(phase==='choose-initial')setPhase('playing');};
 
-  const nextRound=()=>{
-    if(!playerGuess||phase!=='playing')return;
+  const nextRound=async()=>{
+    if(!playerGuess||phase!=='playing'||loading)return;
+    const catalog=F.map(f=>f.c);
     const rng=mkRng(Date.now()+round*1000);
     const all=[{top:playerTop,left:playerLeft,memory:[...playerMem],isPlayer:true,idx:1},
-      ...aiAgents.map((a,i)=>({...a,memory:[...a.memory],isPlayer:false,idx:i+2}))];
+      ...aiAgents.map((a,i)=>({...a,memory:[...a.memory],isPlayer:false,idx:i+2,model:'gpt-4o'}))];
     const newMsgs=[...messages];
-    for(let step=0;step<3;step++){
-      let si,li;
-      if(step===0){if(rng()<0.5){si=0;li=1+Math.floor(rng()*5);}else{li=0;si=1+Math.floor(rng()*5);}}
-      else{si=Math.floor(rng()*6);li=Math.floor(rng()*5);if(li>=si)li++;}
-      const speaker=all[si],listener=all[li];
-      const sg=speaker.isPlayer?playerGuess:bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory);
-      if(listener.memory.length>=H_MEM)listener.memory.shift();
-      listener.memory.push(sg);
-      if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:sg});
-      else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:sg});
-    }
-    setPlayerMem(all[0].memory);
-    setAiAgents(all.slice(1).map(a=>({top:a.top,left:a.left,memory:a.memory})));
-    setMessages(newMsgs);
-    const nR=round+1;setRound(nR);if(nR>=5)setPhase('commit');
+    setLoading(true);setApiError(null);
+    try{
+      for(let step=0;step<3;step++){
+        let si,li;
+        if(step===0){if(rng()<0.5){si=0;li=1+Math.floor(rng()*5);}else{li=0;si=1+Math.floor(rng()*5);}}
+        else{si=Math.floor(rng()*6);li=Math.floor(rng()*5);if(li>=si)li++;}
+        const speaker=all[si],listener=all[li];
+        let sg;
+        if(speaker.isPlayer){sg=playerGuess;}
+        else if(apiKey){const url=getCrop(speaker.top,speaker.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:speaker.memory,model:speaker.model,apiKey,catalog});sg=r.memoryLine;}
+        else{sg=bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory);}
+        if(listener.memory.length>=H_MEM)listener.memory.shift();
+        listener.memory.push(sg);
+        if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:sg});
+        else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:apiKey?(sg.split(' | ')[0]):sg});
+      }
+      const newAi=all.slice(1).map(a=>({top:a.top,left:a.left,memory:a.memory}));
+      if(apiKey){const probed=await Promise.all(newAi.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:'gpt-4o',apiKey,catalog});return r.country;}));setAiGuessesLLM(probed);}
+      setPlayerMem(all[0].memory);
+      setAiAgents(newAi);
+      setMessages(newMsgs);
+      const nR=round+1;setRound(nR);if(nR>=5)setPhase('commit');
+    }catch(e){setApiError(e.message);}finally{setLoading(false);}
   };
 
   const lockIn=()=>setPhase('done');
@@ -770,10 +799,11 @@ function FirstPersonGame(){
       </div>
 
       <div style={{textAlign:'center',marginTop:24}}>
-        {phase==='playing'&&<button onClick={nextRound} disabled={!playerGuess}
-          style={{padding:'12px 32px',borderRadius:8,border:'none',cursor:playerGuess?'pointer':'default',
-            fontWeight:600,fontSize:14,background:playerGuess?'#6ec89b':T.card,color:playerGuess?'#fff':T.fnt,opacity:playerGuess?1:0.5,transition:'all .15s'}}>
-          Next Round →
+        {apiError&&<div style={{padding:'8px 14px',marginBottom:10,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12,maxWidth:520,margin:'0 auto 10px'}}>{apiError}</div>}
+        {phase==='playing'&&<button onClick={nextRound} disabled={!playerGuess||loading}
+          style={{padding:'12px 32px',borderRadius:8,border:'none',cursor:(playerGuess&&!loading)?'pointer':'default',
+            fontWeight:600,fontSize:14,background:(playerGuess&&!loading)?'#6ec89b':T.card,color:(playerGuess&&!loading)?'#fff':T.fnt,opacity:(playerGuess&&!loading)?1:0.5,transition:'all .15s'}}>
+          {loading?'Thinking…':'Next Round →'}
         </button>}
         {phase==='choose-initial'&&<p style={{fontSize:12,color:T.mut,fontStyle:'italic',margin:0}}>↑ Choose a country to begin</p>}
         {phase==='commit'&&<button onClick={lockIn}
@@ -830,14 +860,33 @@ function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,
 }
 
 /* ═══════ ROOT ═══════ */
+function ApiKeyBar({apiKey,setApiKey}){
+  const[shown,setShown]=useState(false);
+  const live=!!apiKey;
+  return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
+    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
+      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Scripted heuristic (no key)'}</span>
+      <span style={{color:T.dim}}>OpenAI key</span>
+      <input type={shown?'text':'password'} placeholder="sk-..." value={apiKey} onChange={e=>setApiKey(e.target.value.trim())}
+        style={{flex:'1 1 240px',maxWidth:380,padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
+      <button onClick={()=>setShown(s=>!s)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.mut,cursor:'pointer',fontSize:10}}>{shown?'hide':'show'}</button>
+      {apiKey&&<button onClick={()=>setApiKey('')} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:'#e87b6f',cursor:'pointer',fontSize:10}}>clear</button>}
+      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10,maxWidth:480}}>Stored only in your browser. Calls go straight to api.openai.com from this page (no proxy).</span>
+    </div>
+  </div>);
+}
+
 export default function App(){
+  const[apiKey,setApiKey]=useState(()=>localStorage.getItem('flag_game_api_key')||'');
+  useEffect(()=>{if(apiKey)localStorage.setItem('flag_game_api_key',apiKey);else localStorage.removeItem('flag_game_api_key');},[apiKey]);
   return(<div style={S.page}>
+    <ApiKeyBar apiKey={apiKey} setApiKey={setApiKey}/>
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
       <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among bounded agents that see only fragments.</p></header>
     <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
-      <FlagGame/>
-      <FirstPersonGame/>
-      <AdversarialGame/>
+      <FlagGame apiKey={apiKey}/>
+      <FirstPersonGame apiKey={apiKey}/>
+      <AdversarialGame apiKey={apiKey}/>
     </div>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
   </div>);
