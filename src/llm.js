@@ -114,7 +114,7 @@ export async function llmInteraction({
   cropDataUrl,
   memoryLines = [],
   model,
-  password,
+  apiKey,
   m = 3,
   socialSusceptibility = 0.5,
   promptSocialSusceptibility = false,
@@ -136,15 +136,15 @@ export async function llmInteraction({
 
   let lastErr = null
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch('/api/chat', {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Password': password },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       signal,
       body: JSON.stringify({
         model,
         messages,
         response_format: { type: 'json_object' },
-        max_completion_tokens: m === 1 ? 30 : 120,
+        max_completion_tokens: 4000,
       }),
     })
 
