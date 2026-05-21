@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { rasterizeFlag, cropAgentView, llmInteraction } from './llm';
 
@@ -996,11 +997,61 @@ function ApiKeyBar({apiKey,setApiKey}){
   </div>);
 }
 
-export default function App(){
-  const[apiKey,setApiKey]=useState(()=>localStorage.getItem('flag_game_api_key')||'');
-  useEffect(()=>{if(apiKey)localStorage.setItem('flag_game_api_key',apiKey);else localStorage.removeItem('flag_game_api_key');},[apiKey]);
-  return(<div style={S.page}>
-    <ApiKeyBar apiKey={apiKey} setApiKey={setApiKey}/>
+/* ═══════ SERIES CATALOG ═══════ */
+const GAMES=[
+  {slug:'flag-game',icon:'🏴',title:'The Flag Game',tagline:'Six agents see fragments of a hidden flag. Through gossip, can they agree on the country?',status:'live'},
+  {slug:'map-game',icon:'🗺️',title:'The Map Game',tagline:'Each agent sees one tile of the world. Where are we?',status:'soon'},
+  {slug:'prediction-market',icon:'📈',title:'The Prediction Market',tagline:'Agents bet on an unknown event. Does the price converge to the truth?',status:'soon'},
+  {slug:'el-farol',icon:'🍺',title:'The El Farol Bar',tagline:'Go to the bar, or stay home? The right answer depends on what everyone else does.',status:'soon'},
+];
+
+/* ═══════ LANDING PAGE ═══════ */
+function LandingPage(){
+  return(<div style={{maxWidth:1100,margin:'0 auto',padding:'0 14px'}}>
+    <header style={{textAlign:'center',padding:'8px 20px 24px'}}>
+      <h1 style={{fontSize:46,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,letterSpacing:'-0.5px',marginBottom:8}}>Bounded <span style={{fontWeight:700,fontStyle:'italic'}}>Collective Games</span></h1>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:760,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a growing series of model social organisms to study coordination dynamics among bounded agents that see only fragments.</p>
+    </header>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:18,marginTop:30,marginBottom:48}}>
+      {GAMES.map(g=>{const live=g.status==='live';return(
+        <Link key={g.slug} to={live?`/${g.slug}`:'#'} onClick={live?undefined:e=>e.preventDefault()}
+          style={{display:'block',textDecoration:'none',padding:'22px 22px 20px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:14,transition:'all .15s',cursor:live?'pointer':'default',opacity:live?1:0.55,boxShadow:live?'0 1px 3px rgba(0,0,0,0.04)':'none'}}
+          onMouseEnter={live?e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 6px 18px rgba(0,0,0,0.08)';}:undefined}
+          onMouseLeave={live?e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)';}:undefined}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{fontSize:42,lineHeight:1}}>{g.icon}</div>
+            <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'1.3px',padding:'3px 8px',borderRadius:4,background:live?'#6ec89b22':T.card,color:live?'#3a8a64':T.fnt,fontWeight:700}}>{live?'Live':'Coming soon'}</span>
+          </div>
+          <h3 style={{fontSize:22,fontFamily:T.ser,fontStyle:'italic',fontWeight:600,color:T.txt,margin:'4px 0 6px'}}>{g.title}</h3>
+          <p style={{fontSize:13,color:T.mut,lineHeight:1.55,margin:0}}>{g.tagline}</p>
+          {live&&<div style={{marginTop:14,fontSize:12,color:'#5b86c4',fontWeight:600}}>Play →</div>}
+        </Link>);
+      })}
+    </div>
+    <div style={{textAlign:'center',padding:'32px 0',fontSize:11,color:T.mut,lineHeight:1.7,maxWidth:680,margin:'0 auto'}}>
+      Each game pairs a <em>bounded perception</em> with a <em>collective decision mechanism</em>, and asks: when individual agents see only a slice of the truth, what does the group come to believe? Sometimes consensus tracks reality; sometimes it doesn&apos;t. The point is to watch.
+    </div>
+  </div>);
+}
+
+/* ═══════ STUB GAME PAGE ═══════ */
+function GameStub(){
+  const slug=useLocation().pathname.slice(1);
+  const game=GAMES.find(g=>g.slug===slug);
+  if(!game)return null;
+  return(<div style={{maxWidth:760,margin:'40px auto',padding:'0 14px',textAlign:'center'}}>
+    <div style={{fontSize:64,marginBottom:12}}>{game.icon}</div>
+    <h1 style={{fontSize:38,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>{game.title}</h1>
+    <p style={{fontSize:16,color:T.mut,fontStyle:'italic',fontFamily:T.ser,lineHeight:1.55,maxWidth:560,margin:'0 auto 28px'}}>{game.tagline}</p>
+    <div style={{display:'inline-block',padding:'10px 18px',background:T.pan,border:`1px dashed ${T.bdr}`,borderRadius:10,fontSize:13,color:T.mut}}>
+      In design. Coming to this page soon — for now, see <Link to="/flag-game" style={{color:'#5b86c4'}}>The Flag Game</Link> for the prototype of the series.
+    </div>
+  </div>);
+}
+
+/* ═══════ FLAG GAME SERIES (the original three modes) ═══════ */
+function FlagGameSeries({apiKey}){
+  return(<>
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
       <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among bounded agents that see only fragments.</p></header>
     <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
@@ -1008,6 +1059,39 @@ export default function App(){
       <FirstPersonGame apiKey={apiKey}/>
       <AdversarialGame apiKey={apiKey}/>
     </div>
+  </>);
+}
+
+/* ═══════ TOP NAV ═══════ */
+function TopNav(){
+  const isLanding=useLocation().pathname==='/';
+  if(isLanding)return null;
+  return(<div style={{padding:'8px 14px',borderBottom:`1px solid ${T.bdr}`,background:T.bg}}>
+    <div style={{maxWidth:1400,margin:'0 auto'}}>
+      <Link to="/" style={{fontSize:12,color:T.mut,textDecoration:'none',fontStyle:'italic',fontFamily:T.ser}}>← Bounded Collective Games</Link>
+    </div>
+  </div>);
+}
+
+/* ═══════ APP SHELL ═══════ */
+function AppShell(){
+  const[apiKey,setApiKey]=useState(()=>localStorage.getItem('flag_game_api_key')||'');
+  useEffect(()=>{if(apiKey)localStorage.setItem('flag_game_api_key',apiKey);else localStorage.removeItem('flag_game_api_key');},[apiKey]);
+  return(<div style={S.page}>
+    <ApiKeyBar apiKey={apiKey} setApiKey={setApiKey}/>
+    <TopNav/>
+    <Routes>
+      <Route path="/" element={<LandingPage/>}/>
+      <Route path="/flag-game" element={<FlagGameSeries apiKey={apiKey}/>}/>
+      <Route path="/map-game" element={<GameStub/>}/>
+      <Route path="/prediction-market" element={<GameStub/>}/>
+      <Route path="/el-farol" element={<GameStub/>}/>
+      <Route path="*" element={<LandingPage/>}/>
+    </Routes>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
   </div>);
+}
+
+export default function App(){
+  return(<HashRouter><AppShell/></HashRouter>);
 }
