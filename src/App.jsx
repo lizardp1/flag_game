@@ -717,10 +717,20 @@ function FlagGame({apiKey}){
       return pairs.length;};
     const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAll(s.agents,grid);}};
     (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}
-      let done=0;try{done=await runRound(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;
-      const prev=s.step;s.step+=done;setStep(s.step);
-      if(s.step>=maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
-      if(Math.floor(s.step/pe)>Math.floor(prev/pe)){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+      const n=s.agents.length;const incr=(parallel&&n>=4)?Math.floor(n/2):(n>=2?1:0);
+      const prev=s.step;const nextStep=prev+incr;
+      const isFinal=nextStep>=maxT;
+      const isProbeTick=isFinal||(incr>0&&Math.floor(nextStep/pe)>Math.floor(prev/pe));
+      let g=null;
+      try{
+        if(isProbeTick&&isFinal){await runRound(s);g=await probe(s);}
+        else if(isProbeTick){const[,probed]=await Promise.all([runRound(s),probe(s)]);g=probed;}
+        else{await runRound(s);}
+      }catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}
+      if(ctl.cancelled)return;
+      s.step+=incr;setStep(s.step);
+      if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
+      if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
       await new Promise(r=>setTimeout(r,100));}})();
     return()=>{ctl.cancelled=true;};},[phase,parallel,grid,maxT,pe,apiKey,getCrop]);
@@ -803,10 +813,20 @@ function AdversarialGame({apiKey}){
       return pairs.length;};
     const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{if(a.adv)return advTarget;const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAllAdv(s.agents,grid,advTarget);}};
     (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}
-      let done=0;try{done=await runRound(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;
-      const prev=s.step;s.step+=done;setStep(s.step);
-      if(s.step>=maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
-      if(Math.floor(s.step/pe)>Math.floor(prev/pe)){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+      const n=s.agents.length;const incr=(parallel&&n>=4)?Math.floor(n/2):(n>=2?1:0);
+      const prev=s.step;const nextStep=prev+incr;
+      const isFinal=nextStep>=maxT;
+      const isProbeTick=isFinal||(incr>0&&Math.floor(nextStep/pe)>Math.floor(prev/pe));
+      let g=null;
+      try{
+        if(isProbeTick&&isFinal){await runRound(s);g=await probe(s);}
+        else if(isProbeTick){const[,probed]=await Promise.all([runRound(s),probe(s)]);g=probed;}
+        else{await runRound(s);}
+      }catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}
+      if(ctl.cancelled)return;
+      s.step+=incr;setStep(s.step);
+      if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
+      if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
       await new Promise(r=>setTimeout(r,100));}})();
     return()=>{ctl.cancelled=true;};},[phase,parallel,grid,maxT,pe,advTarget,apiKey,getCrop]);
