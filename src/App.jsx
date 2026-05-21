@@ -385,6 +385,52 @@ const F_RAW=[
 
 const F=F_RAW.filter(f=>FLAG_SVG[f.c]);
 
+function flagPalette(f){
+  const s=new Set();
+  if(f.s)f.s.forEach(c=>s.add(c));
+  if(f.bg)s.add(f.bg);
+  if(f.tri)s.add(f.tri);
+  if(f.cross)s.add(f.cross);
+  if(f.canton)s.add(f.canton);
+  if(f.cantonCross)s.add(f.cantonCross);
+  if(f.diamond)s.add(f.diamond);
+  if(f.bend)s.add(f.bend);
+  if(f.diag)f.diag.forEach(c=>s.add(c));
+  if(f.circ)s.add(typeof f.circ==='object'?f.circ.color:f.circ);
+  if(f.star)s.add(f.star);
+  if(f.pstars)s.add(f.pstars.color);
+  return s;
+}
+const FLAG_PALETTES=new Map(F.map(f=>[f.c,flagPalette(f)]));
+
+function compatibleCount(grid,top,left){
+  const crop=new Set();
+  for(let r=top;r<top+TH;r++)for(let c=left;c<left+TW;c++)crop.add(grid[r][c]);
+  let n=0;
+  for(const f of F){const pal=FLAG_PALETTES.get(f.c);let ok=true;for(const c of crop){if(!pal.has(c)){ok=false;break;}}if(ok)n++;}
+  return n;
+}
+
+const FP_LEVELS=[
+  {name:'Easy',max:3,desc:'distinctive crop — usually solvable from your view alone'},
+  {name:'Medium',min:4,max:15,desc:'partially distinctive — gossip helps narrow it down'},
+  {name:'Hard',min:16,desc:'ambiguous crop — many flags compatible; you need gossip'},
+];
+
+function samplePositionForDifficulty(level){
+  const band=FP_LEVELS[level];
+  const test=c=>(band.min===undefined||c>=band.min)&&(band.max===undefined||c<=band.max);
+  for(let i=0;i<300;i++){
+    const f=F[Math.floor(Math.random()*F.length)];
+    const g=renderGrid(f);
+    const t=Math.floor(Math.random()*(GH-TH+1));
+    const l=Math.floor(Math.random()*(GW-TW+1));
+    if(test(compatibleCount(g,t,l)))return{country:f.c,top:t,left:l};
+  }
+  const f=F[Math.floor(Math.random()*F.length)];
+  return{country:f.c,top:Math.floor(Math.random()*(GH-TH+1)),left:Math.floor(Math.random()*(GW-TW+1))};
+}
+
 function describeFlag(country){
   const f=F.find(x=>x.c===country);if(!f)return 'The colors match.';
   const norm=c=>String(c).replace(/_/g,' ');
@@ -816,7 +862,7 @@ function AdversarialGame({apiKey}){
 /* ═══════ FIRST-PERSON GAME ═══════ */
 function FirstPersonGame({apiKey}){
   const[lvl,setLvl]=useState(0);
-  const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
+  const[truth,setTruth]=useState(()=>F[0].c);
   const[playerTop,setPlayerTop]=useState(0);
   const[playerLeft,setPlayerLeft]=useState(0);
   const[playerMem,setPlayerMem]=useState([]);
@@ -842,12 +888,9 @@ function FirstPersonGame({apiKey}){
 
   const setup=useCallback((newLvl)=>{
     const useLvl=newLvl===undefined?lvl:newLvl;
-    const ts=LEVELS[useLvl].truth;
-    const newTruth=ts[Math.floor(Math.random()*ts.length)];
-    const pT=Math.floor(Math.random()*(GH-TH+1));
-    const pL=Math.floor(Math.random()*(GW-TW+1));
+    const pick=samplePositionForDifficulty(useLvl);
     const ais=Array.from({length:5},()=>({top:Math.floor(Math.random()*(GH-TH+1)),left:Math.floor(Math.random()*(GW-TW+1)),memory:[]}));
-    setTruth(newTruth);setPlayerTop(pT);setPlayerLeft(pL);setPlayerMem([]);setPlayerGuess(null);
+    setTruth(pick.country);setPlayerTop(pick.top);setPlayerLeft(pick.left);setPlayerMem([]);setPlayerGuess(null);
     setAiAgents(ais);setAiGuessesLLM(ais.map(()=>null));setRound(0);setMessages([]);setPhase('choose-initial');setApiError(null);
   },[lvl]);
 
@@ -902,7 +945,7 @@ function FirstPersonGame({apiKey}){
     <div style={S.bar}>
       <label style={{fontSize:10,color:T.dim}}>Level</label>
       <select value={lvl} onChange={e=>{const nl=+e.target.value;setLvl(nl);setup(nl);}} style={S.sel}>
-        {LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}
+        {FP_LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name}</option>)}
       </select>
       <div style={S.sep}/>
       <span style={{fontSize:11,color:T.fnt}}>Round {Math.min(round,5)} / 5</span>
