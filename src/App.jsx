@@ -1403,7 +1403,7 @@ function AppShell(){
       <Route path="*" element={<LandingPage/>}/>
     </Routes>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
-  </div></ApiKeyContext.Provider>);
+  </div>);
 }
 
 export default function App(){
