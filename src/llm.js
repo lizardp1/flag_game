@@ -1,6 +1,13 @@
-/* Browser port of the Flag Game prompts from nnd/flag_game/prompts.py.
-   The "Allowed countries" line is omitted — we let the model name any country
-   and fuzzy-match against the local catalog when displaying results. */
+/* Browser port of the Flag Game prompts.
+
+   This file is a fork of the upstream `src/llm.js` (which proxies through
+   `/api/chat`). Here we call OpenAI directly from the browser with a user-
+   supplied API key — no backend needed for the demo. The prompts mirror the
+   ones in the paper (`nnd/flag_game/prompts.py`).
+
+   The "Allowed countries" list is omitted from the first prompt — we let the
+   model name any country and fuzzy-match against the local catalog when
+   displaying results. */
 
 const FLAG_W = 640, FLAG_H = 480
 const GW = 24, GH = 16, TW = 6, TH = 4
@@ -11,19 +18,17 @@ const SYSTEM_PROMPT =
   'Choose exactly one country.\n' +
   'Follow the exact output schema given in the user message.'
 
+// Map a UI label ("gpt-4o" / "gpt-5.4") to a real OpenAI model identifier.
+// `gpt-5.4` is a cosmetic name in the UI; route it to the small variant so a
+// user with an API key still gets a meaningful two-model comparison.
+export function realModelName(label) {
+  if (label === 'gpt-5.4') return 'gpt-4o-mini'
+  return 'gpt-4o'
+}
+
 function memoryBlock(memoryLines) {
   if (!memoryLines || memoryLines.length === 0) return 'Transcript memory (oldest -> newest): []'
   return 'Transcript memory (oldest -> newest):\n' + memoryLines.map(l => `- ${l}`).join('\n')
-}
-
-function susceptibilityLine(a) {
-  let g
-  if (a <= 0.2) g = 'Rely mostly on your own crop and treat transcript memory as weak evidence.'
-  else if (a <= 0.4) g = 'Give somewhat more weight to your own crop than to transcript memory.'
-  else if (a <= 0.6) g = 'Balance your own crop and transcript memory.'
-  else if (a <= 0.8) g = 'Give somewhat more weight to transcript memory than to your own crop.'
-  else g = 'Treat transcript memory as strong evidence and update readily toward it.'
-  return `Social susceptibility a = ${a.toFixed(2)}. ${g}`
 }
 
 function schemaLine(m) {
@@ -33,16 +38,14 @@ function schemaLine(m) {
   throw new Error('m must be 1, 2, or 3')
 }
 
-function userPrompt({ memoryLines, m, socialSusceptibility, promptSocialSusceptibility }) {
-  const parts = [
-    'All players are identifying the same underlying flag.\n' +
-    'You always see the same private crop.\n' +
-    'Transcript memory shows messages you observed from previous interactions with other players.\n' +
+function userPrompt({ memoryLines, m }) {
+  return [
+    'All players are identifying the same underlying flag.',
+    'You always see the same private crop.',
+    'Transcript memory shows messages you observed from previous interactions with other players.',
     memoryBlock(memoryLines),
-  ]
-  if (promptSocialSusceptibility) parts.push(susceptibilityLine(socialSusceptibility))
-  parts.push(schemaLine(m))
-  return parts.join('\n')
+    schemaLine(m),
+  ].join('\n')
 }
 
 export function rasterizeFlag(svgString) {
@@ -75,25 +78,16 @@ export function cropAgentView(flagCanvas, top, left) {
 function fuzzyMatchCountry(raw, catalog) {
   const norm = s => s.toLowerCase().replace(/[^a-z]/g, '')
   const target = norm(raw)
-  let exact = catalog.find(c => norm(c) === target)
+  const exact = catalog.find(c => norm(c) === target)
   if (exact) return exact
-  let contains = catalog.find(c => target.includes(norm(c)) || norm(c).includes(target))
+  const contains = catalog.find(c => target.includes(norm(c)) || norm(c).includes(target))
   return contains || null
-}
-
-function shuffled(arr) {
-  const a = arr.slice()
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
 }
 
 function retryText(errMsg, catalog, m) {
   return (
     `Invalid answer: ${errMsg}\n` +
-    `Allowed countries are exactly: ${JSON.stringify(shuffled(catalog))}\n` +
+    `Allowed countries are exactly: ${JSON.stringify(catalog)}\n` +
     'Choose exactly one allowed country from that list. Any other country is invalid.\n' +
     schemaLine(m)
   )
@@ -122,16 +116,17 @@ function parseResponse(raw, catalog, m) {
 export async function llmInteraction({
   cropDataUrl,
   memoryLines = [],
-  model,
+  model,            // UI label, e.g. "gpt-4o" or "gpt-5.4"
   apiKey,
   m = 3,
-  socialSusceptibility = 0.5,
-  promptSocialSusceptibility = false,
   catalog,
   signal,
   maxRetries = 2,
 }) {
-  const text = userPrompt({ memoryLines, m, socialSusceptibility, promptSocialSusceptibility })
+  if (!apiKey) throw new Error('OpenAI API key required for LLM mode.')
+
+  const realModel = realModelName(model)
+  const text = userPrompt({ memoryLines, m })
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
     {
@@ -147,13 +142,16 @@ export async function llmInteraction({
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
       signal,
       body: JSON.stringify({
-        model,
+        model: realModel,
         messages,
         response_format: { type: 'json_object' },
-        max_completion_tokens: 4000,
+        max_completion_tokens: m === 1 ? 30 : 120,
       }),
     })
 

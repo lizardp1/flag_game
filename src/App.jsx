@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { rasterizeFlag, cropAgentView, llmInteraction } from './llm';
-
-const ApiKeyContext = createContext({ apiKey: '', setApiKey: () => {} });
-const useApiKey = () => useContext(ApiKeyContext);
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -388,6 +386,8 @@ const F_RAW=[
 
 const F=F_RAW.filter(f=>FLAG_SVG[f.c]);
 const PAL=genPal(F.length+4);const CCOL={};F.forEach((f,i)=>{CCOL[f.c]=PAL[i];});
+const FLAG_DATA_URI={};F.forEach(f=>{FLAG_DATA_URI[f.c]=`data:image/svg+xml,${encodeURIComponent(FLAG_SVG[f.c])}`;});
+const FLAG_INNER={};F.forEach(f=>{const m=FLAG_SVG[f.c].match(/<svg[^>]*>([\s\S]+)<\/svg>/);if(m)FLAG_INNER[f.c]=m[1];});
 
 /* ═══════ LEVELS — classified by real-world flag appearance ═══════ */
 const _L1=new Set(['Armenia','Austria','Belgium','Benin','Botswana','Bulgaria','Chad','Colombia','Costa Rica',"Cote d'Ivoire",'Estonia','France','Gabon','Gambia','Germany','Guinea','Hungary','Indonesia','Ireland','Italy','Latvia','Lithuania','Luxembourg','Mali','Mauritius','Monaco','Netherlands','Nigeria','Peru','Poland','Qatar','Romania','Russia','Sierra Leone','Thailand','Ukraine','Yemen']);
@@ -398,9 +398,9 @@ const _LVL=[
   F.filter(f=>!_L1.has(f.c)&&!_L2.has(f.c)).map(f=>f.c),
 ];
 const LEVELS=[
-  {name:'Level 1',desc:'Pure stripes — '+_LVL[0].length+' flags with nothing but colored bands',truth:_LVL[0]},
-  {name:'Level 2',desc:'Stripes + symbol — '+_LVL[1].length+' flags with a star, circle, crescent, or triangle added',truth:_LVL[1]},
-  {name:'Level 3',desc:'Complex — '+_LVL[2].length+' flags with crosses, cantons, diagonals, multiple symbols, or detailed emblems',truth:_LVL[2]},
+  {name:'Level 1',desc:'Pure stripes — flags with nothing but colored bands',truth:_LVL[0]},
+  {name:'Level 2',desc:'Stripes + symbol — flags with a star, circle, crescent, or triangle added',truth:_LVL[1]},
+  {name:'Level 3',desc:'Complex — flags with crosses, cantons, diagonals, multiple symbols, or detailed emblems',truth:_LVL[2]},
 ];
 
 /* ═══════ ANALYSIS & SCORING ═══════ */
@@ -430,38 +430,8 @@ function bestGuess(an,mem,agent){const votes={};mem.forEach(m=>{votes[m]=(votes[
     if(sc>bestS||(sc===bestS&&(!best||f.c<best))){bestS=sc;best=f.c;}});return best;}
 
 /* ═══════ SIMULATION ═══════ */
-const CATALOG=F.map(f=>f.c);
-const INTERACTION_M=3,SUSCEPTIBILITY=0.5,PROMPT_SUSCEPTIBILITY=false;
-
-async function prepareAgents(agents,truthFlag){
-  const svg=FLAG_SVG[truthFlag.c];if(!svg)throw new Error('No SVG for '+truthFlag.c);
-  const canvas=await rasterizeFlag(svg);
-  return agents.map(a=>({...a,memory:[],cropDataUrl:cropAgentView(canvas,a.top,a.left)}));
-}
-
-async function llmSpeak(agent,apiKey){
-  return llmInteraction({cropDataUrl:agent.cropDataUrl,memoryLines:agent.memory,model:agent.model,apiKey,m:INTERACTION_M,socialSusceptibility:SUSCEPTIBILITY,promptSocialSusceptibility:PROMPT_SUSCEPTIBILITY,catalog:CATALOG});
-}
-
-function runStep(ag,grid,rng){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuess(analyzeCrop(grid,ag[si].top,ag[si].left),ag[si].memory,ag[si]);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
-function probeAll(ag,grid){return ag.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
-
-async function runStepLLM(ag,rng,apiKey,onCall){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si],listener=ag[li];
-  const msg=await llmSpeak(speaker,apiKey);onCall&&onCall();
-  if(listener.memory.length>=H_MEM)listener.memory.shift();listener.memory.push(msg.memoryLine);
-  return{speakerId:speaker.id,listenerId:listener.id,country:msg.country,memoryLine:msg.memoryLine};}
-async function runStepLLMAdv(ag,rng,apiKey,advTarget,onCall){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si],listener=ag[li];
-  let memoryLine,country;
-  if(speaker.adv){country=advTarget;memoryLine=advTarget;}
-  else{const msg=await llmSpeak(speaker,apiKey);onCall&&onCall();country=msg.country;memoryLine=msg.memoryLine;}
-  if(listener.memory.length>=H_MEM)listener.memory.shift();listener.memory.push(memoryLine);
-  return{speakerId:speaker.id,listenerId:listener.id,country,memoryLine};}
-async function probeAllLLM(ag,apiKey,onCall){
-  const results=await Promise.all(ag.map(a=>llmSpeak(a,apiKey).then(r=>{onCall&&onCall();return r.country;})));
-  return results;}
-async function probeAllLLMAdv(ag,apiKey,advTarget,onCall){
-  const results=await Promise.all(ag.map(a=>a.adv?Promise.resolve(advTarget):llmSpeak(a,apiKey).then(r=>{onCall&&onCall();return r.country;})));
-  return results;}
+function runStep(ag,grid,rng){if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuess(analyzeCrop(grid,ag[si].top,ag[si].left),ag[si].memory);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);return{si,li,g};}
+function probeAll(ag,grid){return ag.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory));}
 function compShares(gs){const ct={};gs.forEach(g=>{ct[g]=(ct[g]||0)+1;});const n=gs.length||1;const sh={};Object.entries(ct).forEach(([c,v])=>{sh[c]=v/n;});return sh;}
 function classifyOutcome(shares,truthC){const ent=Object.entries(shares).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);if(!ent.length)return{label:'Fragmentation',icon:'◇',color:'#9a9183',details:'No guesses'};const[topC,topS]=ent[0];
   if(topS>=CON_T){const ok=topC===truthC;return{label:ok?'Correct Consensus':'Wrong Consensus',icon:ok?'✓':'✗',color:ok?'#6ec89b':'#e87b6f',details:`${(topS*100).toFixed(0)}% agreed on ${topC}${ok?'':` (truth: ${truthC})`}`};}
@@ -474,7 +444,7 @@ const S={page:{minHeight:'100vh',background:T.bg,color:T.txt,fontFamily:T.san},h
   h1:{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,letterSpacing:'-0.5px',marginBottom:6},h1b:{fontWeight:700,fontStyle:'italic'},
   sub:{fontSize:14,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.65},main:{maxWidth:1400,margin:'0 auto',padding:'16px 14px'},
   row:{display:'flex',gap:18,flexWrap:'wrap',justifyContent:'center'},pan:{flex:'1 1 520px',minWidth:310,background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:12,padding:16,overflow:'hidden'},
-  pt:{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'1.6px',color:T.dim,marginBottom:8},
+  pt:{fontSize:13,fontWeight:600,textTransform:'uppercase',letterSpacing:'1.4px',color:T.dim,marginBottom:10},
   bar:{display:'flex',flexWrap:'wrap',gap:7,alignItems:'center',justifyContent:'center',margin:'14px 0',padding:'10px 14px',background:T.pan,borderRadius:9,border:`1px solid ${T.bdr}`},
   btn:(on,c='#5b86c4')=>({padding:'6px 14px',borderRadius:7,border:'none',cursor:'pointer',fontWeight:600,fontSize:11,background:on?c:T.card,color:on?'#fff':T.mut,transition:'all .15s'}),
   sel:{padding:'6px 9px',borderRadius:7,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,cursor:'pointer'},
@@ -482,119 +452,235 @@ const S={page:{minHeight:'100vh',background:T.bg,color:T.txt,fontFamily:T.san},h
   ar:{display:'flex',gap:5,alignItems:'center',padding:'4px 6px',borderRadius:6,fontSize:10,background:T.card,marginBottom:2},sep:{width:1,height:18,background:T.bdr,flexShrink:0}};
 
 /* ═══════ FLAG DISPLAY — real SVG with agent overlay ═══════ */
-function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing}){
+function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing,hintExtra}){
   const wrapRef=useRef(null);
-  const click=useCallback(e=>{if(!placing||!wrapRef.current)return;const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;onClickCell(Math.max(0,Math.min(Math.floor(y),GH-TH)),Math.max(0,Math.min(Math.floor(x),GW-TW)));},[placing,onClickCell]);
+  const[hoverId,setHoverId]=useState(null);
+  const click=useCallback(e=>{if(!placing||!wrapRef.current)return;const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;onClickCell(Math.max(0,Math.min(Math.floor(y),GH-TH)),Math.max(0,Math.min(Math.floor(x),GW-TW)),e.shiftKey);},[placing,onClickCell]);
+  const move=useCallback(e=>{if(!placing||!wrapRef.current){if(hoverId!=null)setHoverId(null);return;}const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;const ex=agents.find(a=>a.top<=y&&y<a.top+TH&&a.left<=x&&x<a.left+TW);setHoverId(ex?ex.id:null);},[placing,agents,hoverId]);
+  const leave=useCallback(()=>setHoverId(null),[]);
+  const hovered=hoverId!=null?agents.find(a=>a.id===hoverId):null;
   return(<div style={{width:'100%',maxWidth:560,margin:'0 auto'}}>
-    <div ref={wrapRef} style={{position:'relative',cursor:placing?'crosshair':'default'}} onClick={click}>
+    <div ref={wrapRef} style={{position:'relative',cursor:hovered?'pointer':(placing?'crosshair':'default')}} onClick={click} onMouseMove={move} onMouseLeave={leave}>
       <div dangerouslySetInnerHTML={{__html:(FLAG_SVG[flag.c]||'').replace('<svg ','<svg width="100%" ')}} style={{width:'100%',lineHeight:0,borderRadius:4,overflow:'hidden'}}/>
       <svg viewBox={`0 0 ${GW} ${GH}`} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}}>
         <defs><filter id="agentglow"><feGaussianBlur stdDeviation="0.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-        {agents.map((a,i)=>{const run=phase!=='setup';const g=run?guesses[i]:null;const mc=a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';const bc=g?(CCOL[g]||T.mut):mc;
-          return(<g key={a.id}>{g&&<rect x={a.left} y={a.top} width={TW} height={TH} fill={bc} opacity={0.18} rx={0.3}/>}<rect x={a.left} y={a.top} width={TW} height={TH} fill="none" stroke={bc} strokeWidth={0.35} rx={0.3} opacity={0.95} filter={g?'url(#agentglow)':undefined}/><rect x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} rx={0.35} fill={mc} opacity={0.9}/><text x={a.left+1.1} y={a.top+1.25} textAnchor="middle" fontSize={1} fontWeight={700} fill="#fff">{i+1}</text></g>);})}
+        {agents.map((a,i)=>{const run=phase!=='setup';const g=run?guesses[i]:null;const mc=a.adv?'#e87b6f':(a.model==='gpt-5.4'?'#d4a94b':'#5b86c4');const bc=g?(CCOL[g]||T.mut):mc;const modelLabel=a.adv?'ADV':(a.model==='gpt-5.4'?'5.4':'4o');
+          return(<g key={a.id}><rect x={a.left} y={a.top} width={TW} height={TH} fill={bc} opacity={0.18} rx={0.3}/><rect x={a.left} y={a.top} width={TW} height={TH} fill="none" stroke={bc} strokeWidth={0.35} rx={0.3} opacity={0.95} filter="url(#agentglow)"/>{g&&FLAG_SVG[g]?<image x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} href={`data:image/svg+xml,${encodeURIComponent(FLAG_SVG[g])}`} preserveAspectRatio="xMidYMid slice"/>:<><rect x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} rx={0.35} fill={mc} opacity={0.9}/><text x={a.left+1.1} y={a.top+1.25} textAnchor="middle" fontSize={1} fontWeight={700} fill="#fff">{i+1}</text></>}<text x={a.left+2.2} y={a.top+1.2} textAnchor="start" fontSize={0.7} fontWeight={400} fill="#fff">{modelLabel}</text></g>);})}
       </svg>
+      {hovered&&<div style={{position:'absolute',left:`${(hovered.left+TW/2)/GW*100}%`,top:`${hovered.top/GH*100}%`,transform:'translate(-50%,-100%)',marginTop:-6,background:'rgba(40,30,20,0.92)',color:'#fff',fontSize:10,fontWeight:500,padding:'4px 9px',borderRadius:5,whiteSpace:'nowrap',pointerEvents:'none',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.3)'}}>Click to remove{hintExtra?' · Shift+click for adversary':''}</div>}
     </div>
-    {placing&&agents.length<MAX_A&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>Click the flag to place agent {agents.length+1}</div>}
+    <div style={{textAlign:'center',fontFamily:T.ser,fontSize:26,fontStyle:'italic',color:T.txt,marginTop:12,letterSpacing:'-0.3px'}}>{flag.c}</div>
+    {placing&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>{agents.length<MAX_A?`Click empty area to place agent ${agents.length+1} · Click an agent to remove`:'At max — click an agent to remove'}{hintExtra?` · ${hintExtra}`:''}</div>}
   </div>);}
 
-function MiniFlag({country}){const svg=FLAG_SVG[country];if(!svg)return null;
-  return(<div style={{position:'absolute',bottom:'100%',right:0,marginBottom:6,zIndex:50,background:T.card,border:`1px solid ${T.blt}`,borderRadius:8,padding:8,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',pointerEvents:'none',minWidth:130}}>
-    <div dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" ')}} style={{width:130,lineHeight:0,borderRadius:3,border:`1px solid ${T.blt}`,overflow:'hidden'}}/>
-    <div style={{fontSize:9,color:T.mut,textAlign:'center',marginTop:4,fontWeight:600}}>{country}</div></div>);}
+function InlineFlag({country,w=18}){const svg=FLAG_SVG[country];if(!svg)return null;const h=Math.round(w*0.72);
+  return(<span dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice" ')}} style={{display:'inline-block',width:w,height:h,lineHeight:0,borderRadius:2,border:`1px solid ${T.blt}`,overflow:'hidden',verticalAlign:'middle',flexShrink:0}}/>);}
+
+/* ═══════ FIRST-PERSON HELPERS ═══════ */
+function scoreFlagAgainstCrop(an,f){let p=0;const circC=typeof f.circ==='object'?f.circ?.color:f.circ;const allC=[...(f.s||[]),f.tri,f.cross,circC,f.canton,f.cantonCross,f.bend,f.bg,f.diamond,f.star,f.pstars?.color,...(f.diag||[])].filter(Boolean);
+  if(an.orientation&&f.s)p+=an.orientation===(f.o||'h')?1:-1;
+  an.colors.forEach(col=>{p+=allC.includes(col)?1.5:-0.5;});
+  if(an.ordered.length>0&&f.s)p+=isSubseq(f.s,an.ordered)?2:-0.5;
+  if(f.tri&&an.colors.includes(f.tri))p+=1.5;if(f.cross&&an.colors.includes(f.cross))p+=1.5;if(circC&&an.colors.includes(circC))p+=1.5;if(f.diamond&&an.colors.includes(f.diamond))p+=1.5;
+  return p;}
+function topCandidates(an,k=8){return F.map(f=>({c:f.c,score:scoreFlagAgainstCrop(an,f)})).sort((a,b)=>b.score-a.score||a.c.localeCompare(b.c)).slice(0,k).map(x=>x.c);}
+
+function CropView({country,top,left,w=300}){const svg=FLAG_SVG[country];if(!svg)return null;
+  const m=svg.match(/<svg[^>]*>([\s\S]+)<\/svg>/);if(!m)return null;
+  const vbX=left/GW*640,vbY=top/GH*480,vbW=TW/GW*640,vbH=TH/GH*480;
+  const h=Math.round(w*vbH/vbW);
+  return(<div style={{display:'inline-block',borderRadius:8,overflow:'hidden',border:`3px solid ${T.bdr}`,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',background:'#000',lineHeight:0}}>
+    <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} width={w} height={h} preserveAspectRatio="xMidYMid slice" dangerouslySetInnerHTML={{__html:m[1]}}/>
+  </div>);}
+
+/* ═══════ MECHANISTIC TRACE ═══════ */
+function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
+  const[cropPngs,setCropPngs]=useState({});
+  const[flagPngs,setFlagPngs]=useState({});
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg||!agents.length)return;rasterizeFlag(svg).then(c=>{if(cancelled)return;const out={};agents.forEach((a,i)=>{try{out[i]=cropAgentView(c,a.top,a.left);}catch(_){}});setCropPngs(out);}).catch(()=>{});return()=>{cancelled=true;};},[truth,agents]);
+  useEffect(()=>{let cancelled=false;const uniq=new Set();(allG||[]).forEach(round=>round.forEach(g=>{if(g&&FLAG_SVG[g])uniq.add(g);}));if(uniq.size===0)return;Promise.all([...uniq].map(c=>rasterizeFlag(FLAG_SVG[c]).then(can=>[c,can.toDataURL('image/png')]).catch(()=>[c,null]))).then(pairs=>{if(cancelled)return;setFlagPngs(p=>{const n={...p};pairs.forEach(([c,png])=>{if(png)n[c]=png;});return n;});});return()=>{cancelled=true;};},[allG]);
+  if(!allG||allG.length<2)return null;
+  const N=agents.length;const numProbes=allG.length;
+  const ROW_H=44,COL_W=48,TOP_GUTTER=30;
+  const CROP_W=64,CROP_H=Math.round(CROP_W*3/4); // 4:3 aspect (matches TW/TH of crop in SVG coords)
+  const FINAL_W=42,FINAL_H=Math.round(FINAL_W*3/4);
+  const LEFT_GUTTER=CROP_W+18; // crop + gap
+  const RIGHT_PAD=FINAL_W+16;
+  const cellX=c=>LEFT_GUTTER+c*COL_W;
+  const cellY=r=>TOP_GUTTER+r*ROW_H;
+  const W=LEFT_GUTTER+numProbes*COL_W+RIGHT_PAD;
+  const H=TOP_GUTTER+N*ROW_H+10;
+
+  // ── Story extraction ───────────────────────────────────────────
+  const finalRound=allG[numProbes-1];
+  const winner=(()=>{const ct={};finalRound.forEach(g=>{if(g)ct[g]=(ct[g]||0)+1;});const ent=Object.entries(ct).sort((a,b)=>b[1]-a[1]);return ent[0]?.[0]||null;})();
+  const winnerIsTruth=winner===truth;
+  const pivotCol=winner?allG.findIndex(round=>round.filter(g=>g===winner).length>N/2):-1;
+  let seedI=-1,seedR=-1;
+  if(winner)for(let r=0;r<numProbes&&seedR<0;r++)for(let i=0;i<N;i++)if(allG[r][i]===winner){seedI=i;seedR=r;break;}
+  const effective=gossipLog.map(g=>{if(g.g!==winner)return false;const prev=Math.floor(g.step/pe);const next=prev+1;if(next>=numProbes)return false;return allG[next][g.li]===winner&&allG[prev][g.li]!==winner;});
+  const frameColor=winnerIsTruth?'#6ec89b':(winner?'#e87b6f':T.bdr);
+
+  const truthInner=FLAG_INNER[truth];
+  const cropVB=(a)=>({x:a.left/GW*640,y:a.top/GH*480,w:TW/GW*640,h:TH/GH*480});
+  const fcId=(c)=>`mt-fc-${c.replace(/[^A-Za-z0-9]/g,'_')}`;
+  // Only define symbols for the final-belief flags (max N = 6), not every cell — far lighter to render
+  const finalCountries=(()=>{const s=new Set();finalRound.forEach(g=>{if(g&&FLAG_INNER[g])s.add(g);});return[...s];})();
+
+  return(<div style={{marginTop:20,padding:'16px 18px',background:T.pan,borderRadius:10,border:`2px solid ${frameColor}`,overflowX:'auto'}}>
+    <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:14,display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
+      <span>Mechanistic Trace</span>
+      <span style={{textTransform:'none',letterSpacing:0,color:T.fnt,fontWeight:400,fontStyle:'italic',fontSize:10}}>
+        view ┃ belief over time ┃ → final · ★ seed · ⬛ pivot · solid = effective spread, faded = noise
+      </span>
+    </div>
+    <svg width={W} height={H} style={{minWidth:W,display:'block'}}>
+      <defs>
+        <marker id="mt-arrow-bold" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={5} markerHeight={5} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor"/></marker>
+        <marker id="mt-arrow-faint" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={4} markerHeight={4} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity={0.4}/></marker>
+      </defs>
+
+      {/* Pivot column band (behind cells) */}
+      {pivotCol>=0&&<rect x={cellX(pivotCol)-2} y={TOP_GUTTER-12} width={COL_W+4} height={N*ROW_H+12} fill={winnerIsTruth?'#6ec89b':'#e87b6f'} opacity={0.13} rx={4}/>}
+      {pivotCol>=0&&<text x={cellX(pivotCol)+COL_W/2} y={TOP_GUTTER-4} textAnchor="middle" fontSize={9} fontWeight={700} fill={winnerIsTruth?'#3a8a64':'#a85047'}>pivot</text>}
+
+      {/* Top column labels */}
+      <text x={CROP_W/2+4} y={18} textAnchor="middle" fontSize={9} fill={T.dim} fontWeight={600}>view</text>
+      {allG.map((_,r)=>(<text key={`c-${r}`} x={cellX(r)+COL_W/2} y={18} textAnchor="middle" fontSize={9} fill={T.fnt}>{r===0?'init':`R${r}`}</text>))}
+      <text x={W-RIGHT_PAD/2-2} y={18} textAnchor="middle" fontSize={9} fill={T.dim} fontWeight={600}>final</text>
+
+      {/* Row 1: agent crop (what they saw) — rasterized PNG, one per agent (cheap) */}
+      {agents.map((a,i)=>{const y=cellY(i)+(ROW_H-CROP_H)/2;return(<g key={`crop-${i}`}>
+        <rect x={4} y={y} width={CROP_W} height={CROP_H} fill="#000" rx={3}/>
+        {cropPngs[i]&&<image href={cropPngs[i]} x={4} y={y} width={CROP_W} height={CROP_H} preserveAspectRatio="xMidYMid slice"/>}
+        <rect x={4} y={y} width={CROP_W} height={CROP_H} fill="none" stroke={T.bdr} strokeWidth={1} rx={3}/>
+      </g>);})}
+
+      {/* Gossip arrows (drawn under cells so flags pop) */}
+      {gossipLog.map((g,idx)=>{
+        const probeIdx=Math.floor(g.step/pe);if(probeIdx>=numProbes-1)return null;
+        if(g.si===g.li)return null;
+        const x1=cellX(probeIdx)+COL_W-1,x2=cellX(probeIdx+1)+1,xm=(x1+x2)/2;
+        const y1=cellY(g.si)+ROW_H/2,y2=cellY(g.li)+ROW_H/2;
+        const eff=effective[idx];
+        const col=CCOL[g.g]||T.fnt;
+        return(<path key={`a-${idx}`} d={`M${xm-6},${y1} Q${xm+4},${(y1+y2)/2} ${xm-2},${y2}`}
+          stroke={col} strokeWidth={eff?2.4:0.5} fill="none" opacity={eff?0.95:0.10}
+          markerEnd={eff?'url(#mt-arrow-bold)':'url(#mt-arrow-faint)'}/>);
+      })}
+
+      {/* Belief cells: flag thumbnails */}
+      {agents.map((a,i)=>allG.map((round,r)=>{
+        const belief=round[i];
+        const x=cellX(r)+3,y=cellY(i)+(ROW_H-(ROW_H-8))/2,w=COL_W-6,h=ROW_H-8;
+        if(!belief)return(<rect key={`b-${i}-${r}`} x={x} y={y} width={w} height={h} fill="none" stroke={T.bdr} strokeDasharray="2 2" rx={3}/>);
+        const changed=r===0||allG[r-1][i]!==belief;
+        const isTruth=belief===truth;
+        const png=flagPngs[belief];
+        return(<g key={`b-${i}-${r}`}>
+          {changed&&png?<image href={png} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid slice"/>
+            :<rect x={x} y={y} width={w} height={h} fill={CCOL[belief]||T.fnt} opacity={changed?(isTruth?1:0.85):0.32} rx={3}/>}
+          <rect x={x} y={y} width={w} height={h} fill="none"
+            stroke={isTruth?'#2d2926':(changed?'#00000033':'transparent')}
+            strokeWidth={isTruth?1.4:0.6} rx={3}/>
+          <title>{belief}</title>
+        </g>);
+      }))}
+
+      {/* Final-belief flag at row end */}
+      {agents.map((a,i)=>{
+        const final=allG[numProbes-1][i];if(!final)return null;
+        const x=W-RIGHT_PAD+4,y=cellY(i)+(ROW_H-FINAL_H)/2;
+        const isTruth=final===truth;
+        const png=flagPngs[final];
+        return(<g key={`f-${i}`}>
+          {png&&<image href={png} x={x} y={y} width={FINAL_W} height={FINAL_H} preserveAspectRatio="xMidYMid slice"/>}
+          <rect x={x} y={y} width={FINAL_W} height={FINAL_H} fill="none"
+            stroke={isTruth?'#3a8a64':'#a85047'} strokeWidth={1.8} rx={3}/>
+          <title>{final}{isTruth?' ✓':' ✗'}</title>
+        </g>);
+      })}
+
+      {/* Seed marker on top */}
+      {seedR>=0&&<g>
+        <circle cx={cellX(seedR)+COL_W/2} cy={cellY(seedI)+ROW_H/2} r={11} fill="#fff" stroke="#2d2926" strokeWidth={2}/>
+        <text x={cellX(seedR)+COL_W/2} y={cellY(seedI)+ROW_H/2+5} textAnchor="middle" fontSize={13} fontWeight={700} fill="#2d2926">★</text>
+      </g>}
+    </svg>
+  </div>);
+}
 
 /* ═══════ CHART ═══════ */
 function TrajChart({data,active,truth,onHover}){if(!data.length)return(<div style={{height:310,display:'flex',alignItems:'center',justifyContent:'center',color:T.fnt,fontSize:12,fontStyle:'italic'}}>Trajectory appears once the simulation runs</div>);
   const pk={};data.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));const shown=active.filter(c=>pk[c]>0.02||c===truth).sort((a,b)=>(pk[b]||0)-(pk[a]||0)).slice(0,14);
-  return(<ResponsiveContainer width="100%" height={310}><LineChart data={data} margin={{top:4,right:6,left:0,bottom:18}} onMouseMove={e=>{if(e&&e.activeTooltipIndex!=null)onHover(e.activeTooltipIndex);}} onMouseLeave={()=>onHover(null)}>
-    <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/><XAxis dataKey="round" stroke={T.fnt} fontSize={9} label={{value:'Interaction rounds',position:'insideBottom',offset:-6,fill:T.dim,fontSize:9}}/><YAxis domain={[0,1]} stroke={T.fnt} fontSize={9} tickFormatter={v=>`${(v*100).toFixed(0)}%`}/>
-    <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:7,fontSize:10}} labelStyle={{color:T.mut}} formatter={(v,n)=>[`${(v*100).toFixed(1)}%`,n]} labelFormatter={v=>`Round ${v}`}/>
-    {shown.map(c=><Line key={c} type="monotone" dataKey={c} stroke={CCOL[c]||T.dim} strokeWidth={c===truth?3:1.5} strokeDasharray={c===truth?undefined:'5 3'} dot={false} isAnimationActive={false} opacity={c===truth?1:0.65}/>)}
+  return(<ResponsiveContainer width="100%" height={320}><LineChart data={data} margin={{top:6,right:8,left:14,bottom:22}} onMouseMove={e=>{if(e&&e.activeTooltipIndex!=null)onHover(e.activeTooltipIndex);}} onMouseLeave={()=>onHover(null)}>
+    <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/><XAxis dataKey="round" stroke={T.fnt} fontSize={13} axisLine={{strokeWidth:1.5}} tickLine={{strokeWidth:1.5}} label={{value:'Interaction rounds',position:'insideBottom',offset:-12,fill:T.dim,fontSize:13}}/><YAxis domain={[0,1]} stroke={T.fnt} fontSize={13} axisLine={{strokeWidth:1.5}} tickLine={{strokeWidth:1.5}} tickFormatter={v=>`${(v*100).toFixed(0)}%`} label={{value:'Country share',angle:-90,position:'insideLeft',offset:6,style:{textAnchor:'middle',fontSize:13,fill:T.dim}}}/>
+    <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:7,fontSize:12}} labelStyle={{color:T.mut}} formatter={(v,n)=>[`${(v*100).toFixed(1)}%`,n]} labelFormatter={v=>`Round ${v}`}/>
+    {shown.map(c=><Line key={c} type="monotone" dataKey={c} stroke={CCOL[c]||T.dim} strokeWidth={c===truth?4:2.5} strokeDasharray={c===truth?undefined:'5 3'} dot={false} isAnimationActive={false} opacity={c===truth?1:0.7}/>)}
   </LineChart></ResponsiveContainer>);}
 
 function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;const oc=classifyOutcome(shares,truthC);const ent=Object.entries(shares).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);const N=agents.length;const cc=guesses.filter(g=>g===truthC).length;
   return(<div style={{marginTop:14,padding:'14px 16px',background:T.card,borderRadius:10,border:`1px solid ${T.bdr}`}}>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}><span style={{fontSize:28,lineHeight:1,color:oc.color}}>{oc.icon}</span><div><div style={{fontSize:15,fontWeight:700,color:oc.color,fontFamily:T.ser}}>{oc.label}</div><div style={{fontSize:11,color:T.mut}}>{oc.details}</div></div></div>
-    <div style={{display:'flex',flexWrap:'wrap',gap:6,fontSize:10}}><span style={{color:T.dim}}>Accuracy: <strong style={{color:T.txt}}>{cc}/{N} ({(cc/N*100).toFixed(0)}%)</strong></span><span style={{color:T.bdr}}>·</span><span style={{color:T.dim}}>Countries in play: <strong style={{color:T.txt}}>{ent.length}</strong></span><span style={{color:T.bdr}}>·</span><span style={{color:T.dim}}>Truth: <strong style={{color:CCOL[truthC]||T.txt}}>{truthC}</strong></span></div>
+    <div style={{display:'flex',flexWrap:'wrap',gap:6,fontSize:10}}><span style={{color:T.dim}}>Accuracy: <strong style={{color:T.txt}}>{cc}/{N} ({(cc/N*100).toFixed(0)}%)</strong></span><span style={{color:T.bdr}}>·</span><span style={{color:T.dim}}>Countries in play: <strong style={{color:T.txt}}>{ent.length}</strong></span></div>
     {ent.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>{ent.slice(0,8).map(([c,s])=><span key={c} style={{...S.bdg(CCOL[c]),fontSize:9}}>{c} {(s*100).toFixed(0)}%</span>)}{ent.length>8&&<span style={{fontSize:9,color:T.fnt}}>+{ent.length-8} more</span>}</div>}
   </div>);}
 
-function AgentList({agents,guesses,phase,onRemove,onToggle}){const[hov,setHov]=useState(null);if(!agents.length)return null;const dis=phase!=='setup';
-  return(<div style={{marginTop:8}}>{agents.map((a,i)=>{const g=phase!=='setup'?guesses[i]:null;const mc=a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';
-    return(<div key={a.id} style={S.ar}><span style={{width:16,height:16,borderRadius:4,display:'inline-flex',alignItems:'center',justifyContent:'center',background:mc,fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{i+1}</span>
-      <button onClick={()=>onToggle(a.id)} disabled={dis} style={{...S.bdg(mc),cursor:dis?'default':'pointer'}}>{a.model}</button><span style={{color:T.fnt,fontSize:9}}>({a.top},{a.left})</span>
-      {g&&<span style={{position:'relative',marginLeft:'auto'}} onMouseEnter={()=>setHov(a.id)} onMouseLeave={()=>setHov(null)}><span style={{...S.bdg(CCOL[g]),cursor:'default'}}>{g}</span>{hov===a.id&&<MiniFlag country={g}/>}</span>}
-      {!dis&&<button onClick={()=>onRemove(a.id)} style={{marginLeft:g?3:'auto',background:'none',border:'none',color:'#e87b6f',cursor:'pointer',fontSize:12,padding:'0 2px'}}>×</button>}</div>);})}</div>);}
-
 /* ═══════ MAIN ═══════ */
-function FlagGame(){
-  const{apiKey}=useApiKey();
-  const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(LEVELS[0].truth[0]);const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
+function FlagGame({apiKey}){
+  const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
-  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(60);const[active,setActive]=useState([]);
-  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const sim=useRef(null);const nid=useRef(1);
-  const[probing,setProbing]=useState(false);const[apiErr,setApiErr]=useState(null);
+  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
+  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const level=LEVELS[lvl];const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
   useEffect(()=>{if(!level.truth.includes(truth))setTruth(level.truth[0]);},[lvl]);
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
+  const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
-  const place=useCallback((t,l)=>{if(N>=MAX_A||phase!=='setup')return;setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase]);
-  const remove=useCallback(id=>setAgents(p=>p.filter(a=>a.id!==id)),[]);
-  const toggle=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,model:a.model==='gpt-4o'?'gpt-5.4':'gpt-4o'}:a)),[]);
+  const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-5.4','gpt-5.4','gpt-4o'];setAgents(ms.map(m=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[]})));},[phase]);
-  const[calls,setCalls]=useState(0);const cancelRef=useRef(false);
-  const start=useCallback(async()=>{if(N<2||probing)return;setApiErr(null);setCalls(0);
-    let sa=agents.map(a=>({...a,memory:[]}));
-    if(apiKey){setProbing(true);try{sa=await prepareAgents(sa,truthFlag);}catch(e){setApiErr(e.message||String(e));setProbing(false);return;}setProbing(false);}
-    const rng=mkRng(Date.now());
-    let g0;if(apiKey){try{g0=await probeAllLLM(sa,apiKey,()=>setCalls(c=>c+1));}catch(e){setApiErr(e.message||String(e));return;}}else{g0=probeAll(sa,grid);}
-    const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey,truthFlag,probing]);
+  const start=useCallback(()=>{if(N<2)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0,gossipLog:[]};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,apiKey]);
 
-  useEffect(()=>{if(phase!=='running')return;cancelRef.current=false;
-    const onCall=()=>setCalls(c=>c+1);
-    const tick=async()=>{const s=sim.current;if(!s||s.done){setPhase('done');return;}
-      if(cancelRef.current)return;
-      s.step++;
-      if(s.step>maxT){let g;try{g=apiKey?await probeAllLLM(s.agents,apiKey,onCall):probeAll(s.agents,grid);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
-        const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);return;}
-      try{if(apiKey)await runStepLLM(s.agents,s.rng,apiKey,onCall);else runStep(s.agents,grid,s.rng);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
-      if(cancelRef.current)return;setStep(s.step);
-      if(s.step%pe===0){s.pr++;let g;try{g=apiKey?await probeAllLLM(s.agents,apiKey,onCall):probeAll(s.agents,grid);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
-        const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
-        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');return;}}else{s.conRuns=0;}}
-      setTimeout(tick,spd);};
-    setTimeout(tick,spd);return()=>{cancelRef.current=true;};},[phase,spd,grid,maxT,pe,apiKey]);
+  useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
+    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(r.memoryLine);s.gossipLog.push({step:s.step,si,li,g:r.country});}else{const info=runStep(s.agents,grid,s.rng);if(info)s.gossipLog.push({step:s.step,...info});}};
+    const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAll(s.agents,grid);}};
+    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
+        try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
+        if(s.step%pe===0){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+          const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
+        await new Promise(r=>setTimeout(r,spd));}})();
+    return()=>{ctl.cancelled=true;};},[phase,spd,grid,maxT,pe,apiKey,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
-  const reset=()=>{cancelRef.current=true;setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);setCalls(0);sim.current=null;setAgents(p=>p.map(a=>({...a,memory:[]})));};
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const nextFlag=()=>{reset();const ts=level.truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);};
+  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
-  const stTxt=phase==='setup'?'Place agents on the flag, then press Run':phase==='done'?(cons?`✓ Stable consensus at round ${pr}`:`Done — ${maxT} steps`):`Step ${step}/${maxT} · Round ${pr}${sim.current?.conRuns>0?' · streak '+sim.current.conRuns+'/'+CON_RUNS:''}`;
-  const removed=F_RAW.length-F.length;
 
   return(<div>
-    <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1><p style={S.sub}>Place AI agents on a hidden flag. Each sees only a small crop. Watch them converge — or fail — through pairwise gossip.</p></header>
     <div style={S.main}>
       <div style={S.bar}>
-        <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){setLvl(+e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i}>{l.name} ({l.truth.length})</option>)}</select>
+        <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
-        <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} disabled={probing} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||probing} style={{...S.btn(N>=2&&!probing,'#6ec89b'),opacity:(N<2||probing)?0.4:1}}>{probing?'⏳ Querying agents…':'▶ Run'}</button></>}
-        {phase==='running'&&<button onClick={()=>{cancelRef.current=true;setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-        {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>{apiKey&&<span style={{fontSize:9,color:T.dim,marginLeft:6}}>· {calls} call{calls===1?'':'s'}</span>}
+        <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
+        {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
+        {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
       </div>
-      <p style={{textAlign:'center',fontSize:10,color:T.fnt,margin:'-6px 0 10px'}}>{level.desc} · {F.length} countries total</p>
+      {apiError&&<div style={{textAlign:'center',padding:'8px 14px',margin:'8px auto',maxWidth:620,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12}}>{apiError}</div>}
       {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
       <div style={S.row}>
-        <div style={S.pan}><div style={S.pt}>Agent Positions{phase!=='setup'?' & Beliefs':''}<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>N={N}{cons?' · consensus':''}</span></div>
-          <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'&&N<MAX_A}/>
-          <AgentList agents={agents} guesses={dg} phase={phase} onRemove={remove} onToggle={toggle}/></div>
-        <div style={S.pan}><div style={S.pt}>Country Share Trajectories<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>{traj.length>0?`${traj.length} probes`:''}</span></div>
+        <div style={S.pan}>
+          <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'}/></div>
+        <div style={S.pan}>
           <TrajChart data={traj} active={active} truth={truthFlag.c} onHover={setHovIdx}/>
-          {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/>{c}{c===truthFlag.c?' (truth)':''}</span>)}</div>}
+          {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/><InlineFlag country={c}/><span>{c}{c===truthFlag.c?' (truth)':''}</span></span>)}</div>}
           {phase==='done'&&fShares&&<OutcomePanel shares={fShares} truthC={truthFlag.c} agents={agents} guesses={guesses}/>}</div>
       </div>
-      <div style={{textAlign:'center',padding:'7px 12px',background:T.card,borderRadius:7,border:`1px solid ${T.bdr}`,fontSize:11,color:cons?'#6ec89b':T.mut,marginTop:12}}>{stTxt}<span style={{marginLeft:10,color:T.fnt}}>Truth: <strong style={{color:CCOL[truthFlag.c]||T.txt}}>{truthFlag.c}</strong></span></div>
-      {apiErr&&<div style={{textAlign:'center',padding:'7px 12px',background:'#fbecea',borderRadius:7,border:`1px solid #e87b6f`,fontSize:11,color:'#a13c30',marginTop:6}}>API error: {apiErr}</div>}
+      {phase==='done'&&sim.current&&sim.current.gossipLog&&<MechanisticTrace agents={agents} allG={allG} gossipLog={sim.current.gossipLog} truth={truthFlag.c} pe={pe}/>}
       <div style={{marginTop:24,padding:'18px 22px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:11,maxWidth:740,margin:'24px auto 0'}}>
         <h3 style={{fontSize:14,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>How it works</h3>
         <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>{F.length} real country flags are embedded as SVGs (from the flag-icons project). With an OpenAI key set, each step the chosen speaker calls its model (gpt-4o / gpt-5.4) with its private crop and its transcript memory of prior interactions, and returns JSON {`{country, reason}`} — the listener appends that line to its own memory (last {H_MEM}). The prompts mirror those used in the paper (nnd/flag_game/prompts.py), exposing the interplay between private visual evidence and social signal. Without a key, agents use a local color-matching heuristic. Stops after {CON_RUNS} consecutive probe rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or N×14 steps.</p>
@@ -608,55 +694,42 @@ function FlagGame(){
 function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si];const g=speaker.adv?advTarget:bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory,speaker);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
-function AdversarialGame(){
-  const{apiKey}=useApiKey();
-  const[truth,setTruth]=useState(F[0].c);
+function AdversarialGame({apiKey}){
+  const[truth,setTruth]=useState(()=>F[Math.floor(Math.random()*F.length)].c);
   const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
-  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(60);const[active,setActive]=useState([]);
-  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const sim=useRef(null);const nid=useRef(1);
-  const[probing,setProbing]=useState(false);const[apiErr,setApiErr]=useState(null);
+  const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[spd,setSpd]=useState(100);const[active,setActive]=useState([]);
+  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const others=useMemo(()=>F.filter(f=>f.c!==truth).map(f=>f.c),[truth]);
   const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
   const nAdv=agents.filter(a=>a.adv).length;const nHon=N-nAdv;
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
+  const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
 
-  const place=useCallback((t,l)=>{if(N>=MAX_A||phase!=='setup')return;setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase]);
-  const remove=useCallback(id=>setAgents(p=>p.filter(a=>a.id!==id)),[]);
-  const toggleModel=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,model:a.model==='gpt-4o'?'gpt-5.4':'gpt-4o'}:a)),[]);
-  const toggleAdv=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,adv:!a.adv}:a)),[]);
+  const place=useCallback((t,l,shift)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){if(shift){setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));}else{setAgents(p=>p.filter(a=>a.id!==ex.id));}return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-4o','gpt-4o','gpt-4o'];setAgents(ms.map((m,i)=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[],adv:i>=4})));},[phase]);
 
-  const[calls,setCalls]=useState(0);const cancelRef=useRef(false);
-  const start=useCallback(async()=>{if(N<2||nAdv<1||probing)return;setApiErr(null);setCalls(0);
-    let sa=agents.map(a=>({...a,memory:[]}));
-    if(apiKey){setProbing(true);try{sa=await prepareAgents(sa,truthFlag);}catch(e){setApiErr(e.message||String(e));setProbing(false);return;}setProbing(false);}
-    const rng=mkRng(Date.now());
-    let g0;if(apiKey){try{g0=await probeAllLLMAdv(sa,apiKey,advTarget,()=>setCalls(c=>c+1));}catch(e){setApiErr(e.message||String(e));return;}}else{g0=probeAllAdv(sa,grid,advTarget);}
-    const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,apiKey,truthFlag,probing]);
+  const start=useCallback(()=>{if(N<2||nAdv<1)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(apiKey){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAllAdv(sa,grid,advTarget);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,apiKey]);
 
-  useEffect(()=>{if(phase!=='running')return;
-    cancelRef.current=false;
-    const onCall=()=>setCalls(c=>c+1);
-    const tick=async()=>{const s=sim.current;if(!s||s.done){setPhase('done');return;}
-      if(cancelRef.current)return;
-      s.step++;
-      if(s.step>maxT){let g;try{g=apiKey?await probeAllLLMAdv(s.agents,apiKey,advTarget,onCall):probeAllAdv(s.agents,grid,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
-        const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);return;}
-      try{if(apiKey)await runStepLLMAdv(s.agents,s.rng,apiKey,advTarget,onCall);else runStepAdv(s.agents,grid,s.rng,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
-      if(cancelRef.current)return;setStep(s.step);
-      if(s.step%pe===0){s.pr++;let g;try{g=apiKey?await probeAllLLMAdv(s.agents,apiKey,advTarget,onCall):probeAllAdv(s.agents,grid,advTarget);}catch(e){setApiErr(e.message||String(e));setPhase('done');return;}
-        const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
-        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');return;}}else{s.conRuns=0;}}
-      setTimeout(tick,spd);};
-    setTimeout(tick,spd);return()=>{cancelRef.current=true;};},[phase,spd,grid,maxT,pe,advTarget,apiKey]);
+  useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
+    const runOne=async(s)=>{if(apiKey){if(s.agents.length<2)return;const si=Math.floor(s.rng()*s.agents.length);let li=Math.floor(s.rng()*(s.agents.length-1));if(li>=si)li++;const sp=s.agents[si],ls=s.agents[li];let g;if(sp.adv){g=advTarget;}else{const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,apiKey,catalog});g=r.memoryLine;}if(ls.memory.length>=H_MEM)ls.memory.shift();ls.memory.push(g);}else{runStepAdv(s.agents,grid,s.rng,advTarget);}};
+    const probe=async(s)=>{if(apiKey){return Promise.all(s.agents.map(async a=>{if(a.adv)return advTarget;const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,apiKey,catalog});return r.country;}));}else{return probeAllAdv(s.agents,grid,advTarget);}};
+    (async()=>{while(!ctl.cancelled){const s=sim.current;if(!s||s.done){if(!ctl.cancelled)setPhase('done');return;}s.step++;if(s.step>maxT){try{const g=await probe(s);if(ctl.cancelled)return;const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}}return;}
+        try{await runOne(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;setStep(s.step);
+        if(s.step%pe===0){s.pr++;let g;try{g=await probe(s);}catch(e){if(!ctl.cancelled){setApiError(e.message);setPhase('done');}return;}if(ctl.cancelled)return;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+          const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
+        await new Promise(r=>setTimeout(r,spd));}})();
+    return()=>{ctl.cancelled=true;};},[phase,spd,grid,maxT,pe,advTarget,apiKey,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
-  const reset=()=>{cancelRef.current=true;setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);setCalls(0);sim.current=null;setAgents(p=>p.map(a=>({...a,memory:[]})));};
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const nextFlag=()=>{reset();const newTruth=F[Math.floor(Math.random()*F.length)].c;setTruth(newTruth);const others=F.filter(f=>f.c!==newTruth);setAdvTarget(others[Math.floor(Math.random()*others.length)].c);};
+  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
-  const stTxt=phase==='setup'?'Place agents, mark adversaries, then press Run':phase==='done'?(cons?`✓ Stable consensus at round ${pr}`:`Done — ${maxT} steps`):`Step ${step}/${maxT} · Round ${pr}${sim.current?.conRuns>0?' · streak '+sim.current.conRuns+'/'+CON_RUNS:''}`;
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
 
   return(<div style={{marginTop:48,borderTop:`1px solid ${T.bdr}`,paddingTop:32}}>
@@ -669,28 +742,19 @@ function AdversarialGame(){
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Speed</label><input type="range" min={10} max={300} value={300-spd} onChange={e=>setSpd(300-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
-      <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} disabled={probing} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1||probing} style={{...S.btn(N>=2&&nAdv>=1&&!probing,'#6ec89b'),opacity:(N<2||nAdv<1||probing)?0.4:1}}>{probing?'⏳ Querying agents…':'▶ Run'}</button></>}
-      {phase==='running'&&<button onClick={()=>{cancelRef.current=true;setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-      {phase==='done'&&<button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>{apiKey&&<span style={{fontSize:9,color:T.dim,marginLeft:6}}>· {calls} call{calls===1?'':'s'}</span>}
+      <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
+      {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
+      {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
     </div>
-    <p style={{textAlign:'center',fontSize:10,color:T.fnt,margin:'-6px 0 10px'}}>Click agents in the list to toggle <span style={{color:'#e87b6f',fontWeight:600}}>adversary</span> status</p>
+    {apiError&&<div style={{textAlign:'center',padding:'8px 14px',margin:'8px auto',maxWidth:620,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12}}>{apiError}</div>}
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
     <div style={S.row}>
-      <div style={S.pan}><div style={S.pt}>Agent Positions{phase!=='setup'?' & Beliefs':''}<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>N={N}{cons?' · consensus':''}</span></div>
-        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'&&N<MAX_A}/>
-        {agents.length>0&&<div style={{marginTop:8}}>{agents.map((a,i)=>{const g=phase!=='setup'?dg[i]:null;const mc=a.adv?'#e87b6f':a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';
-          return(<div key={a.id} style={S.ar}><span style={{width:16,height:16,borderRadius:4,display:'inline-flex',alignItems:'center',justifyContent:'center',background:mc,fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{i+1}</span>
-            {phase==='setup'&&<button onClick={()=>toggleAdv(a.id)} style={{...S.bdg(a.adv?'#e87b6f':'#5b86c4'),cursor:'pointer'}}>{a.adv?'adversary':'honest'}</button>}
-            {phase!=='setup'&&<span style={{...S.bdg(a.adv?'#e87b6f':'#5b86c4')}}>{a.adv?'adversary':'honest'}</span>}
-            {!a.adv&&phase==='setup'&&<button onClick={()=>toggleModel(a.id)} style={{...S.bdg(mc),cursor:'pointer',fontSize:8}}>{a.model}</button>}
-            <span style={{color:T.fnt,fontSize:9}}>({a.top},{a.left})</span>
-            {g&&<span style={{position:'relative',marginLeft:'auto'}}><span style={{...S.bdg(CCOL[g])}}>{g}</span></span>}
-            {phase==='setup'&&<button onClick={()=>remove(a.id)} style={{marginLeft:g?3:'auto',background:'none',border:'none',color:'#e87b6f',cursor:'pointer',fontSize:12,padding:'0 2px'}}>×</button>}
-          </div>);})}</div>}
+      <div style={S.pan}>
+        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'} hintExtra="Shift+click to toggle adversary"/>
       </div>
-      <div style={S.pan}><div style={S.pt}>Country Share Trajectories<span style={{float:'right',fontWeight:400,textTransform:'none',letterSpacing:0}}>{traj.length>0?`${traj.length} probes`:''}</span></div>
+      <div style={S.pan}>
         <TrajChart data={traj} active={active} truth={truthFlag.c} onHover={setHovIdx}/>
-        {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/>{c}{c===truthFlag.c?' (truth)':''}</span>)}</div>}
+        {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL[c]||T.dim}}><span style={{width:c===truthFlag.c?12:7,height:c===truthFlag.c?3:2,background:CCOL[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truthFlag.c?`0 0 5px ${CCOL[c]}`:undefined}}/><InlineFlag country={c}/><span>{c}{c===truthFlag.c?' (truth)':''}</span></span>)}</div>}
         {phase==='done'&&fShares&&<div style={{marginTop:14,padding:'14px 16px',background:T.card,borderRadius:10,border:`1px solid ${T.bdr}`}}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
             <span style={{fontSize:28,lineHeight:1,color:flipped?'#e87b6f':'#6ec89b'}}>{flipped?'✗':'✓'}</span>
@@ -704,35 +768,644 @@ function AdversarialGame(){
         </div>}
       </div>
     </div>
-    <div style={{textAlign:'center',padding:'7px 12px',background:T.card,borderRadius:7,border:`1px solid ${T.bdr}`,fontSize:11,color:cons?flipped?'#e87b6f':'#6ec89b':T.mut,marginTop:12}}>{stTxt}<span style={{marginLeft:10,color:T.fnt}}>Truth: <strong style={{color:CCOL[truthFlag.c]||T.txt}}>{truthFlag.c}</strong> · Adversary target: <strong style={{color:CCOL[advTarget]||T.txt}}>{advTarget}</strong></span></div>
-    {apiErr&&<div style={{textAlign:'center',padding:'7px 12px',background:'#fbecea',borderRadius:7,border:`1px solid #e87b6f`,fontSize:11,color:'#a13c30',marginTop:6}}>API error: {apiErr}</div>}
+  </div>);
+}
+
+/* ═══════ FIRST-PERSON GAME ═══════ */
+function FirstPersonGame({apiKey}){
+  const[lvl,setLvl]=useState(0);
+  const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
+  const[playerTop,setPlayerTop]=useState(0);
+  const[playerLeft,setPlayerLeft]=useState(0);
+  const[playerMem,setPlayerMem]=useState([]);
+  const[playerGuess,setPlayerGuess]=useState(null);
+  const[aiAgents,setAiAgents]=useState([]);
+  const[aiGuessesLLM,setAiGuessesLLM]=useState([]);
+  const[round,setRound]=useState(0);
+  const[phase,setPhase]=useState('init');
+  const[messages,setMessages]=useState([]);
+  const[peek,setPeek]=useState(false);
+  const[loading,setLoading]=useState(false);
+  const[apiError,setApiError]=useState(null);
+  const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
+  const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);
+  const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
+  const aiGuessesScripted=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
+  const aiGuesses=apiKey?aiGuessesLLM:aiGuessesScripted;
+  const candidates=useMemo(()=>{const an=analyzeCrop(grid,playerTop,playerLeft);const top=topCandidates(an,8);const set=new Set(top);if(truth)set.add(truth);aiGuesses.forEach(g=>{if(g)set.add(g);});return[...set].sort();},[grid,playerTop,playerLeft,aiGuesses,truth]);
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
+  const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
+
+  const setup=useCallback((newLvl)=>{
+    const useLvl=newLvl===undefined?lvl:newLvl;
+    const ts=LEVELS[useLvl].truth;
+    const newTruth=ts[Math.floor(Math.random()*ts.length)];
+    const pT=Math.floor(Math.random()*(GH-TH+1));
+    const pL=Math.floor(Math.random()*(GW-TW+1));
+    const ais=Array.from({length:5},()=>({top:Math.floor(Math.random()*(GH-TH+1)),left:Math.floor(Math.random()*(GW-TW+1)),memory:[]}));
+    setTruth(newTruth);setPlayerTop(pT);setPlayerLeft(pL);setPlayerMem([]);setPlayerGuess(null);
+    setAiAgents(ais);setAiGuessesLLM(ais.map(()=>null));setRound(0);setMessages([]);setPhase('choose-initial');setApiError(null);
+  },[lvl]);
+
+  useEffect(()=>{setup();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{const kd=e=>{if(e.key==='Tab'){e.preventDefault();setPeek(true);}};const ku=e=>{if(e.key==='Tab'){e.preventDefault();setPeek(false);}};window.addEventListener('keydown',kd);window.addEventListener('keyup',ku);return()=>{window.removeEventListener('keydown',kd);window.removeEventListener('keyup',ku);};},[]);
+
+  const pick=(c)=>{if(phase==='commit'||phase==='done'||loading)return;setPlayerGuess(c);if(phase==='choose-initial')setPhase('playing');};
+
+  const nextRound=async()=>{
+    if(!playerGuess||phase!=='playing'||loading)return;
+    const catalog=F.map(f=>f.c);
+    const rng=mkRng(Date.now()+round*1000);
+    const all=[{top:playerTop,left:playerLeft,memory:[...playerMem],isPlayer:true,idx:1},
+      ...aiAgents.map((a,i)=>({...a,memory:[...a.memory],isPlayer:false,idx:i+2,model:'gpt-4o'}))];
+    const newMsgs=[...messages];
+    setLoading(true);setApiError(null);
+    try{
+      for(let step=0;step<3;step++){
+        let si,li;
+        if(step===0){if(rng()<0.5){si=0;li=1+Math.floor(rng()*5);}else{li=0;si=1+Math.floor(rng()*5);}}
+        else{si=Math.floor(rng()*6);li=Math.floor(rng()*5);if(li>=si)li++;}
+        const speaker=all[si],listener=all[li];
+        let sg;
+        if(speaker.isPlayer){sg=playerGuess;}
+        else if(apiKey){const url=getCrop(speaker.top,speaker.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');const r=await llmInteraction({cropDataUrl:url,memoryLines:speaker.memory,model:speaker.model,apiKey,catalog});sg=r.memoryLine;}
+        else{sg=bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory);}
+        if(listener.memory.length>=H_MEM)listener.memory.shift();
+        listener.memory.push(sg);
+        if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:sg});
+        else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:apiKey?(sg.split(' | ')[0]):sg});
+      }
+      const newAi=all.slice(1).map(a=>({top:a.top,left:a.left,memory:a.memory}));
+      if(apiKey){const probed=await Promise.all(newAi.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:'gpt-4o',apiKey,catalog});return r.country;}));setAiGuessesLLM(probed);}
+      setPlayerMem(all[0].memory);
+      setAiAgents(newAi);
+      setMessages(newMsgs);
+      const nR=round+1;setRound(nR);if(nR>=5)setPhase('commit');
+    }catch(e){setApiError(e.message);}finally{setLoading(false);}
+  };
+
+  const lockIn=()=>setPhase('done');
+  const playAgain=()=>setup();
+  const isCorrect=phase==='done'&&playerGuess===truth;
+  const collectiveCorrect=phase==='done'?aiGuesses.filter(g=>g===truth).length+(playerGuess===truth?1:0):0;
+
+  return(<div style={{marginTop:48,marginBottom:32,borderTop:`1px solid ${T.bdr}`,paddingTop:36}}>
+    <header style={{textAlign:'center',marginBottom:24}}>
+      <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>Play <span style={{fontWeight:700,fontStyle:'italic'}}>as Agent</span></h2>
+      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>You see only a small fragment of a hidden flag. Five other AI agents see other fragments. Through gossip, can you figure out the truth?</p>
+    </header>
+
+    <div style={S.bar}>
+      <label style={{fontSize:10,color:T.dim}}>Level</label>
+      <select value={lvl} onChange={e=>{const nl=+e.target.value;setLvl(nl);setup(nl);}} style={S.sel}>
+        {LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}
+      </select>
+      <div style={S.sep}/>
+      <span style={{fontSize:11,color:T.fnt}}>Round {Math.min(round,5)} / 5</span>
+      {phase==='done'&&<><div style={S.sep}/><button onClick={playAgain} style={S.btn(true,'#5b86c4')}>→ Play Again</button></>}
+    </div>
+
+    {phase==='done'?(
+      <ResultPanel truth={truth} playerGuess={playerGuess} playerTop={playerTop} playerLeft={playerLeft} aiAgents={aiAgents} aiGuesses={aiGuesses} isCorrect={isCorrect} collectiveCorrect={collectiveCorrect}/>
+    ):(<>
+      <div style={S.row}>
+        <div style={{flex:'1 1 360px',minWidth:300}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>Your view</div>
+            <CropView country={truth} top={playerTop} left={playerLeft} w={320}/>
+            <div style={{marginTop:10,fontSize:11,color:T.fnt,fontStyle:'italic'}}>This is all you can see of the flag.</div>
+          </div>
+        </div>
+
+        <div style={{flex:'1 1 360px',minWidth:300}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+            <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px'}}>What the others think</div>
+            <div style={{fontSize:10,color:peek?'#e87b6f':T.fnt,fontStyle:'italic'}}>{peek?'peeking — agents cannot do this':'hold Tab to peek (cheat)'}</div>
+          </div>
+          <div style={{padding:'10px 14px',background:T.pan,borderRadius:10,border:`1px solid ${peek?'#e87b6f':T.bdr}`,transition:'border-color .1s'}}>
+            {aiAgents.map((a,i)=>{const g=aiGuesses[i];return(<div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',fontSize:13,color:T.txt}}>
+              <span style={{width:22,height:22,borderRadius:11,background:'#5b86c4',color:'#fff',fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+2}</span>
+              <span style={{fontSize:11,color:T.fnt,minWidth:54}}>Agent {i+2}:</span>
+              {peek&&g?(<><InlineFlag country={g} w={22}/><span style={{fontStyle:'italic',color:T.txt}}>{g}</span></>):<span style={{color:T.fnt,fontStyle:'italic'}}>{peek?'—':'hidden'}</span>}
+            </div>);})}
+          </div>
+
+          <div style={{marginTop:18,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>Recent messages</div>
+          <div style={{padding:'10px 14px',background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`,minHeight:90,maxHeight:160,overflowY:'auto'}}>
+            {messages.length===0?<p style={{fontSize:11,color:T.fnt,fontStyle:'italic',margin:0}}>No gossip yet — press Next Round to start.</p>:messages.slice(-6).map((m,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',fontSize:12,borderBottom:i<Math.min(messages.length,6)-1?`1px dashed ${T.bdr}`:'none'}}>
+                <span style={{color:T.fnt,fontSize:9,minWidth:22}}>R{m.r}</span>
+                <span style={{color:m.kind==='sent'?'#5b86c4':T.mut,minWidth:106}}>{m.kind==='sent'?`You → Agent ${m.other}`:`Agent ${m.other} → You`}</span>
+                <InlineFlag country={m.country} w={18}/>
+                <span style={{fontSize:11,color:T.txt}}>{m.country}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{marginTop:24,padding:'16px 18px',background:T.pan,borderRadius:10,border:`1px solid ${T.bdr}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:14,flexWrap:'wrap'}}>
+          <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px'}}>Your guess</div>
+          {playerGuess?(<div style={{display:'flex',alignItems:'center',gap:10}}><InlineFlag country={playerGuess} w={36}/><span style={{fontSize:20,fontFamily:T.ser,fontStyle:'italic',color:T.txt}}>{playerGuess}</span></div>):
+            (<span style={{fontSize:13,color:T.mut,fontStyle:'italic'}}>Pick a country from the candidates below to start.</span>)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
+          {candidates.map(c=>(<button key={c} onClick={()=>pick(c)} disabled={phase==='commit'}
+            style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:7,
+              border:`2px solid ${c===playerGuess?'#5b86c4':T.bdr}`,
+              background:c===playerGuess?'#e6efff':T.card,
+              cursor:phase==='commit'?'default':'pointer',
+              fontSize:13,color:T.txt,fontFamily:T.san,textAlign:'left',transition:'all .15s'}}>
+            <InlineFlag country={c} w={32}/>
+            <span style={{fontWeight:c===playerGuess?600:400}}>{c}</span>
+          </button>))}
+        </div>
+      </div>
+
+      <div style={{textAlign:'center',marginTop:24}}>
+        {apiError&&<div style={{padding:'8px 14px',marginBottom:10,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12,maxWidth:520,margin:'0 auto 10px'}}>{apiError}</div>}
+        {phase==='playing'&&<button onClick={nextRound} disabled={!playerGuess||loading}
+          style={{padding:'12px 32px',borderRadius:8,border:'none',cursor:(playerGuess&&!loading)?'pointer':'default',
+            fontWeight:600,fontSize:14,background:(playerGuess&&!loading)?'#6ec89b':T.card,color:(playerGuess&&!loading)?'#fff':T.fnt,opacity:(playerGuess&&!loading)?1:0.5,transition:'all .15s'}}>
+          {loading?'Thinking…':'Next Round →'}
+        </button>}
+        {phase==='choose-initial'&&<p style={{fontSize:12,color:T.mut,fontStyle:'italic',margin:0}}>↑ Choose a country to begin</p>}
+        {phase==='commit'&&<button onClick={lockIn}
+          style={{padding:'12px 32px',borderRadius:8,border:'none',cursor:'pointer',fontWeight:600,fontSize:14,background:'#e87b6f',color:'#fff'}}>
+          🔒 Lock in your final answer
+        </button>}
+      </div>
+    </>)}
+  </div>);
+}
+
+function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,isCorrect,collectiveCorrect}){
+  return(<div>
+    <div style={{textAlign:'center',padding:'24px 20px',background:isCorrect?'#6ec89b15':'#e87b6f15',borderRadius:12,border:`2px solid ${isCorrect?'#6ec89b':'#e87b6f'}`,marginBottom:24}}>
+      <div style={{fontSize:48,lineHeight:1,color:isCorrect?'#6ec89b':'#e87b6f',marginBottom:8}}>{isCorrect?'✓':'✗'}</div>
+      <h3 style={{fontSize:24,fontFamily:T.ser,fontStyle:'italic',color:isCorrect?'#3a8a64':'#a85047',margin:'0 0 6px'}}>{isCorrect?'You were right.':'You were misled.'}</h3>
+      <p style={{fontSize:13,color:T.mut,margin:0}}>
+        Truth: <strong style={{color:T.txt}}>{truth}</strong> · Your guess: <strong style={{color:T.txt}}>{playerGuess}</strong> · Collective: <strong style={{color:T.txt}}>{collectiveCorrect}/6</strong> correct
+      </p>
+    </div>
+
+    <div style={{textAlign:'center',marginBottom:24}}>
+      <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:10}}>The truth was</div>
+      <div style={{display:'inline-block',borderRadius:8,overflow:'hidden',border:`3px solid ${T.bdr}`,boxShadow:'0 4px 16px rgba(0,0,0,0.15)',lineHeight:0,width:360,maxWidth:'90%'}}>
+        <div dangerouslySetInnerHTML={{__html:(FLAG_SVG[truth]||'').replace('<svg ','<svg width="100%" ')}} style={{width:'100%'}}/>
+      </div>
+      <div style={{marginTop:10,fontSize:22,fontFamily:T.ser,fontStyle:'italic',color:T.txt}}>{truth}</div>
+    </div>
+
+    <div>
+      <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:12,textAlign:'center'}}>Everyone's view, now revealed</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:14}}>
+        <div style={{textAlign:'center',padding:'12px 10px',background:T.card,borderRadius:8,border:`2px solid #5b86c4`}}>
+          <div style={{fontSize:10,fontWeight:700,color:'#5b86c4',letterSpacing:'1.2px',marginBottom:8}}>YOU</div>
+          <CropView country={truth} top={playerTop} left={playerLeft} w={140}/>
+          <div style={{fontSize:10,marginTop:8,color:T.fnt}}>Guessed</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:3}}>
+            <InlineFlag country={playerGuess} w={16}/>
+            <span style={{fontSize:11,fontWeight:600,color:playerGuess===truth?'#3a8a64':'#a85047'}}>{playerGuess}</span>
+          </div>
+        </div>
+        {aiAgents.map((a,i)=>(<div key={i} style={{textAlign:'center',padding:'12px 10px',background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.mut,letterSpacing:'1.2px',marginBottom:8}}>AGENT {i+2}</div>
+          <CropView country={truth} top={a.top} left={a.left} w={140}/>
+          <div style={{fontSize:10,marginTop:8,color:T.fnt}}>Guessed</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:3}}>
+            <InlineFlag country={aiGuesses[i]} w={16}/>
+            <span style={{fontSize:11,fontWeight:600,color:aiGuesses[i]===truth?'#3a8a64':'#a85047'}}>{aiGuesses[i]}</span>
+          </div>
+        </div>))}
+      </div>
+    </div>
   </div>);
 }
 
 /* ═══════ ROOT ═══════ */
-function ApiKeyBar(){
-  const{apiKey,setApiKey}=useApiKey();
-  const[show,setShow]=useState(false);
-  const masked=apiKey?apiKey.slice(0,3)+'…'+apiKey.slice(-4):'';
-  return(<div style={{maxWidth:1400,margin:'0 auto',padding:'10px 14px 0'}}>
-    <div style={{display:'flex',gap:8,alignItems:'center',padding:'8px 14px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:9,fontSize:11}}>
-      <span style={{color:T.dim,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',fontSize:9}}>OpenAI API Key</span>
-      <input type={show?'text':'password'} value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-..." style={{flex:1,minWidth:200,padding:'5px 9px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'monospace'}}/>
-      <button onClick={()=>setShow(s=>!s)} style={S.btn(false)}>{show?'hide':'show'}</button>
-      {apiKey&&<button onClick={()=>setApiKey('')} style={S.btn(false,'#e87b6f')}>clear</button>}
-      <span style={{color:apiKey?'#6ec89b':T.fnt,fontSize:10}}>{apiKey?`set (${masked})`:'not set — agents will use heuristic fallback'}</span>
+function ApiKeyBar({apiKey,setApiKey}){
+  const[shown,setShown]=useState(false);
+  const live=!!apiKey;
+  return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
+    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
+      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Scripted heuristic (no key)'}</span>
+      <span style={{color:T.dim}}>OpenAI key</span>
+      <input type={shown?'text':'password'} placeholder="sk-..." value={apiKey} onChange={e=>setApiKey(e.target.value.trim())}
+        style={{flex:'1 1 240px',maxWidth:380,padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
+      <button onClick={()=>setShown(s=>!s)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.mut,cursor:'pointer',fontSize:10}}>{shown?'hide':'show'}</button>
+      {apiKey&&<button onClick={()=>setApiKey('')} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:'#e87b6f',cursor:'pointer',fontSize:10}}>clear</button>}
+      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10,maxWidth:480}}>Stored only in your browser. Calls go straight to api.openai.com from this page (no proxy).</span>
     </div>
-    <p style={{fontSize:10,color:T.fnt,margin:'6px 14px 0',lineHeight:1.5}}>Stored in your browser only (localStorage). Requests go directly from your browser to api.openai.com. Anyone with access to this device can read the key.</p>
   </div>);
 }
 
-export default function App(){
-  const[apiKey,setApiKeyState]=useState(()=>{try{return localStorage.getItem('openai_api_key')||'';}catch{return'';}});
-  const setApiKey=useCallback(k=>{setApiKeyState(k);try{if(k)localStorage.setItem('openai_api_key',k);else localStorage.removeItem('openai_api_key');}catch{}},[]);
-  return(<ApiKeyContext.Provider value={{apiKey,setApiKey}}><div style={S.page}>
-    <ApiKeyBar/>
-    <FlagGame/>
-    <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}><AdversarialGame/></div>
+/* ═══════ SERIES CATALOG ═══════ */
+const GAMES=[
+  {slug:'flag-game',icon:'🏴',title:'The Flag Game',tagline:'Six agents see fragments of a hidden flag. Through gossip, can they agree on the country?',status:'live'},
+  {slug:'el-farol',icon:'🍺',title:'The El Farol Bar',tagline:'Go to the bar, or stay home? The right answer depends on what everyone else does.',status:'live'},
+  {slug:'map-game',icon:'🗺️',title:'The Map Game',tagline:'Each agent sees one tile of a stylized scene. Where in the world are we?',status:'live'},
+  {slug:'prediction-market',icon:'📈',title:'The Prediction Market',tagline:'Agents bet on an unknown event. Does the price converge to the truth?',status:'soon'},
+];
+
+/* ═══════ MAP GAME ═══════ */
+const LOCATIONS=[
+  {name:'Paris, France',sky:'#a3c9e8',ground:'#7a9967',landmark:'eiffel',landmarkColor:'#2a2a2a',accent:'#cabe8e'},
+  {name:'Cairo, Egypt',sky:'#d8e8f0',ground:'#e0c489',landmark:'pyramids',landmarkColor:'#a8794c',accent:'#5a8c6e'},
+  {name:'Sydney, Australia',sky:'#9bc4e2',ground:'#4a8aa8',landmark:'opera',landmarkColor:'#f0eee2',accent:'#3a5a6e'},
+  {name:'Reykjavik, Iceland',sky:'#3a4a6a',ground:'#6a7a8a',landmark:'aurora',landmarkColor:'#9ad8a3',accent:'#bdc7d4'},
+  {name:'Marrakech, Morocco',sky:'#f5b88c',ground:'#b86a3a',landmark:'minaret',landmarkColor:'#c39656',accent:'#7a4030'},
+  {name:'New York, USA',sky:'#9bb8d0',ground:'#4a4a52',landmark:'skyline',landmarkColor:'#2a3340',accent:'#d8d4c8'},
+  {name:'Rio de Janeiro, Brazil',sky:'#b8d4e8',ground:'#3a7aa8',landmark:'christ',landmarkColor:'#d4d0c4',accent:'#5a8a4a'},
+  {name:'Swiss Alps',sky:'#a8c4d8',ground:'#5a6855',landmark:'mountains',landmarkColor:'#7a8590',accent:'#f0f0f0'},
+];
+function locationSvg(loc){
+  const sky=`<rect width="640" height="280" fill="${loc.sky}"/>`;
+  const ground=`<rect y="280" width="640" height="200" fill="${loc.ground}"/>`;
+  let lm='';
+  switch(loc.landmark){
+    case 'eiffel':lm=`<polygon points="320,90 305,440 335,440" fill="${loc.landmarkColor}"/><polygon points="280,440 360,440 350,470 290,470" fill="${loc.landmarkColor}"/><line x1="295" y1="240" x2="345" y2="240" stroke="${loc.landmarkColor}" stroke-width="6"/><line x1="290" y1="340" x2="350" y2="340" stroke="${loc.landmarkColor}" stroke-width="6"/>`;break;
+    case 'pyramids':lm=`<polygon points="60,440 200,200 340,440" fill="${loc.landmarkColor}"/><polygon points="280,440 420,180 560,440" fill="${loc.landmarkColor}" opacity="0.95"/><polygon points="440,440 540,260 640,440" fill="${loc.landmarkColor}" opacity="0.9"/><circle cx="530" cy="120" r="42" fill="${loc.accent}"/>`;break;
+    case 'opera':lm=`<path d="M 130 440 Q 200 200 270 440 Z" fill="${loc.landmarkColor}"/><path d="M 240 440 Q 310 220 380 440 Z" fill="${loc.landmarkColor}" opacity="0.95"/><path d="M 350 440 Q 420 250 490 440 Z" fill="${loc.landmarkColor}" opacity="0.9"/><rect y="430" width="640" height="14" fill="${loc.accent}"/>`;break;
+    case 'aurora':lm=`<path d="M 0 100 Q 160 30 320 110 T 640 60" stroke="${loc.landmarkColor}" stroke-width="60" fill="none" opacity="0.55"/><path d="M 0 180 Q 160 130 320 200 T 640 150" stroke="${loc.landmarkColor}" stroke-width="40" fill="none" opacity="0.45"/><polygon points="0,360 180,200 360,360" fill="${loc.accent}"/><polygon points="280,360 460,220 640,360" fill="${loc.accent}" opacity="0.9"/>`;break;
+    case 'minaret':lm=`<rect x="280" y="200" width="80" height="240" fill="${loc.landmarkColor}"/><polygon points="270,200 370,200 320,140" fill="${loc.landmarkColor}"/><rect x="295" y="220" width="50" height="20" fill="${loc.accent}"/><rect x="305" y="280" width="30" height="40" fill="${loc.accent}"/>`;break;
+    case 'skyline':lm=`<rect x="20" y="280" width="60" height="200" fill="${loc.landmarkColor}"/><rect x="90" y="220" width="80" height="260" fill="${loc.landmarkColor}"/><rect x="180" y="260" width="60" height="220" fill="${loc.landmarkColor}"/><rect x="250" y="180" width="100" height="300" fill="${loc.landmarkColor}"/><rect x="360" y="240" width="70" height="240" fill="${loc.landmarkColor}"/><rect x="440" y="200" width="80" height="280" fill="${loc.landmarkColor}"/><rect x="530" y="260" width="60" height="220" fill="${loc.landmarkColor}"/><rect x="600" y="240" width="40" height="240" fill="${loc.landmarkColor}"/>`;break;
+    case 'christ':lm=`<polygon points="240,440 320,180 400,440" fill="${loc.accent}"/><rect x="312" y="200" width="16" height="180" fill="${loc.landmarkColor}"/><rect x="280" y="240" width="80" height="16" fill="${loc.landmarkColor}"/><circle cx="320" cy="185" r="18" fill="${loc.landmarkColor}"/>`;break;
+    case 'mountains':lm=`<polygon points="40,440 200,140 360,440" fill="${loc.landmarkColor}"/><polygon points="240,440 420,90 600,440" fill="${loc.landmarkColor}"/><polygon points="180,440 280,200 380,440" fill="${loc.accent}"/><polygon points="380,440 480,180 580,440" fill="${loc.accent}" opacity="0.7"/>`;break;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">${sky}${ground}${lm}</svg>`;
+}
+const LOC_SVG={};LOCATIONS.forEach(l=>{LOC_SVG[l.name]=locationSvg(l);});
+
+function MapGame(){
+  const[truth,setTruth]=useState(()=>LOCATIONS[Math.floor(Math.random()*LOCATIONS.length)].name);
+  const[agents,setAgents]=useState([]);
+  const[phase,setPhase]=useState('setup');
+  const[guesses,setGuesses]=useState([]);
+  const[allG,setAllG]=useState([]);
+  const[traj,setTraj]=useState([]);
+  const[step,setStep]=useState(0);
+  const[pr,setPr]=useState(0);
+  const[spd,setSpd]=useState(120);
+  const[cons,setCons]=useState(false);
+  const[fShares,setFS]=useState(null);
+  const[hovIdx,setHovIdx]=useState(null);
+  const[active,setActive]=useState([]);
+  const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+
+  const truthLoc=useMemo(()=>LOCATIONS.find(l=>l.name===truth)||LOCATIONS[0],[truth]);
+  const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
+  const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
+
+  // Scoring: how well does a location match an agent's crop window
+  const scoreLocation=useCallback((agent,loc)=>{
+    let s=0;
+    // each crop window covers a region of the 24x16 grid
+    // sky is roughly rows 0..7, ground 8..15
+    const topRows=agent.top<8;
+    if(topRows){if(loc.sky===truthLoc.sky)s+=0.7;}
+    else{if(loc.ground===truthLoc.ground)s+=0.7;}
+    // landmark roughly at center
+    const inCenter=agent.left>=8&&agent.left<=15&&agent.top>=3&&agent.top<=14;
+    if(inCenter&&loc.landmark===truthLoc.landmark)s+=1.3;
+    // small noise
+    return s+Math.random()*0.6;
+  },[truthLoc]);
+  const bestGuessLoc=useCallback((agent,memory)=>{
+    const memC={};memory.forEach(m=>{memC[m]=(memC[m]||0)+1;});
+    let best=null,bestS=-Infinity;
+    LOCATIONS.forEach(loc=>{const s=scoreLocation(agent,loc)+(memC[loc.name]||0)*1.5;if(s>bestS){bestS=s;best=loc.name;}});
+    return best;
+  },[scoreLocation]);
+  const probeAllLoc=useCallback((ag)=>ag.map(a=>bestGuessLoc(a,a.memory)),[bestGuessLoc]);
+  const runStepLoc=useCallback((ag,rng)=>{if(ag.length<2)return null;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const g=bestGuessLoc(ag[si],ag[si].memory);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);return{si,li,g};},[bestGuessLoc]);
+
+  const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,memory:[]}]);},[N,phase,agents]);
+  const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());setAgents(Array.from({length:6},()=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),memory:[]})));},[phase]);
+  const start=useCallback(()=>{if(N<2)return;const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());const g0=probeAllLoc(sa);const sh=compShares(g0);const d0={round:0};LOCATIONS.forEach(l=>{d0[l.name]=sh[l.name]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,N,probeAllLoc]);
+  useEffect(()=>{if(phase!=='running'){if(iRef.current)clearInterval(iRef.current);return;}
+    iRef.current=setInterval(()=>{const s=sim.current;if(!s||s.done){setPhase('done');clearInterval(iRef.current);return;}
+      s.step++;if(s.step>maxT){const g=probeAllLoc(s.agents);const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');setStep(s.step-1);clearInterval(iRef.current);return;}
+      runStepLoc(s.agents,s.rng);setStep(s.step);
+      if(s.step%pe===0){s.pr++;const g=probeAllLoc(s.agents);const sh=compShares(g);const dp={round:s.pr};LOCATIONS.forEach(l=>{dp[l.name]=sh[l.name]||0;if(sh[l.name])s.ac.add(l.name);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
+        const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;setCons(true);setFS(sh);setPhase('done');clearInterval(iRef.current);}}else{s.conRuns=0;}}
+    },spd);return()=>{if(iRef.current)clearInterval(iRef.current);};},[phase,spd,maxT,pe,probeAllLoc,runStepLoc]);
+  useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const nextLoc=()=>{reset();setTruth(LOCATIONS[Math.floor(Math.random()*LOCATIONS.length)].name);};
+  useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];return active.filter(c=>(last[c]||0)>0.01||c===truth).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,8);},[active,traj,truth]);
+
+  // Locations as F-equivalent for FlagDisplay
+  const locFlagShim={c:truth};
+  const flagSvgShim={[truth]:LOC_SVG[truth]};
+  const CCOL_LOC={};LOCATIONS.forEach((l,i)=>{CCOL_LOC[l.name]=PAL[i%PAL.length];});
+
+  return(<div style={{maxWidth:1200,margin:'0 auto',padding:'0 14px 48px'}}>
+    <header style={{textAlign:'center',padding:'16px 20px 24px'}}>
+      <h1 style={{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>The <span style={{fontWeight:700,fontStyle:'italic'}}>Map Game</span></h1>
+      <p style={{fontSize:16,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.55}}>Six agents see fragments of a stylized scene from some place on Earth. Through gossip, can they identify the city?</p>
+    </header>
+
+    <div style={S.bar}>
+      <label style={{fontSize:10,color:T.dim}}>Where</label>
+      <select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={S.sel} disabled={phase!=='setup'}>{LOCATIONS.map(l=><option key={l.name} value={l.name}>{l.name}</option>)}</select>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Speed</label>
+      <input type="range" min={20} max={400} value={420-spd} onChange={e=>setSpd(420-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <div style={S.sep}/>
+      {phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
+      {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
+      {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextLoc} style={S.btn(true,'#5b86c4')}>→ Next Place</button></>}
+      <span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
+    </div>
+
+    <div style={S.row}>
+      <div style={S.pan}>
+        <FlagDisplay flag={locFlagShim} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'}
+          hintExtra={null}/>
+        <div style={{textAlign:'center',marginTop:14,fontFamily:T.ser,fontSize:26,fontStyle:'italic',color:T.txt}}>{truth}</div>
+      </div>
+      <div style={S.pan}>
+        <TrajChart data={traj} active={active} truth={truth} onHover={setHovIdx}/>
+        {legend.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:8,justifyContent:'center'}}>{legend.map(c=><span key={c} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:CCOL_LOC[c]||T.dim}}><span style={{width:c===truth?12:7,height:c===truth?3:2,background:CCOL_LOC[c]||T.dim,borderRadius:2,display:'inline-block',boxShadow:c===truth?`0 0 5px ${CCOL_LOC[c]}`:undefined}}/><span>{c}{c===truth?' (truth)':''}</span></span>)}</div>}
+      </div>
+    </div>
+
+    <div style={{marginTop:20,padding:'14px 18px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:10,maxWidth:760,margin:'20px auto 0'}}>
+      <h3 style={{fontSize:13,fontFamily:T.ser,fontStyle:'italic',color:T.txt,marginBottom:6}}>How it works</h3>
+      <p style={{fontSize:11,color:T.mut,lineHeight:1.65,margin:0}}>
+        Each location is a simplified scene (sky band + ground band + an iconic landmark). Each agent is dropped on a {TW}×{TH} tile of that scene and only sees those cells. Agents score every candidate location by what their tile reveals (sky color, ground color, landmark fragment) plus what they have been told. As in the Flag Game, a random speaker–listener pair meets each step and the speaker's current guess enters the listener&apos;s memory.
+      </p>
+    </div>
+
+    <div style={{display:'none'}}>{Object.entries(flagSvgShim).map(([k,v])=>k)}</div>
+  </div>);
+}
+const _MAP_FLAG_SVG_OVERRIDE=(()=>{Object.entries(LOC_SVG).forEach(([k,v])=>{FLAG_SVG[k]=v;});return true;})();
+
+/* ═══════ EL FAROL BAR ═══════ */
+const EF_STRATEGIES=[
+  {id:'last-week',label:'last week',color:'#e87b6f',predict:(h,N)=>h.length?h[h.length-1]:Math.random()*N},
+  {id:'avg-4',label:'avg of 4',color:'#5b86c4',predict:(h,N)=>{if(!h.length)return N/2;const s=h.slice(-4);return s.reduce((a,b)=>a+b,0)/s.length;}},
+  {id:'trend',label:'trend',color:'#6ec89b',predict:(h,N)=>{if(h.length<2)return h[h.length-1]||N/2;return Math.max(0,Math.min(N,h[h.length-1]+(h[h.length-1]-h[h.length-2])));}},
+  {id:'mirror',label:'mirror',color:'#7a6db0',predict:(h,N)=>h.length?N-h[h.length-1]:Math.random()*N},
+  {id:'constant',label:'constant 50%',color:'#d4a94b',predict:(h,N)=>N/2},
+  {id:'random',label:'random',color:'#9a9183',predict:(h,N)=>Math.random()*N},
+];
+const EF_STRAT_MAP=Object.fromEntries(EF_STRATEGIES.map(s=>[s.id,s]));
+
+function ElFarolBar(){
+  const[counts,setCounts]=useState(()=>Object.fromEntries(EF_STRATEGIES.map(s=>[s.id,10])));
+  const N=Object.values(counts).reduce((a,b)=>a+b,0);
+  const[capPct,setCapPct]=useState(60);
+  const capacity=Math.max(1,Math.round(N*capPct/100));
+  const[agents,setAgents]=useState([]);
+  const[history,setHistory]=useState([]); // attendance counts per week
+  const[scores,setScores]=useState({}); // strategy id -> cumulative score
+  const[week,setWeek]=useState(0);
+  const[running,setRunning]=useState(false);
+  const[spd,setSpd]=useState(450);
+  const[decisions,setDecisions]=useState([]); // last week's per-agent decisions (true = went)
+  const iRef=useRef(null);
+
+  // Rebuild agents whenever the mix changes
+  useEffect(()=>{
+    const init=[];let id=0;
+    EF_STRATEGIES.forEach(s=>{for(let i=0;i<(counts[s.id]||0);i++)init.push({id:id++,strategy:s.id});});
+    setAgents(init);
+    setHistory([]);setScores({});setWeek(0);setDecisions([]);setRunning(false);
+  },[counts]);
+
+  const adjust=(stratId,delta)=>{if(running)return;setCounts(c=>{const cur=c[stratId]||0;const nx=Math.max(0,Math.min(50,cur+delta));return{...c,[stratId]:nx};});};
+
+  // Step one week
+  const stepOnce=useCallback(()=>{
+    setAgents(prevAgents=>{
+      setHistory(prevHist=>{
+        const decs=prevAgents.map(a=>{const p=EF_STRAT_MAP[a.strategy].predict(prevHist,N);return p<capacity;});
+        const attendance=decs.filter(Boolean).length;
+        const overcrowded=attendance>capacity;
+        const newHist=[...prevHist,attendance];
+        setDecisions(decs);
+        // Update scores: +1 if went and not overcrowded, -1 if went and overcrowded, 0 if stayed
+        setScores(prevSc=>{const out={...prevSc};decs.forEach((went,i)=>{const st=prevAgents[i].strategy;const delta=went?(overcrowded?-1:1):0;out[st]=(out[st]||0)+delta;});return out;});
+        return newHist;
+      });
+      return prevAgents;
+    });
+    setWeek(w=>w+1);
+  },[N,capacity]);
+
+  // Run loop
+  useEffect(()=>{
+    if(!running)return;
+    iRef.current=setInterval(()=>{stepOnce();},spd);
+    return()=>{if(iRef.current)clearInterval(iRef.current);};
+  },[running,spd,stepOnce]);
+
+  const reset=()=>{setRunning(false);setHistory([]);setScores({});setWeek(0);setDecisions([]);};
+
+  // Layout for the bar/home scene
+  const HOME_W=240,BAR_W=380,SCENE_H=200,DOT=10;
+  const placeDots=(count,boxW,boxH,padding=18)=>{
+    const innerW=boxW-padding*2,innerH=boxH-padding*2;
+    const cols=Math.ceil(Math.sqrt(count*innerW/Math.max(1,innerH)));
+    const rows=Math.ceil(count/cols);
+    const gx=innerW/Math.max(1,cols),gy=innerH/Math.max(1,rows);
+    return Array.from({length:count},(_,i)=>({col:i%cols,row:Math.floor(i/cols),gx,gy,padding,boxW,boxH}));
+  };
+
+  // Group agents by location
+  const goers=agents.map((a,i)=>({...a,went:decisions[i]})).filter(a=>a.went);
+  const stayers=agents.map((a,i)=>({...a,went:decisions[i]})).filter(a=>a.went===false);
+  const lastAttendance=history.length?history[history.length-1]:null;
+  const overcrowded=lastAttendance!=null&&lastAttendance>capacity;
+
+  // For chart
+  const chartData=history.map((a,i)=>({week:i+1,attendance:a,capacity}));
+  const stratStats=EF_STRATEGIES.map(s=>({...s,count:agents.filter(a=>a.strategy===s.id).length,score:scores[s.id]||0}));
+
+  return(<div style={{maxWidth:1200,margin:'0 auto',padding:'0 14px 48px'}}>
+    <header style={{textAlign:'center',padding:'16px 20px 28px'}}>
+      <h1 style={{fontSize:42,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>The <span style={{fontWeight:700,fontStyle:'italic'}}>El Farol Bar</span></h1>
+      <p style={{fontSize:16,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:680,margin:'12px auto 0',lineHeight:1.55}}>Each agent uses their own rule of thumb to predict whether the bar will be crowded. They go only if their guess is below capacity. The truth is endogenous — it&apos;s whatever the group decides.</p>
+    </header>
+
+    <div style={S.bar}>
+      <span style={{fontSize:11,color:T.fnt}}>Total <strong style={{color:T.txt}}>{N}</strong> agents</span>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Capacity</label>
+      <input type="range" min={20} max={80} step={5} value={capPct} onChange={e=>setCapPct(+e.target.value)} disabled={running} style={{width:80,accentColor:'#5b86c4'}}/>
+      <span style={{fontSize:11,color:T.fnt,minWidth:38}}>{capacity} ({capPct}%)</span>
+      <div style={S.sep}/>
+      <label style={{fontSize:10,color:T.dim}}>Speed</label>
+      <input type="range" min={80} max={1200} value={1280-spd} onChange={e=>setSpd(1280-+e.target.value)} style={{width:60,accentColor:'#5b86c4'}}/>
+      <div style={S.sep}/>
+      <span style={{fontSize:11,color:T.fnt}}>Week {week}</span>
+      <div style={S.sep}/>
+      {N>=2&&(!running?<><button onClick={stepOnce} style={S.btn(true,'#7a6db0')}>step</button><button onClick={()=>setRunning(true)} style={S.btn(true,'#6ec89b')}>▶ Run</button></>:<button onClick={()=>setRunning(false)} style={S.btn(true,'#e87b6f')}>■ Pause</button>)}
+      <button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Reset</button>
+    </div>
+
+    <div style={{display:'flex',gap:18,marginTop:18,flexWrap:'wrap'}}>
+      {/* Scene */}
+      <div style={{flex:'1 1 640px',minWidth:520,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px'}}>
+          <span>🏠 At home ({stayers.length})</span>
+          <span style={{color:overcrowded?'#a85047':(lastAttendance!=null?'#3a8a64':T.dim)}}>🍺 At the bar ({goers.length})  {overcrowded?'· overcrowded':lastAttendance!=null?'· comfortable':''}</span>
+        </div>
+        <svg width="100%" viewBox={`0 0 ${HOME_W+BAR_W+24} ${SCENE_H}`} style={{background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`}}>
+          {/* Home box */}
+          <rect x={4} y={4} width={HOME_W} height={SCENE_H-8} fill="#fcf9f4" rx={8} stroke={T.bdr}/>
+          {/* Bar box (red tint when overcrowded) */}
+          <rect x={HOME_W+20} y={4} width={BAR_W} height={SCENE_H-8} fill={overcrowded?'#e87b6f15':'#6ec89b10'} rx={8} stroke={overcrowded?'#e87b6f':T.bdr}/>
+          {/* Capacity line inside bar */}
+          {(()=>{const ratio=capacity/N;const fillW=BAR_W*Math.min(1,ratio);return(<line x1={HOME_W+20+fillW} y1={10} x2={HOME_W+20+fillW} y2={SCENE_H-12} stroke="#e87b6f" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.6}/>);})()}
+          <text x={HOME_W+20+BAR_W*capacity/N+4} y={SCENE_H-6} fontSize={8} fill="#a85047">capacity</text>
+          {/* Stayers dots */}
+          {(()=>{const placements=placeDots(stayers.length,HOME_W,SCENE_H-8);return stayers.map((a,i)=>{const p=placements[i];const cx=4+p.padding+p.col*p.gx+p.gx/2;const cy=4+p.padding+p.row*p.gy+p.gy/2;return(<circle key={`s-${a.id}`} cx={cx} cy={cy} r={DOT/2} fill={EF_STRAT_MAP[a.strategy].color} opacity={0.4}/>);});})()}
+          {/* Goers dots */}
+          {(()=>{const placements=placeDots(goers.length,BAR_W,SCENE_H-8);return goers.map((a,i)=>{const p=placements[i];const cx=HOME_W+20+p.padding+p.col*p.gx+p.gx/2;const cy=4+p.padding+p.row*p.gy+p.gy/2;return(<circle key={`g-${a.id}`} cx={cx} cy={cy} r={DOT/2} fill={EF_STRAT_MAP[a.strategy].color} opacity={0.95}/>);});})()}
+        </svg>
+
+        {/* Attendance chart */}
+        {history.length>0&&<div style={{marginTop:18}}>
+          <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:6}}>Attendance over weeks</div>
+          <ResponsiveContainer width="100%" height={140}>
+            <LineChart data={chartData} margin={{top:6,right:8,left:0,bottom:6}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.bdr}/>
+              <XAxis dataKey="week" stroke={T.fnt} fontSize={11}/>
+              <YAxis domain={[0,N]} stroke={T.fnt} fontSize={11}/>
+              <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.blt}`,borderRadius:6,fontSize:11}}/>
+              <Line type="monotone" dataKey="capacity" stroke="#e87b6f" strokeWidth={1.5} strokeDasharray="5 3" dot={false} isAnimationActive={false}/>
+              <Line type="monotone" dataKey="attendance" stroke="#5b86c4" strokeWidth={2.5} dot={false} isAnimationActive={false}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>}
+      </div>
+
+      {/* Strategy mix + scores */}
+      <div style={{flex:'0 1 320px',minWidth:280,padding:16,background:T.pan,borderRadius:12,border:`1px solid ${T.bdr}`}}>
+        <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:4}}>Compose the crowd</div>
+        <div style={{fontSize:10,color:T.fnt,fontStyle:'italic',marginBottom:12}}>Click − / + to add or remove agents per strategy. Reset is automatic.</div>
+        {stratStats.map(s=>{const disabled=running;const btnStyle={width:22,height:22,borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:disabled?T.fnt:T.mut,cursor:disabled?'default':'pointer',fontWeight:700,fontSize:13,display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0};return(
+          <div key={s.id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 0',borderBottom:`1px dashed ${T.bdr}`,fontSize:12}}>
+            <span style={{width:12,height:12,borderRadius:6,background:s.color,flexShrink:0}}/>
+            <span style={{color:T.txt,minWidth:90,fontFamily:T.san,fontSize:11}}>{s.label}</span>
+            <button onClick={()=>adjust(s.id,-1)} disabled={disabled||s.count===0} style={{...btnStyle,opacity:s.count===0?0.3:1}}>−</button>
+            <span style={{minWidth:24,textAlign:'center',color:T.txt,fontWeight:600,fontSize:12,fontFamily:'ui-monospace,monospace'}}>{s.count}</span>
+            <button onClick={()=>adjust(s.id,1)} disabled={disabled} style={btnStyle}>+</button>
+            <span style={{marginLeft:'auto',fontWeight:700,minWidth:30,textAlign:'right',color:s.score>0?'#3a8a64':s.score<0?'#a85047':T.fnt,fontSize:11,fontFamily:'ui-monospace,monospace'}}>{s.score>0?'+':''}{s.score}</span>
+          </div>);
+        })}
+        <div style={{marginTop:10,fontSize:11,color:T.mut,fontStyle:'italic'}}>
+          Score = went-when-comfortable − went-when-crowded.
+        </div>
+        {history.length>3&&<div style={{marginTop:10,padding:'8px 10px',background:T.card,borderRadius:6,fontSize:11,color:T.mut,lineHeight:1.55,border:`1px solid ${T.bdr}`}}>
+          Avg attendance: <strong style={{color:T.txt}}>{(history.reduce((a,b)=>a+b,0)/history.length).toFixed(1)}</strong> / {N}
+          <br/>Crowded weeks: <strong style={{color:T.txt}}>{history.filter(h=>h>capacity).length}</strong> / {history.length}
+        </div>}
+      </div>
+    </div>
+
+    <div style={{marginTop:24,padding:'14px 18px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:10,maxWidth:800,margin:'24px auto 0'}}>
+      <h3 style={{fontSize:13,fontFamily:T.ser,fontStyle:'italic',color:T.txt,marginBottom:6}}>How it works</h3>
+      <p style={{fontSize:11,color:T.mut,lineHeight:1.65,margin:0}}>
+        {N} agents decide each week whether to go to El Farol. They go only if their personal prediction of attendance is below the comfort capacity ({capacity}). Each agent uses a different rule (last week&apos;s count, a running average, a trend extrapolation, the mirror, a constant, or pure randomness). Going is rewarded only if the bar isn&apos;t overcrowded — so any strategy that everyone starts using will self-defeat. Brian Arthur (1994) showed that <em>heterogeneous</em> strategy ecologies can stabilize attendance near capacity even though no single rule is correct.
+      </p>
+    </div>
+  </div>);
+}
+
+/* ═══════ LANDING PAGE ═══════ */
+function LandingPage(){
+  return(<div style={{maxWidth:1100,margin:'0 auto',padding:'0 14px'}}>
+    <header style={{textAlign:'center',padding:'8px 20px 24px'}}>
+      <h1 style={{fontSize:46,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,letterSpacing:'-0.5px',marginBottom:8}}>Bounded <span style={{fontWeight:700,fontStyle:'italic'}}>Collective Games</span></h1>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:760,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a growing series of model social organisms to study coordination dynamics among bounded agents that see only fragments.</p>
+    </header>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:18,marginTop:30,marginBottom:48}}>
+      {GAMES.map(g=>{const live=g.status==='live';return(
+        <Link key={g.slug} to={live?`/${g.slug}`:'#'} onClick={live?undefined:e=>e.preventDefault()}
+          style={{display:'block',textDecoration:'none',padding:'22px 22px 20px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:14,transition:'all .15s',cursor:live?'pointer':'default',opacity:live?1:0.55,boxShadow:live?'0 1px 3px rgba(0,0,0,0.04)':'none'}}
+          onMouseEnter={live?e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 6px 18px rgba(0,0,0,0.08)';}:undefined}
+          onMouseLeave={live?e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)';}:undefined}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{fontSize:42,lineHeight:1}}>{g.icon}</div>
+            <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'1.3px',padding:'3px 8px',borderRadius:4,background:live?'#6ec89b22':T.card,color:live?'#3a8a64':T.fnt,fontWeight:700}}>{live?'Live':'Coming soon'}</span>
+          </div>
+          <h3 style={{fontSize:22,fontFamily:T.ser,fontStyle:'italic',fontWeight:600,color:T.txt,margin:'4px 0 6px'}}>{g.title}</h3>
+          <p style={{fontSize:13,color:T.mut,lineHeight:1.55,margin:0}}>{g.tagline}</p>
+          {live&&<div style={{marginTop:14,fontSize:12,color:'#5b86c4',fontWeight:600}}>Play →</div>}
+        </Link>);
+      })}
+    </div>
+    <div style={{textAlign:'center',padding:'32px 0',fontSize:11,color:T.mut,lineHeight:1.7,maxWidth:680,margin:'0 auto'}}>
+      Each game pairs a <em>bounded perception</em> with a <em>collective decision mechanism</em>, and asks: when individual agents see only a slice of the truth, what does the group come to believe? Sometimes consensus tracks reality; sometimes it doesn&apos;t. The point is to watch.
+    </div>
+  </div>);
+}
+
+/* ═══════ STUB GAME PAGE ═══════ */
+function GameStub(){
+  const slug=useLocation().pathname.slice(1);
+  const game=GAMES.find(g=>g.slug===slug);
+  if(!game)return null;
+  return(<div style={{maxWidth:760,margin:'40px auto',padding:'0 14px',textAlign:'center'}}>
+    <div style={{fontSize:64,marginBottom:12}}>{game.icon}</div>
+    <h1 style={{fontSize:38,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:8}}>{game.title}</h1>
+    <p style={{fontSize:16,color:T.mut,fontStyle:'italic',fontFamily:T.ser,lineHeight:1.55,maxWidth:560,margin:'0 auto 28px'}}>{game.tagline}</p>
+    <div style={{display:'inline-block',padding:'10px 18px',background:T.pan,border:`1px dashed ${T.bdr}`,borderRadius:10,fontSize:13,color:T.mut}}>
+      In design. Coming to this page soon — for now, see <Link to="/flag-game" style={{color:'#5b86c4'}}>The Flag Game</Link> for the prototype of the series.
+    </div>
+  </div>);
+}
+
+/* ═══════ FLAG GAME SERIES (the original three modes) ═══════ */
+function FlagGameSeries({apiKey}){
+  return(<>
+    <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among bounded agents that see only fragments.</p></header>
+    <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
+      <FlagGame apiKey={apiKey}/>
+      <FirstPersonGame apiKey={apiKey}/>
+      <AdversarialGame apiKey={apiKey}/>
+    </div>
+  </>);
+}
+
+/* ═══════ TOP NAV ═══════ */
+function TopNav(){
+  const isLanding=useLocation().pathname==='/';
+  if(isLanding)return null;
+  return(<div style={{padding:'8px 14px',borderBottom:`1px solid ${T.bdr}`,background:T.bg}}>
+    <div style={{maxWidth:1400,margin:'0 auto'}}>
+      <Link to="/" style={{fontSize:12,color:T.mut,textDecoration:'none',fontStyle:'italic',fontFamily:T.ser}}>← Bounded Collective Games</Link>
+    </div>
+  </div>);
+}
+
+/* ═══════ APP SHELL ═══════ */
+function AppShell(){
+  const[apiKey,setApiKey]=useState(()=>localStorage.getItem('flag_game_api_key')||'');
+  useEffect(()=>{if(apiKey)localStorage.setItem('flag_game_api_key',apiKey);else localStorage.removeItem('flag_game_api_key');},[apiKey]);
+  return(<div style={S.page}>
+    <ApiKeyBar apiKey={apiKey} setApiKey={setApiKey}/>
+    <TopNav/>
+    <Routes>
+      <Route path="/" element={<LandingPage/>}/>
+      <Route path="/flag-game" element={<FlagGameSeries apiKey={apiKey}/>}/>
+      <Route path="/map-game" element={<MapGame/>}/>
+      <Route path="/prediction-market" element={<GameStub/>}/>
+      <Route path="/el-farol" element={<ElFarolBar/>}/>
+      <Route path="*" element={<LandingPage/>}/>
+    </Routes>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
   </div></ApiKeyContext.Provider>);
+}
+
+export default function App(){
+  return(<HashRouter><AppShell/></HashRouter>);
 }
