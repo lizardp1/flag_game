@@ -465,11 +465,6 @@ function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing,hintExtra}){
     {placing&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>{agents.length<MAX_A?`Click empty area to place agent ${agents.length+1} · Click an agent to remove`:'At max — click an agent to remove'}{hintExtra?` · ${hintExtra}`:''}</div>}
   </div>);}
 
-function MiniFlag({country}){const svg=FLAG_SVG[country];if(!svg)return null;
-  return(<div style={{position:'absolute',bottom:'100%',right:0,marginBottom:6,zIndex:50,background:T.card,border:`1px solid ${T.blt}`,borderRadius:8,padding:8,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',pointerEvents:'none',minWidth:130}}>
-    <div dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" ')}} style={{width:130,lineHeight:0,borderRadius:3,border:`1px solid ${T.blt}`,overflow:'hidden'}}/>
-    <div style={{fontSize:9,color:T.mut,textAlign:'center',marginTop:4,fontWeight:600}}>{country}</div></div>);}
-
 function InlineFlag({country,w=18}){const svg=FLAG_SVG[country];if(!svg)return null;const h=Math.round(w*0.72);
   return(<span dangerouslySetInnerHTML={{__html:svg.replace('<svg ','<svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice" ')}} style={{display:'inline-block',width:w,height:h,lineHeight:0,borderRadius:2,border:`1px solid ${T.blt}`,overflow:'hidden',verticalAlign:'middle',flexShrink:0}}/>);}
 
@@ -506,12 +501,6 @@ function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;con
     {ent.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>{ent.slice(0,8).map(([c,s])=><span key={c} style={{...S.bdg(CCOL[c]),fontSize:9}}>{c} {(s*100).toFixed(0)}%</span>)}{ent.length>8&&<span style={{fontSize:9,color:T.fnt}}>+{ent.length-8} more</span>}</div>}
   </div>);}
 
-function AgentList({agents,guesses,phase,onRemove,onToggle}){if(!agents.length||phase!=='setup')return null;
-  return(<div style={{marginTop:8}}>{agents.map((a,i)=>{const mc=a.model==='gpt-5.4'?'#d4a94b':'#5b86c4';
-    return(<div key={a.id} style={S.ar}><span style={{width:16,height:16,borderRadius:4,display:'inline-flex',alignItems:'center',justifyContent:'center',background:mc,fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{i+1}</span>
-      <button onClick={()=>onToggle(a.id)} style={{...S.bdg(mc),cursor:'pointer',fontSize:8,opacity:0.7}} title="Click to switch model">switch</button>
-      <button onClick={()=>onRemove(a.id)} style={{marginLeft:'auto',background:'none',border:'none',color:'#e87b6f',cursor:'pointer',fontSize:13,padding:'0 2px'}}>×</button></div>);})}</div>);}
-
 /* ═══════ MAIN ═══════ */
 function FlagGame(){
   const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
@@ -523,8 +512,6 @@ function FlagGame(){
   useEffect(()=>{if(!level.truth.includes(truth))setTruth(level.truth[0]);},[lvl]);
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
   const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase,agents]);
-  const remove=useCallback(id=>setAgents(p=>p.filter(a=>a.id!==id)),[]);
-  const toggle=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,model:a.model==='gpt-4o'?'gpt-5.4':'gpt-4o'}:a)),[]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-5.4','gpt-5.4','gpt-4o'];setAgents(ms.map(m=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[]})));},[phase]);
   const start=useCallback(()=>{if(N<2)return;const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());const g0=probeAll(sa,grid);const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N]);
 
@@ -541,8 +528,6 @@ function FlagGame(){
   const nextFlag=()=>{reset();const ts=level.truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);};
   useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
-  const stTxt=phase==='setup'?'Place agents on the flag, then press Run':phase==='done'?(cons?`✓ Stable consensus at round ${pr}`:`Done — ${maxT} steps`):`Step ${step}/${maxT} · Round ${pr}${sim.current?.conRuns>0?' · streak '+sim.current.conRuns+'/'+CON_RUNS:''}`;
-  const removed=F_RAW.length-F.length;
 
   return(<div>
     <div style={S.main}>
@@ -591,9 +576,6 @@ function AdversarialGame(){
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
 
   const place=useCallback((t,l,shift)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){if(shift){setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));}else{setAgents(p=>p.filter(a=>a.id!==ex.id));}return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase,agents]);
-  const remove=useCallback(id=>setAgents(p=>p.filter(a=>a.id!==id)),[]);
-  const toggleModel=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,model:a.model==='gpt-4o'?'gpt-5.4':'gpt-4o'}:a)),[]);
-  const toggleAdv=useCallback(id=>setAgents(p=>p.map(a=>a.id===id?{...a,adv:!a.adv}:a)),[]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());const ms=['gpt-4o','gpt-4o','gpt-4o','gpt-4o','gpt-4o','gpt-4o'];setAgents(ms.map((m,i)=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model:m,memory:[],adv:i>=4})));},[phase]);
 
   const start=useCallback(()=>{if(N<2||nAdv<1)return;const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());const g0=probeAllAdv(sa,grid,advTarget);const sh=compShares(g0);const d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});const ac=new Set(Object.keys(sh));sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget]);
@@ -611,7 +593,6 @@ function AdversarialGame(){
   const nextFlag=()=>{reset();const newTruth=F[Math.floor(Math.random()*F.length)].c;setTruth(newTruth);const others=F.filter(f=>f.c!==newTruth);setAdvTarget(others[Math.floor(Math.random()*others.length)].c);};
   useEffect(()=>{quick();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
-  const stTxt=phase==='setup'?'Place agents, mark adversaries, then press Run':phase==='done'?(cons?`✓ Stable consensus at round ${pr}`:`Done — ${maxT} steps`):`Step ${step}/${maxT} · Round ${pr}${sim.current?.conRuns>0?' · streak '+sim.current.conRuns+'/'+CON_RUNS:''}`;
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
 
   return(<div style={{marginTop:48,borderTop:`1px solid ${T.bdr}`,paddingTop:32}}>
