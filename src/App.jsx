@@ -385,6 +385,8 @@ const F_RAW=[
 
 const F=F_RAW.filter(f=>FLAG_SVG[f.c]);
 const PAL=genPal(F.length+4);const CCOL={};F.forEach((f,i)=>{CCOL[f.c]=PAL[i];});
+const FLAG_DATA_URI={};F.forEach(f=>{FLAG_DATA_URI[f.c]=`data:image/svg+xml,${encodeURIComponent(FLAG_SVG[f.c])}`;});
+const FLAG_INNER={};F.forEach(f=>{const m=FLAG_SVG[f.c].match(/<svg[^>]*>([\s\S]+)<\/svg>/);if(m)FLAG_INNER[f.c]=m[1];});
 
 /* ═══════ LEVELS — classified by real-world flag appearance ═══════ */
 const _L1=new Set(['Armenia','Austria','Belgium','Benin','Botswana','Bulgaria','Chad','Colombia','Costa Rica',"Cote d'Ivoire",'Estonia','France','Gabon','Gambia','Germany','Guinea','Hungary','Indonesia','Ireland','Italy','Latvia','Lithuania','Luxembourg','Mali','Mauritius','Monaco','Netherlands','Nigeria','Peru','Poland','Qatar','Romania','Russia','Sierra Leone','Thailand','Ukraine','Yemen']);
@@ -488,52 +490,67 @@ function CropView({country,top,left,w=300}){const svg=FLAG_SVG[country];if(!svg)
 
 /* ═══════ MECHANISTIC TRACE ═══════ */
 function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
+  const[cropPngs,setCropPngs]=useState({});
+  useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg||!agents.length)return;rasterizeFlag(svg).then(c=>{if(cancelled)return;const out={};agents.forEach((a,i)=>{try{out[i]=cropAgentView(c,a.top,a.left);}catch(_){}});setCropPngs(out);}).catch(()=>{});return()=>{cancelled=true;};},[truth,agents]);
   if(!allG||allG.length<2)return null;
   const N=agents.length;const numProbes=allG.length;
-  const ROW_H=28,COL_W=44,LEFT_GUTTER=84,TOP_GUTTER=34,RIGHT_PAD=10;
+  const ROW_H=44,COL_W=48,TOP_GUTTER=30;
+  const CROP_W=64,CROP_H=Math.round(CROP_W*3/4); // 4:3 aspect (matches TW/TH of crop in SVG coords)
+  const FINAL_W=42,FINAL_H=Math.round(FINAL_W*3/4);
+  const LEFT_GUTTER=CROP_W+18; // crop + gap
+  const RIGHT_PAD=FINAL_W+16;
   const cellX=c=>LEFT_GUTTER+c*COL_W;
   const cellY=r=>TOP_GUTTER+r*ROW_H;
   const W=LEFT_GUTTER+numProbes*COL_W+RIGHT_PAD;
-  const H=TOP_GUTTER+N*ROW_H+12;
+  const H=TOP_GUTTER+N*ROW_H+10;
 
   // ── Story extraction ───────────────────────────────────────────
   const finalRound=allG[numProbes-1];
   const winner=(()=>{const ct={};finalRound.forEach(g=>{if(g)ct[g]=(ct[g]||0)+1;});const ent=Object.entries(ct).sort((a,b)=>b[1]-a[1]);return ent[0]?.[0]||null;})();
   const winnerIsTruth=winner===truth;
-  // Pivot column: first probe round where winner is strict majority
   const pivotCol=winner?allG.findIndex(round=>round.filter(g=>g===winner).length>N/2):-1;
-  // Seed cell: earliest (agent,probe) where someone showed the winner
   let seedI=-1,seedR=-1;
   if(winner)for(let r=0;r<numProbes&&seedR<0;r++)for(let i=0;i<N;i++)if(allG[r][i]===winner){seedI=i;seedR=r;break;}
-  // Effective gossip: speaker said winner AND listener at next probe shows winner (AND didn't already have winner at prior probe)
   const effective=gossipLog.map(g=>{if(g.g!==winner)return false;const prev=Math.floor(g.step/pe);const next=prev+1;if(next>=numProbes)return false;return allG[next][g.li]===winner&&allG[prev][g.li]!==winner;});
-
-  // Border tint by outcome
   const frameColor=winnerIsTruth?'#6ec89b':(winner?'#e87b6f':T.bdr);
+
+  const truthInner=FLAG_INNER[truth];
+  const cropVB=(a)=>({x:a.left/GW*640,y:a.top/GH*480,w:TW/GW*640,h:TH/GH*480});
+  const fcId=(c)=>`mt-fc-${c.replace(/[^A-Za-z0-9]/g,'_')}`;
+  // Only define symbols for the final-belief flags (max N = 6), not every cell — far lighter to render
+  const finalCountries=(()=>{const s=new Set();finalRound.forEach(g=>{if(g&&FLAG_INNER[g])s.add(g);});return[...s];})();
 
   return(<div style={{marginTop:20,padding:'16px 18px',background:T.pan,borderRadius:10,border:`2px solid ${frameColor}`,overflowX:'auto'}}>
     <div style={{fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:14,display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
       <span>Mechanistic Trace</span>
       <span style={{textTransform:'none',letterSpacing:0,color:T.fnt,fontWeight:400,fontStyle:'italic',fontSize:10}}>
-        ★ seed · ⬛ pivot · solid arrows = effective spread · faded = noise
+        view ┃ belief over time ┃ → final · ★ seed · ⬛ pivot · solid = effective spread, faded = noise
       </span>
     </div>
     <svg width={W} height={H} style={{minWidth:W,display:'block'}}>
       <defs>
         <marker id="mt-arrow-bold" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={5} markerHeight={5} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor"/></marker>
         <marker id="mt-arrow-faint" viewBox="0 0 8 8" refX={7} refY={4} markerWidth={4} markerHeight={4} orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="currentColor" opacity={0.4}/></marker>
+        {finalCountries.map(c=>(<symbol key={`s-${c}`} id={fcId(c)} viewBox="0 0 640 480" preserveAspectRatio="xMidYMid slice" dangerouslySetInnerHTML={{__html:FLAG_INNER[c]||''}}/>))}
       </defs>
 
-      {/* Pivot column band (drawn first, behind cells) */}
-      {pivotCol>=0&&<rect x={cellX(pivotCol)} y={TOP_GUTTER-12} width={COL_W} height={N*ROW_H+12} fill={winnerIsTruth?'#6ec89b':'#e87b6f'} opacity={0.12} rx={4}/>}
-      {pivotCol>=0&&<text x={cellX(pivotCol)+COL_W/2} y={TOP_GUTTER-2} textAnchor="middle" fontSize={9} fontWeight={700} fill={winnerIsTruth?'#3a8a64':'#a85047'}>pivot</text>}
+      {/* Pivot column band (behind cells) */}
+      {pivotCol>=0&&<rect x={cellX(pivotCol)-2} y={TOP_GUTTER-12} width={COL_W+4} height={N*ROW_H+12} fill={winnerIsTruth?'#6ec89b':'#e87b6f'} opacity={0.13} rx={4}/>}
+      {pivotCol>=0&&<text x={cellX(pivotCol)+COL_W/2} y={TOP_GUTTER-4} textAnchor="middle" fontSize={9} fontWeight={700} fill={winnerIsTruth?'#3a8a64':'#a85047'}>pivot</text>}
 
-      {/* Row labels */}
-      {agents.map((a,i)=>(<text key={`l-${i}`} x={LEFT_GUTTER-10} y={cellY(i)+ROW_H/2+4} textAnchor="end" fontSize={11} fill={T.mut} fontFamily={T.san}>Agent {i+1}</text>))}
-      {/* Column labels */}
-      {allG.map((_,r)=>(<text key={`c-${r}`} x={cellX(r)+COL_W/2} y={20} textAnchor="middle" fontSize={9} fill={T.fnt}>{r===0?'init':`R${r}`}</text>))}
+      {/* Top column labels */}
+      <text x={CROP_W/2+4} y={18} textAnchor="middle" fontSize={9} fill={T.dim} fontWeight={600}>view</text>
+      {allG.map((_,r)=>(<text key={`c-${r}`} x={cellX(r)+COL_W/2} y={18} textAnchor="middle" fontSize={9} fill={T.fnt}>{r===0?'init':`R${r}`}</text>))}
+      <text x={W-RIGHT_PAD/2-2} y={18} textAnchor="middle" fontSize={9} fill={T.dim} fontWeight={600}>final</text>
 
-      {/* Gossip arrows */}
+      {/* Row 1: agent crop (what they saw) — rasterized PNG, one per agent (cheap) */}
+      {agents.map((a,i)=>{const y=cellY(i)+(ROW_H-CROP_H)/2;return(<g key={`crop-${i}`}>
+        <rect x={4} y={y} width={CROP_W} height={CROP_H} fill="#000" rx={3}/>
+        {cropPngs[i]&&<image href={cropPngs[i]} x={4} y={y} width={CROP_W} height={CROP_H} preserveAspectRatio="xMidYMid slice"/>}
+        <rect x={4} y={y} width={CROP_W} height={CROP_H} fill="none" stroke={T.bdr} strokeWidth={1} rx={3}/>
+      </g>);})}
+
+      {/* Gossip arrows (drawn under cells so flags pop) */}
       {gossipLog.map((g,idx)=>{
         const probeIdx=Math.floor(g.step/pe);if(probeIdx>=numProbes-1)return null;
         if(g.si===g.li)return null;
@@ -542,30 +559,44 @@ function MechanisticTrace({agents,allG,gossipLog,truth,pe}){
         const eff=effective[idx];
         const col=CCOL[g.g]||T.fnt;
         return(<path key={`a-${idx}`} d={`M${xm-6},${y1} Q${xm+4},${(y1+y2)/2} ${xm-2},${y2}`}
-          stroke={col} strokeWidth={eff?2.2:0.6} fill="none" opacity={eff?0.95:0.12}
+          stroke={col} strokeWidth={eff?2.4:0.5} fill="none" opacity={eff?0.95:0.10}
           markerEnd={eff?'url(#mt-arrow-bold)':'url(#mt-arrow-faint)'}/>);
       })}
 
-      {/* Belief cells */}
+      {/* Belief cells: flag thumbnails */}
       {agents.map((a,i)=>allG.map((round,r)=>{
         const belief=round[i];
-        if(!belief)return(<rect key={`b-${i}-${r}`} x={cellX(r)+3} y={cellY(i)+2} width={COL_W-6} height={ROW_H-4} fill="none" stroke={T.bdr} strokeDasharray="2 2" rx={3}/>);
+        const x=cellX(r)+3,y=cellY(i)+(ROW_H-(ROW_H-8))/2,w=COL_W-6,h=ROW_H-8;
+        if(!belief)return(<rect key={`b-${i}-${r}`} x={x} y={y} width={w} height={h} fill="none" stroke={T.bdr} strokeDasharray="2 2" rx={3}/>);
         const changed=r===0||allG[r-1][i]!==belief;
         const isTruth=belief===truth;
         return(<g key={`b-${i}-${r}`}>
-          <rect x={cellX(r)+3} y={cellY(i)+2} width={COL_W-6} height={ROW_H-4}
-            fill={CCOL[belief]||T.fnt}
-            opacity={changed?(isTruth?1:0.85):0.32}
-            rx={3}
-            stroke={isTruth?T.txt:'transparent'} strokeWidth={isTruth?1.2:0}/>
+          <rect x={x} y={y} width={w} height={h} fill={CCOL[belief]||T.fnt} opacity={changed?(isTruth?1:0.85):0.32} rx={3}/>
+          <rect x={x} y={y} width={w} height={h} fill="none"
+            stroke={isTruth?'#2d2926':(changed?'#00000033':'transparent')}
+            strokeWidth={isTruth?1.4:0.6} rx={3}/>
           <title>{belief}</title>
         </g>);
       }))}
 
-      {/* Seed marker (drawn last so it sits on top) */}
+      {/* Final-belief flag at row end */}
+      {agents.map((a,i)=>{
+        const final=allG[numProbes-1][i];if(!final)return null;
+        const x=W-RIGHT_PAD+4,y=cellY(i)+(ROW_H-FINAL_H)/2;
+        const isTruth=final===truth;
+        const hasFlag=!!FLAG_INNER[final];
+        return(<g key={`f-${i}`}>
+          {hasFlag&&<use href={`#${fcId(final)}`} x={x} y={y} width={FINAL_W} height={FINAL_H}/>}
+          <rect x={x} y={y} width={FINAL_W} height={FINAL_H} fill="none"
+            stroke={isTruth?'#3a8a64':'#a85047'} strokeWidth={1.8} rx={3}/>
+          <title>{final}{isTruth?' ✓':' ✗'}</title>
+        </g>);
+      })}
+
+      {/* Seed marker on top */}
       {seedR>=0&&<g>
-        <circle cx={cellX(seedR)+COL_W/2} cy={cellY(seedI)+ROW_H/2} r={9} fill="#fff" stroke="#2d2926" strokeWidth={1.5}/>
-        <text x={cellX(seedR)+COL_W/2} y={cellY(seedI)+ROW_H/2+4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#2d2926">★</text>
+        <circle cx={cellX(seedR)+COL_W/2} cy={cellY(seedI)+ROW_H/2} r={11} fill="#fff" stroke="#2d2926" strokeWidth={2}/>
+        <text x={cellX(seedR)+COL_W/2} y={cellY(seedI)+ROW_H/2+5} textAnchor="middle" fontSize={13} fontWeight={700} fill="#2d2926">★</text>
       </g>}
     </svg>
   </div>);
