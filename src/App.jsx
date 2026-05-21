@@ -978,16 +978,15 @@ function FirstPersonGame({apiKey}){
             </div>);})}
           </div>
 
-          <div style={{marginTop:18,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>Recent messages</div>
+          <div style={{marginTop:18,fontSize:11,color:T.dim,textTransform:'uppercase',letterSpacing:'1.4px',marginBottom:8}}>Your transcript memory <span style={{textTransform:'none',letterSpacing:0,color:T.fnt,fontSize:9,fontStyle:'italic'}}>oldest → newest · same format your AI peers see</span></div>
           <div style={{padding:'10px 14px',background:T.card,borderRadius:8,border:`1px solid ${T.bdr}`,minHeight:90,maxHeight:160,overflowY:'auto'}}>
-            {messages.length===0?<p style={{fontSize:11,color:T.fnt,fontStyle:'italic',margin:0}}>No gossip yet — press Next Round to start.</p>:messages.slice(-6).map((m,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',fontSize:12,borderBottom:i<Math.min(messages.length,6)-1?`1px dashed ${T.bdr}`:'none'}}>
-                <span style={{color:T.fnt,fontSize:9,minWidth:22}}>R{m.r}</span>
-                <span style={{color:m.kind==='sent'?'#5b86c4':T.mut,minWidth:106}}>{m.kind==='sent'?`You → Agent ${m.other}`:`Agent ${m.other} → You`}</span>
-                <InlineFlag country={m.country} w={18}/>
-                <span style={{fontSize:11,color:T.txt}}>{m.country}</span>
-              </div>
-            ))}
+            {playerMem.length===0?<p style={{fontSize:11,color:T.fnt,fontStyle:'italic',margin:0}}>Nothing in memory yet — what other agents tell you will show up here.</p>:playerMem.map((m,i)=>{const parts=m.split(' | ');const country=parts[0];const reason=parts.slice(1).join(' | ');return(
+              <div key={i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'4px 0',fontSize:12,borderBottom:i<playerMem.length-1?`1px dashed ${T.bdr}`:'none'}}>
+                <span style={{color:T.fnt,fontSize:9,minWidth:14,marginTop:3}}>{i+1}.</span>
+                <InlineFlag country={country} w={18}/>
+                <span style={{fontSize:11,color:T.txt,fontWeight:600,whiteSpace:'nowrap'}}>{country}</span>
+                {reason&&<span style={{fontSize:11,color:T.mut,fontStyle:'italic'}}>| {reason}</span>}
+              </div>);})}
           </div>
         </div>
       </div>
