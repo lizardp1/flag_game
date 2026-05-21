@@ -766,9 +766,10 @@ function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.f
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
 function AdversarialGame({apiKey}){
-  const[truth,setTruth]=useState(()=>F[Math.floor(Math.random()*F.length)].c);
-  const[advTarget,setAdvTarget]=useState(F[1]?.c||F[0].c);
-  const[advReason,setAdvReason]=useState(()=>describeFlag(F[1]?.c||F[0].c));
+  const[lvl,setLvl]=useState(0);
+  const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
+  const[advTarget,setAdvTarget]=useState(()=>{const ts=LEVELS[0].truth;return ts.find(c=>c!==ts[0])||ts[0];});
+  const[advReason,setAdvReason]=useState(()=>describeFlag(LEVELS[0].truth[1]||LEVELS[0].truth[0]));
   useEffect(()=>{setAdvReason(describeFlag(advTarget));},[advTarget]);
   const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
@@ -776,7 +777,9 @@ function AdversarialGame({apiKey}){
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
   const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
-  const others=useMemo(()=>F.filter(f=>f.c!==truth).map(f=>f.c),[truth]);
+  const levelPool=LEVELS[lvl].truth;
+  const truthOptions=useMemo(()=>levelPool.filter(c=>F.some(f=>f.c===c)),[levelPool]);
+  const others=useMemo(()=>truthOptions.filter(c=>c!==truth),[truthOptions,truth]);
   const N=agents.length;const pe=Math.max(Math.floor(N/2),1);const maxT=N*14;
   const nAdv=agents.filter(a=>a.adv).length;const nHon=N-nAdv;
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
@@ -810,7 +813,7 @@ function AdversarialGame({apiKey}){
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
   const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
-  const nextFlag=()=>{reset();const newTruth=F[Math.floor(Math.random()*F.length)].c;setTruth(newTruth);const others=F.filter(f=>f.c!==newTruth);setAdvTarget(others[Math.floor(Math.random()*others.length)].c);};
+  const nextFlag=()=>{reset();const ts=LEVELS[lvl].truth.filter(c=>F.some(f=>f.c===c));const newTruth=ts[Math.floor(Math.random()*ts.length)];setTruth(newTruth);const o=ts.filter(c=>c!==newTruth);setAdvTarget(o[Math.floor(Math.random()*o.length)]||newTruth);};
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
 
@@ -820,7 +823,8 @@ function AdversarialGame({apiKey}){
       <p style={{fontSize:13,color:T.mut,maxWidth:520,margin:'0 auto',lineHeight:1.6}}>Place agents on the flag, then mark some as adversaries. Adversaries always claim the target country — can they flip the honest agents?</p>
     </header>
     <div style={S.bar}>
-      <label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{F.map(f=><option key={f.c} value={f.c}>{f.c}</option>)}</select>
+      <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
+      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{truthOptions.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary reason</label><input type="text" value={advReason} onChange={e=>{if(phase==='setup')setAdvReason(e.target.value);}} disabled={phase!=='setup'} title="Static reason appended after the country on every adversary message — keep it plausible to avoid signaling 'this is an adversary'." style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,width:260}}/>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Next agent</label><button onClick={()=>setModel('gpt-4o')} style={S.btn(model==='gpt-4o','#5b86c4')} disabled={phase!=='setup'}>gpt-4o</button><button onClick={()=>setModel('gpt-5.4')} style={S.btn(model==='gpt-5.4','#d4a94b')} disabled={phase!=='setup'}>gpt-5.4</button>
