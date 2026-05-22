@@ -1478,7 +1478,7 @@ function LandingPage(){
   return(<div style={{maxWidth:1100,margin:'0 auto',padding:'0 14px'}}>
     <header style={{textAlign:'center',padding:'8px 20px 24px'}}>
       <h1 style={{fontSize:46,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,letterSpacing:'-0.5px',marginBottom:8}}>Bounded <span style={{fontWeight:700,fontStyle:'italic'}}>Collective Games</span></h1>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:760,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a growing series of model social organisms to study coordination dynamics among bounded agents that see only fragments.</p>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:760,margin:'14px auto 0',lineHeight:1.5}}>What does &ldquo;alignment&rdquo; even mean, when it&apos;s collective? We study the ecology of bounded minds that together try to know a whole no single mind can ever see.</p>
     </header>
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:18,marginTop:30,marginBottom:48}}>
       {GAMES.map(g=>{const live=g.status==='live';return(
@@ -1521,7 +1521,7 @@ function GameStub(){
 function FlagGameSeries({apiKey}){
   return(<>
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among bounded agents that see only fragments.</p></header>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does &ldquo;alignment&rdquo; even mean, when it&apos;s collective? We study the ecology of bounded minds that together try to know a whole no single mind can ever see.</p></header>
     <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
       <FlagGame apiKey={apiKey}/>
       <FirstPersonGame apiKey={apiKey}/>
