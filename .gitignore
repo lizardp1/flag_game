@@ -35,3 +35,8 @@ sweeps/
 node_modules/
 dist/
 
+# Local secrets (API keys for the model benchmark)
+.env
+.env.local
+test/results-*.json
+
