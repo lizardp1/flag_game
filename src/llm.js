@@ -204,10 +204,14 @@ const ADAPTERS = {
           messages.push({ role: 'assistant', content: t.text })
         }
       }
+      // gpt-4.1-mini 500s on response_format=json_object + vision; skip it there.
+      // extractJson handles unfenced output for that one model.
+      const body = { model, messages, max_completion_tokens: 4000 }
+      if (model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
       return {
         url: 'https://api.openai.com/v1/chat/completions',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: { model, messages, max_completion_tokens: 4000 },
+        body,
       }
     },
     read: data => (data.choices?.[0]?.message?.content || '').trim(),
