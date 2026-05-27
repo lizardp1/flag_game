@@ -706,7 +706,42 @@ function FlagGame({keys}){
   const dg=useMemo(()=>{if(phase==='setup')return[];if(hovIdx!=null&&allG[hovIdx])return allG[hovIdx];return guesses;},[phase,hovIdx,allG,guesses]);
   const place=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){setAgents(p=>p.filter(a=>a.id!==ex.id));return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[]}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());setAgents(Array.from({length:6},()=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model,memory:[]})));},[phase,model]);
-  const start=useCallback(()=>{if(N<2)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(live){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0,gossipLog:[]};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,live]);
+  const start=useCallback(async()=>{
+    if(N<2)return;
+    setApiError(null);
+    const sa=agents.map(a=>({...a,memory:[]}));
+    const rng=mkRng(Date.now());
+    let g0,sh,d0,ac;
+    if(live){
+      // Round 0: explicit initial probe of each agent's belief from just its
+      // crop, before any gossip. Surfaces failures immediately instead of
+      // silently entering a null state that allSettled then perpetuates.
+      setPhase('probing');
+      const catalog=F.map(f=>f.c);
+      const settled=await Promise.allSettled(sa.map(async a=>{
+        const url=getCrop(a.top,a.left);
+        if(!url)throw new Error('Flag image not ready yet — retry in a moment.');
+        const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,keys,catalog});
+        return r.country;
+      }));
+      g0=settled.map(r=>r.status==='fulfilled'?r.value:null);
+      const nFailed=settled.filter(r=>r.status==='rejected').length;
+      if(nFailed===sa.length){
+        const firstErr=settled.find(r=>r.status==='rejected')?.reason;
+        setApiError(`All initial probes failed (round 0). ${firstErr?.message||firstErr}`);
+        setPhase('setup');
+        return;
+      }
+      const valid=g0.filter(Boolean);
+      sh=compShares(valid.length?valid:g0);
+      d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});
+      ac=new Set(Object.keys(sh).filter(c=>sh[c]>0));
+    }else{
+      g0=probeAll(sa,grid);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));
+    }
+    sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0,gossipLog:[]};
+    setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');
+  },[agents,grid,N,live,keys,getCrop]);
 
   useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
     const buildPairs=(s)=>{const n=s.agents.length;if(n<2)return[];
@@ -751,6 +786,7 @@ function FlagGame({keys}){
         <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'}/>
         <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
+        {phase==='probing'&&<span style={{fontSize:11,color:T.mut,fontStyle:'italic'}}>Round 0 probe…</span>}
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
         {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{N}/{MAX_A}</span>
       </div>
@@ -804,7 +840,41 @@ function AdversarialGame({keys}){
   const place=useCallback((t,l,shift)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){if(shift){setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));}else{setAgents(p=>p.filter(a=>a.id!==ex.id));}return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase,agents]);
   const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());setAgents(Array.from({length:6},(_,i)=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model,memory:[],adv:i>=4})));},[phase,model]);
 
-  const start=useCallback(()=>{if(N<2||nAdv<1)return;setApiError(null);const sa=agents.map(a=>({...a,memory:[]}));const rng=mkRng(Date.now());let g0,sh,d0,ac;if(live){g0=sa.map(()=>null);sh={};d0={round:0};F.forEach(f=>{d0[f.c]=0;});ac=new Set();}else{g0=probeAllAdv(sa,grid,advTarget);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));}sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');},[agents,grid,N,nAdv,advTarget,live]);
+  const start=useCallback(async()=>{
+    if(N<2||nAdv<1)return;
+    setApiError(null);
+    const sa=agents.map(a=>({...a,memory:[]}));
+    const rng=mkRng(Date.now());
+    let g0,sh,d0,ac;
+    if(live){
+      setPhase('probing');
+      const catalog=F.map(f=>f.c);
+      const settled=await Promise.allSettled(sa.map(async a=>{
+        if(a.adv)return advTarget;
+        const url=getCrop(a.top,a.left);
+        if(!url)throw new Error('Flag image not ready yet — retry in a moment.');
+        const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,keys,catalog});
+        return r.country;
+      }));
+      g0=settled.map(r=>r.status==='fulfilled'?r.value:null);
+      const nLLM=sa.filter(a=>!a.adv).length;
+      const nFailed=settled.filter((r,i)=>!sa[i].adv&&r.status==='rejected').length;
+      if(nLLM>0&&nFailed===nLLM){
+        const firstErr=settled.find(r=>r.status==='rejected')?.reason;
+        setApiError(`All initial probes failed (round 0). ${firstErr?.message||firstErr}`);
+        setPhase('setup');
+        return;
+      }
+      const valid=g0.filter(Boolean);
+      sh=compShares(valid.length?valid:g0);
+      d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});
+      ac=new Set(Object.keys(sh).filter(c=>sh[c]>0));
+    }else{
+      g0=probeAllAdv(sa,grid,advTarget);sh=compShares(g0);d0={round:0};F.forEach(f=>{d0[f.c]=sh[f.c]||0;});ac=new Set(Object.keys(sh));
+    }
+    sim.current={agents:sa,rng,step:0,pr:0,traj:[d0],ac,done:false,allG:[g0],conRuns:0};
+    setGuesses(g0);setAllG([g0]);setTraj([d0]);setActive([...ac]);setStep(0);setPr(0);setCons(false);setFS(null);setHovIdx(null);setPhase('running');
+  },[agents,grid,N,nAdv,advTarget,live,keys,getCrop]);
 
   useEffect(()=>{if(phase!=='running')return;const ctl={cancelled:false};const catalog=F.map(f=>f.c);
     const buildPairs=(s)=>{const n=s.agents.length;if(n<2)return[];
@@ -856,7 +926,8 @@ function AdversarialGame({keys}){
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary reason</label><input type="text" value={advReason} onChange={e=>{if(phase==='setup')setAdvReason(e.target.value);}} disabled={phase!=='setup'} title="Static reason appended after the country on every adversary message — keep it plausible to avoid signaling 'this is an adversary'." style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,width:260}}/>
       <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'}/>
       <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
-      {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
+      {phase==='probing'&&<span style={{fontSize:11,color:T.mut,fontStyle:'italic'}}>Round 0 probe…</span>}
+        {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
       {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
     </div>
     {apiError&&<div style={{textAlign:'center',padding:'8px 14px',margin:'8px auto',maxWidth:620,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12}}>{apiError}</div>}

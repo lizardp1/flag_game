@@ -208,7 +208,11 @@ const ADAPTERS = {
       }
       // gpt-4.1-mini 500s on response_format=json_object + vision; skip it there.
       // extractJson handles unfenced output for that one model.
-      const body = { model, messages, max_completion_tokens: 500 }
+      // Reasoning models (gpt-5.x) need a large budget — reasoning tokens
+      // count against max_completion_tokens. Non-reasoning models output a
+      // ~50-token JSON object, so 500 is plenty and bounds generation time.
+      const isReasoning = /^gpt-5(\.|-|$)/.test(model)
+      const body = { model, messages, max_completion_tokens: isReasoning ? 4000 : 500 }
       if (model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
       return {
         url: 'https://api.openai.com/v1/chat/completions',
