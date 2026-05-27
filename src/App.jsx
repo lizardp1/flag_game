@@ -943,24 +943,35 @@ function FirstPersonGame({keys}){
     for(let i=perm.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}
     const pairs=[];for(let i=0;i+1<perm.length;i+=2)pairs.push([perm[i],perm[i+1]]);
     const newMsgs=[...messages];
+    // Snapshot pre-round AI state so probe can run concurrently with the
+    // round (same pattern as FlagGame). Probe reflects beliefs entering
+    // this round, not after — saves one full round-trip of latency.
+    const probeSnap=all.slice(1).map(a=>({top:a.top,left:a.left,memory:[...a.memory],model:a.model}));
     setLoading(true);setApiError(null);
     try{
-      // Run all speakers concurrently — pairs are disjoint so memories don't collide.
-      const results=await Promise.all(pairs.map(async([si])=>{
+      const speakerP=Promise.allSettled(pairs.map(async([si])=>{
         const sp=all[si];
         if(sp.isPlayer){const ml=playerReason.trim()?`${playerGuess} | ${playerReason.trim()}`:playerGuess;return{country:playerGuess,memoryLine:ml};}
         if(live){const url=getCrop(sp.top,sp.left);if(!url)throw new Error('Flag image not ready yet — retry in a moment.');return await llmInteraction({cropDataUrl:url,memoryLines:sp.memory,model:sp.model,keys,catalog});}
         const g=bestGuess(analyzeCrop(grid,sp.top,sp.left),sp.memory);return{country:g,memoryLine:g};
       }));
-      pairs.forEach(([si,li],idx)=>{
-        const speaker=all[si],listener=all[li],r=results[idx];
+      const probeP=live?Promise.allSettled(probeSnap.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model:a.model,keys,catalog});return r.country;})):Promise.resolve(null);
+      const[settled,probedSettled]=await Promise.all([speakerP,probeP]);
+      let firstErr=null;
+      settled.forEach((r,idx)=>{
+        if(r.status!=='fulfilled'){if(!firstErr)firstErr=r.reason?.message||String(r.reason);console.warn('FP speaker failed:',r.reason);return;}
+        const[si,li]=pairs[idx];const speaker=all[si],listener=all[li],v=r.value;
         if(listener.memory.length>=H_MEM)listener.memory.shift();
-        listener.memory.push(r.memoryLine);
+        listener.memory.push(v.memoryLine);
         if(speaker.isPlayer)newMsgs.push({r:round+1,kind:'sent',other:listener.idx,country:playerGuess});
-        else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:r.country});
+        else if(listener.isPlayer)newMsgs.push({r:round+1,kind:'received',other:speaker.idx,country:v.country});
       });
+      if(probedSettled){
+        const prev=aiGuessesLLM.length===probedSettled.length?aiGuessesLLM:probedSettled.map(()=>null);
+        setAiGuessesLLM(probedSettled.map((r,i)=>{if(r.status==='fulfilled')return r.value;console.warn('FP probe failed:',r.reason);return prev[i];}));
+      }
+      if(firstErr)setApiError(firstErr);
       const newAi=all.slice(1).map(a=>({top:a.top,left:a.left,memory:a.memory}));
-      if(live){const probed=await Promise.all(newAi.map(async a=>{const url=getCrop(a.top,a.left);if(!url)throw new Error('Flag image not ready yet.');const r=await llmInteraction({cropDataUrl:url,memoryLines:a.memory,model,keys,catalog});return r.country;}));setAiGuessesLLM(probed);}
       setPlayerMem(all[0].memory);
       setAiAgents(newAi);
       setMessages(newMsgs);
