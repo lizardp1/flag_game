@@ -736,7 +736,7 @@ function FlagGame({keys}){
       if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-      await new Promise(r=>setTimeout(r,100));}})();
+      await new Promise(r=>setTimeout(r,25));}})();
     return()=>{ctl.cancelled=true;};},[phase,parallel,grid,maxT,pe,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
@@ -836,7 +836,7 @@ function AdversarialGame({keys}){
       if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-      await new Promise(r=>setTimeout(r,100));}})();
+      await new Promise(r=>setTimeout(r,25));}})();
     return()=>{ctl.cancelled=true;};},[phase,parallel,grid,maxT,pe,advTarget,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);

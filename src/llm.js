@@ -198,7 +198,9 @@ const ADAPTERS = {
       for (const t of turns) {
         if (t.role === 'user') {
           const content = [{ type: 'text', text: t.text }]
-          if (t.image) content.push({ type: 'image_url', image_url: { url: t.image, detail: 'high' } })
+          // Agent crop is ~150x100 — 'low' uses a flat 85-token rep instead of
+          // tiling at 'high' (~255 tokens), ~30-50% faster per call.
+          if (t.image) content.push({ type: 'image_url', image_url: { url: t.image, detail: 'low' } })
           messages.push({ role: 'user', content })
         } else {
           messages.push({ role: 'assistant', content: t.text })
@@ -206,7 +208,7 @@ const ADAPTERS = {
       }
       // gpt-4.1-mini 500s on response_format=json_object + vision; skip it there.
       // extractJson handles unfenced output for that one model.
-      const body = { model, messages, max_completion_tokens: 4000 }
+      const body = { model, messages, max_completion_tokens: 500 }
       if (model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
       return {
         url: 'https://api.openai.com/v1/chat/completions',
@@ -238,7 +240,7 @@ const ADAPTERS = {
           // Required for direct browser calls (otherwise CORS-blocked).
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: { model, max_tokens: 4000, system: SYSTEM_PROMPT, messages },
+        body: { model, max_tokens: 500, system: SYSTEM_PROMPT, messages },
       }
     },
     read: data => (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim(),
@@ -258,7 +260,7 @@ const ADAPTERS = {
         body: {
           system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents,
-          generationConfig: { response_mime_type: 'application/json', max_output_tokens: 4000 },
+          generationConfig: { response_mime_type: 'application/json', max_output_tokens: 500 },
         },
       }
     },
