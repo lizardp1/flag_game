@@ -290,10 +290,25 @@ export async function llmInteraction({
   let lastErr = null
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const { url, headers, body } = adapter.build(model, key, turns)
-    const res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify(body) })
+    let res
+    try {
+      res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify(body) })
+    } catch (e) {
+      // Network blip — treat like a 5xx and retry with backoff.
+      lastErr = e
+      if (attempt >= maxRetries) throw e
+      await new Promise(r => setTimeout(r, 300 * (attempt + 1) + Math.random() * 200))
+      continue
+    }
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
+      const transient = res.status === 429 || res.status >= 500
+      if (transient && attempt < maxRetries) {
+        lastErr = new Error(`${adapter.label} ${res.status}: ${errText.slice(0, 200)}`)
+        await new Promise(r => setTimeout(r, 400 * Math.pow(2, attempt) + Math.random() * 200))
+        continue
+      }
       throw new Error(`${adapter.label} ${res.status}: ${errText.slice(0, 200)}`)
     }
     const data = await res.json()
