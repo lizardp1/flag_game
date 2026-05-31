@@ -35,13 +35,11 @@ export const MODELS = [
   { id: 'gpt-4o',                provider: 'openai',    label: 'gpt-4o',                group: 'main', short: '4o',   color: '#5b86c4' },
   { id: 'gpt-5.4',               provider: 'openai',    label: 'gpt-5.4',               group: 'main', short: '5.4',  color: '#d4a94b' },
   { id: 'claude-sonnet-4-6',     provider: 'anthropic', label: 'claude-sonnet-4-6',     group: 'main', short: 's46',  color: '#c2683e' },
-  { id: 'claude-sonnet-4-5',     provider: 'anthropic', label: 'claude-sonnet-4-5',     group: 'main', short: 's45',  color: '#cf8a5a' },
   { id: 'gemini-3.5-flash',      provider: 'google',    label: 'gemini-3.5-flash',      group: 'main', short: 'g35',  color: '#5b6fc4' },
   { id: 'gemini-2.5-flash',      provider: 'google',    label: 'gemini-2.5-flash',      group: 'main', short: 'g25',  color: '#7a86d4' },
   // ── Faster ──
   { id: 'gpt-4.1-mini',          provider: 'openai',    label: 'gpt-4.1-mini',          group: 'fast', short: '4.1m', color: '#6aa6d4' },
   { id: 'claude-haiku-4-5',      provider: 'anthropic', label: 'claude-haiku-4-5',      group: 'fast', short: 'h45',  color: '#d9a878' },
-  { id: 'claude-sonnet-4-0',     provider: 'anthropic', label: 'claude-sonnet-4-0',     group: 'fast', short: 's40',  color: '#b58a6a' },
   { id: 'gemini-3.1-flash-lite', provider: 'google',    label: 'gemini-3.1-flash-lite', group: 'fast', short: 'g31L', color: '#8a7ac4' },
   { id: 'gemini-2.5-flash-lite', provider: 'google',    label: 'gemini-2.5-flash-lite', group: 'fast', short: 'g25L', color: '#9a8ad0' },
 ]
