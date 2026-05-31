@@ -213,7 +213,7 @@ const ADAPTERS = {
       // extractJson for parsing instead.
       const isReasoning = /^gpt-5(\.|-|$)/.test(model)
       const body = { model, messages, max_completion_tokens: isReasoning ? 4000 : 500 }
-      if (isReasoning) body.reasoning_effort = 'minimal'
+      if (isReasoning) body.reasoning_effort = 'none'
       if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
       return {
         url: 'https://api.openai.com/v1/chat/completions',
