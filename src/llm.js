@@ -34,7 +34,6 @@ export const MODELS = [
   // ── Models ──
   { id: 'gpt-4o',                provider: 'openai',    label: 'gpt-4o',                group: 'main', short: '4o',   color: '#5b86c4' },
   { id: 'gpt-5.4',               provider: 'openai',    label: 'gpt-5.4',               group: 'main', short: '5.4',  color: '#d4a94b' },
-  { id: 'gpt-5-mini',            provider: 'openai',    label: 'gpt-5-mini',            group: 'main', short: '5m',   color: '#3f7cb8' },
   { id: 'claude-sonnet-4-6',     provider: 'anthropic', label: 'claude-sonnet-4-6',     group: 'main', short: 's46',  color: '#c2683e' },
   { id: 'claude-sonnet-4-5',     provider: 'anthropic', label: 'claude-sonnet-4-5',     group: 'main', short: 's45',  color: '#cf8a5a' },
   { id: 'gemini-3.5-flash',      provider: 'google',    label: 'gemini-3.5-flash',      group: 'main', short: 'g35',  color: '#5b6fc4' },
@@ -206,14 +205,16 @@ const ADAPTERS = {
           messages.push({ role: 'assistant', content: t.text })
         }
       }
-      // gpt-4.1-mini 500s on response_format=json_object + vision; skip it there.
-      // extractJson handles unfenced output for that one model.
-      // Reasoning models (gpt-5.x) need a large budget — reasoning tokens
-      // count against max_completion_tokens. Non-reasoning models output a
-      // ~50-token JSON object, so 500 is plenty and bounds generation time.
+      // gpt-4.1-mini 500s on response_format=json_object + vision; skip it.
+      // Reasoning models (gpt-5.x) burn the token budget on hidden reasoning
+      // before any output — give them headroom AND tell them to think
+      // minimally (this is a one-word-answer task). They also reject
+      // response_format=json_object in many configurations; rely on
+      // extractJson for parsing instead.
       const isReasoning = /^gpt-5(\.|-|$)/.test(model)
       const body = { model, messages, max_completion_tokens: isReasoning ? 4000 : 500 }
-      if (model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
+      if (isReasoning) body.reasoning_effort = 'minimal'
+      if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
       return {
         url: 'https://api.openai.com/v1/chat/completions',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
