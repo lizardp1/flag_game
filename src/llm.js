@@ -212,7 +212,11 @@ const ADAPTERS = {
       // response_format=json_object in many configurations; rely on
       // extractJson for parsing instead.
       const isReasoning = /^gpt-5(\.|-|$)/.test(model)
-      const body = { model, messages, max_completion_tokens: isReasoning ? 4000 : 500 }
+      // 1500 caps total work (reasoning + output) for gpt-5.x while still
+      // leaving plenty of room past the ~50-token JSON answer. 4000 made
+      // gpt-5.4 burn 10-15s on reasoning at effort=low; 1500 brings it
+      // back to 3-5s without starving output.
+      const body = { model, messages, max_completion_tokens: isReasoning ? 1500 : 500 }
       if (isReasoning) body.reasoning_effort = 'low'
       if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
       return {
@@ -297,16 +301,27 @@ export async function llmInteraction({
   let lastErr = null
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const { url, headers, body } = adapter.build(model, key, turns)
+    // 45s hard timeout per attempt — without this, browser-internal limits
+    // surface as opaque "Failed to fetch" after random delays. Compose with
+    // the caller's signal if any.
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(new Error('Request timed out after 45s')), 45000)
+    const onCallerAbort = () => ctl.abort(signal?.reason)
+    if (signal) signal.addEventListener('abort', onCallerAbort, { once: true })
     let res
     try {
-      res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify(body) })
+      res = await fetch(url, { method: 'POST', headers, signal: ctl.signal, body: JSON.stringify(body) })
     } catch (e) {
-      // Network blip — treat like a 5xx and retry with backoff.
+      // Network blip / timeout — treat like a 5xx and retry with backoff.
+      clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onCallerAbort)
       lastErr = e
       if (attempt >= maxRetries) throw e
       await new Promise(r => setTimeout(r, 300 * (attempt + 1) + Math.random() * 200))
       continue
     }
+    clearTimeout(timer)
+    if (signal) signal.removeEventListener('abort', onCallerAbort)
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
