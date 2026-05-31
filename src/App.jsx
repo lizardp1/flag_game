@@ -692,7 +692,7 @@ function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;con
 /* ═══════ MAIN ═══════ */
 function FlagGame({keys}){
   const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
-  const[lvl,setLvl]=useState(0);const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
+  const[lvl,setLvl]=useState(1);const[truth,setTruth]=useState('Japan');const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
@@ -783,7 +783,7 @@ function FlagGame({keys}){
     <div style={S.main}>
       <div style={S.bar}>
         <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth;setTruth(ts[Math.floor(Math.random()*ts.length)]);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
-        <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{level.truth.map(c=><option key={c} value={c}>{c}</option>)}</select>
+        <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:160}} disabled={phase!=='setup'}>{[...level.truth].sort((a,b)=>a.localeCompare(b)).map(c=><option key={c} value={c}>{c}</option>)}</select>
         <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'}/>
         <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2} style={{...S.btn(N>=2,'#6ec89b'),opacity:N<2?0.4:1}}>▶ Run</button></>}
         {phase==='probing'&&<span style={{fontSize:11,color:T.mut,fontStyle:'italic'}}>Round 0 probe…</span>}
@@ -921,7 +921,7 @@ function AdversarialGame({keys}){
     </header>
     <div style={S.bar}>
       <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
-      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{truthOptions.map(c=><option key={c} value={c}>{c}</option>)}</select>
+      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{[...truthOptions].sort((a,b)=>a.localeCompare(b)).map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary reason</label><input type="text" value={advReason} onChange={e=>{if(phase==='setup')setAdvReason(e.target.value);}} disabled={phase!=='setup'} title="Static reason appended after the country on every adversary message — keep it plausible to avoid signaling 'this is an adversary'." style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,width:260}}/>
       <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'}/>
