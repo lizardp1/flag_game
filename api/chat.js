@@ -5,13 +5,6 @@ export default async function handler(req) {
     return new Response('Method Not Allowed', { status: 405 })
   }
 
-  const password = req.headers.get('x-app-password') || ''
-  if (!process.env.APP_PASSWORD || password !== process.env.APP_PASSWORD) {
-    return new Response(
-      JSON.stringify({ error: { message: 'Unauthorized — wrong or missing app password.' } }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
   if (!process.env.OPENAI_API_KEY) {
     return new Response(
       JSON.stringify({ error: { message: 'Server is missing OPENAI_API_KEY env var.' } }),

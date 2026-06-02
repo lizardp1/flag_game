@@ -1193,14 +1193,14 @@ function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,
 }
 
 /* ═══════ ROOT ═══════ */
-const PROVIDER_ORDER=['openai','anthropic','google'];
+const PROVIDER_ORDER=['anthropic','google'];
 function ApiKeyBar({keys,setKeys}){
   const[shown,setShown]=useState(false);
-  const live=anyKey(keys);
   const set=(p,v)=>setKeys(k=>({...k,[p]:v.trim()}));
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
     <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
-      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Scripted heuristic (no key)'}</span>
+      <span style={{color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live API mode</span>
+      <span style={{color:T.dim,whiteSpace:'nowrap'}}>OpenAI: server-proxied</span>
       {PROVIDER_ORDER.map(p=>(<span key={p} style={{display:'flex',alignItems:'center',gap:6}}>
         <span style={{color:T.dim,whiteSpace:'nowrap'}}>{PROVIDERS[p].label} key</span>
         <input type={shown?'text':'password'} placeholder={PROVIDERS[p].placeholder} value={keys[p]} onChange={e=>set(p,e.target.value)}
@@ -1208,7 +1208,7 @@ function ApiKeyBar({keys,setKeys}){
         {keys[p]&&<button onClick={()=>set(p,'')} title={`Clear ${PROVIDERS[p].label} key`} style={{padding:'4px 7px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:'#e87b6f',cursor:'pointer',fontSize:10}}>×</button>}
       </span>))}
       <button onClick={()=>setShown(s=>!s)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.mut,cursor:'pointer',fontSize:10}}>{shown?'hide':'show'}</button>
-      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10,maxWidth:520}}>Stored in your browser (localStorage).</span>
+      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10,maxWidth:520}}>Anthropic/Google keys are optional and stay in your browser.</span>
     </div>
   </div>);
 }

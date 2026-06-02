@@ -46,14 +46,14 @@ export const MODELS = [
 
 const MODEL_BY_ID = Object.fromEntries(MODELS.map(m => [m.id, m]))
 
-export function anyKey(keys) {
-  return !!(keys && (keys.openai || keys.anthropic || keys.google))
+// OpenAI is always available — it's proxied server-side, no user key needed.
+export function anyKey(_keys) {
+  return true
 }
 
-// Models whose provider has a key entered. Hidden (not greyed) when no key.
+// OpenAI models always listed; Anthropic/Google appear only when their key is set.
 export function availableModels(keys) {
-  if (!keys) return []
-  return MODELS.filter(m => keys[m.provider])
+  return MODELS.filter(m => m.provider === 'openai' || (keys && keys[m.provider]))
 }
 
 export function modelMeta(id) {
@@ -195,31 +195,22 @@ const ADAPTERS = {
       for (const t of turns) {
         if (t.role === 'user') {
           const content = [{ type: 'text', text: t.text }]
-          // Agent crop is ~150x100 — 'low' uses a flat 85-token rep instead of
-          // tiling at 'high' (~255 tokens), ~30-50% faster per call.
           if (t.image) content.push({ type: 'image_url', image_url: { url: t.image, detail: 'low' } })
           messages.push({ role: 'user', content })
         } else {
           messages.push({ role: 'assistant', content: t.text })
         }
       }
-      // gpt-4.1-mini 500s on response_format=json_object + vision; skip it.
-      // Reasoning models (gpt-5.x) burn the token budget on hidden reasoning
-      // before any output — give them headroom AND tell them to think
-      // minimally (this is a one-word-answer task). They also reject
-      // response_format=json_object in many configurations; rely on
-      // extractJson for parsing instead.
       const isReasoning = /^gpt-5(\.|-|$)/.test(model)
-      // 1500 caps total work (reasoning + output) for gpt-5.x while still
-      // leaving plenty of room past the ~50-token JSON answer. 4000 made
-      // gpt-5.4 burn 10-15s on reasoning at effort=low; 1500 brings it
-      // back to 3-5s without starving output.
       const body = { model, messages, max_completion_tokens: isReasoning ? 1500 : 500 }
       if (isReasoning) body.reasoning_effort = 'low'
       if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
+      // OpenAI is proxied server-side via /api/chat (Vercel edge function holds
+      // the key). Anthropic and Google still call their provider directly with
+      // user-supplied keys.
       return {
-        url: 'https://api.openai.com/v1/chat/completions',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        url: '/api/chat',
+        headers: { 'Content-Type': 'application/json' },
         body,
       }
     },
@@ -290,7 +281,8 @@ export async function llmInteraction({
   if (!def) throw new Error(`Unknown model: ${model}`)
   const provider = def.provider
   const key = (keys && keys[provider]) || (provider === 'openai' ? apiKey : null)
-  if (!key) throw new Error(`${PROVIDERS[provider].label} API key required for ${model}.`)
+  // OpenAI is proxied — no user key required. Other providers still BYOK.
+  if (!key && provider !== 'openai') throw new Error(`${PROVIDERS[provider].label} API key required for ${model}.`)
   const adapter = ADAPTERS[provider]
 
   const text = userPrompt({ memoryLines, m })
