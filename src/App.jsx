@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import REAL_GRIDS_RAW from './realGrids.json';
-import { rasterizeFlag, cropAgentView, llmInteraction, PROVIDERS, availableModels, anyKey, modelMeta } from './llm';
+import { rasterizeFlag, cropAgentView, llmInteraction, availableModels, anyKey, modelMeta } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -1193,22 +1193,10 @@ function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,
 }
 
 /* ═══════ ROOT ═══════ */
-const PROVIDER_ORDER=['anthropic','google'];
-function ApiKeyBar({keys,setKeys}){
-  const[shown,setShown]=useState(false);
-  const set=(p,v)=>setKeys(k=>({...k,[p]:v.trim()}));
+function ApiKeyBar(){
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
-    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
+    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,fontSize:11}}>
       <span style={{color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live API mode</span>
-      <span style={{color:T.dim,whiteSpace:'nowrap'}}>OpenAI: server-proxied</span>
-      {PROVIDER_ORDER.map(p=>(<span key={p} style={{display:'flex',alignItems:'center',gap:6}}>
-        <span style={{color:T.dim,whiteSpace:'nowrap'}}>{PROVIDERS[p].label} key</span>
-        <input type={shown?'text':'password'} placeholder={PROVIDERS[p].placeholder} value={keys[p]} onChange={e=>set(p,e.target.value)}
-          style={{flex:'1 1 170px',minWidth:130,maxWidth:260,padding:'4px 8px',borderRadius:5,border:`1px solid ${keys[p]?'#3a8a64':T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
-        {keys[p]&&<button onClick={()=>set(p,'')} title={`Clear ${PROVIDERS[p].label} key`} style={{padding:'4px 7px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:'#e87b6f',cursor:'pointer',fontSize:10}}>×</button>}
-      </span>))}
-      <button onClick={()=>setShown(s=>!s)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.mut,cursor:'pointer',fontSize:10}}>{shown?'hide':'show'}</button>
-      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10,maxWidth:520}}>Anthropic/Google keys are optional and stay in your browser.</span>
     </div>
   </div>);
 }
@@ -1278,16 +1266,9 @@ function FlagGameSeries({keys}){
 }
 
 export default function App(){
-  const[keys,setKeys]=useState(()=>({
-    // Migrate the legacy single-key store into the OpenAI slot.
-    openai:localStorage.getItem('flag_game_key_openai')||localStorage.getItem('flag_game_api_key')||'',
-    anthropic:localStorage.getItem('flag_game_key_anthropic')||'',
-    google:localStorage.getItem('flag_game_key_google')||'',
-  }));
-  useEffect(()=>{['openai','anthropic','google'].forEach(p=>{if(keys[p])localStorage.setItem(`flag_game_key_${p}`,keys[p]);else localStorage.removeItem(`flag_game_key_${p}`);});},[keys]);
   return(<div style={S.page}>
-    <ApiKeyBar keys={keys} setKeys={setKeys}/>
-    <FlagGameSeries keys={keys}/>
+    <ApiKeyBar/>
+    <FlagGameSeries/>
     <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
   </div>);
 }
