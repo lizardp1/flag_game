@@ -1256,7 +1256,7 @@ const LOC_SVG={};LOCATIONS.forEach(l=>{LOC_SVG[l.name]=locationSvg(l);});
 function FlagGameSeries({keys}){
   return(<>
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among bounded agents that see only fragments.</p></header>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>The world is bigger than any of us. We bring our unique minds together to see the whole picture.</p></header>
     <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
       <FlagGame keys={keys}/>
       <FirstPersonGame keys={keys}/>
