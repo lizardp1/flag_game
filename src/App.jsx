@@ -917,7 +917,7 @@ function AdversarialGame({keys}){
   return(<div style={{marginTop:48,borderTop:`1px solid ${T.bdr}`,paddingTop:32}}>
     <header style={{textAlign:'center',marginBottom:20}}>
       <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>Adversarial <span style={{fontWeight:700,fontStyle:'italic'}}>Flip</span></h2>
-      <p style={{fontSize:13,color:T.mut,maxWidth:520,margin:'0 auto',lineHeight:1.6}}>Place agents on the flag, then mark some as adversaries. Adversaries always claim the target country — can they flip the honest agents?</p>
+      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Click on the flag to place an agent. Shift+click a placed agent to toggle it adversarial — adversaries always claim the target country. Can they flip the honest agents?</p>
     </header>
     <div style={S.bar}>
       <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
@@ -982,7 +982,7 @@ function FirstPersonGame({keys}){
   const aiGuessesScripted=useMemo(()=>aiAgents.map(a=>bestGuess(analyzeCrop(grid,a.top,a.left),a.memory)),[aiAgents,grid]);
   const aiGuesses=live?aiGuessesLLM:aiGuessesScripted;
   useEffect(()=>{if(avail.length&&!avail.some(m=>m.id===model))setModel(avail[0].id);},[avail,model]);
-  const candidates=useMemo(()=>{const an=analyzeCrop(grid,playerTop,playerLeft);const top=topCandidates(an,8);const set=new Set(top);if(truth)set.add(truth);aiGuesses.forEach(g=>{if(g)set.add(g);});return[...set].sort();},[grid,playerTop,playerLeft,aiGuesses,truth]);
+  const candidates=useMemo(()=>{const TARGET=10;const set=new Set();if(truth)set.add(truth);const an=analyzeCrop(grid,playerTop,playerLeft);topCandidates(an,TARGET).forEach(c=>{if(set.size<TARGET)set.add(c);});aiGuesses.forEach(g=>{if(g&&set.size<TARGET)set.add(g);});if(set.size<TARGET){const rest=F.map(f=>f.c).filter(c=>!set.has(c));for(let i=rest.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]];}for(const c of rest){if(set.size>=TARGET)break;set.add(c);}}return[...set].sort((a,b)=>a.localeCompare(b));},[grid,playerTop,playerLeft,aiGuesses,truth]);
   useEffect(()=>{let cancelled=false;const svg=FLAG_SVG[truth];if(!svg)return;rasterizeFlag(svg).then(c=>{if(!cancelled){canvasRef.current=c;cropCacheRef.current.clear();}}).catch(()=>{});return()=>{cancelled=true;};},[truth]);
   const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
 
