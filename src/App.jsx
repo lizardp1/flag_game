@@ -801,7 +801,7 @@ function FlagGame({keys}){
       {phase==='done'&&sim.current&&sim.current.gossipLog&&<MechanisticTrace agents={agents} allG={allG} gossipLog={sim.current.gossipLog} truth={truthFlag.c} pe={pe}/>}
       <div style={{marginTop:24,padding:'18px 22px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:11,maxWidth:740,margin:'24px auto 0'}}>
         <h3 style={{fontSize:14,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>How it works</h3>
-        <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>{F.length} real country flags are embedded as SVGs (from the flag-icons project). With an API key set, each step the chosen speaker calls its selected model (OpenAI, Anthropic, or Google) with its private crop and its transcript memory of prior interactions, and returns JSON {`{country, reason}`} — the listener appends that line to its own memory (last {H_MEM}). The prompts mirror those used in the paper (nnd/flag_game/prompts.py), exposing the interplay between private visual evidence and social signal. Without any key, agents use a local color-matching heuristic. Stops after {CON_RUNS} consecutive probe rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or N×14 steps.</p>
+        <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>Each agent sees only a small fragment of a hidden flag. Step by step, one agent shares its current guess with another, who adds it to its memory of recent observations. The game ends when agents settle on the same country for {CON_RUNS} consecutive rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or after N×14 steps.</p>
       </div>
     </div></div>);
 }
