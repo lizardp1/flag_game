@@ -331,7 +331,11 @@ def run() -> None:
     parser.add_argument("--models", action="append", default=None, help="Model name(s). Repeat or comma-separate.")
     parser.add_argument("--B", type=int, default=50, help="Repeated isolated probes per selected crop.")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--backend", choices=("openai", "anthropic", "scripted"), default="openai")
+    parser.add_argument(
+        "--backend",
+        choices=("openai", "anthropic", "transformers_vlm", "scripted"),
+        default="openai",
+    )
     parser.add_argument("--country-pool", default="stripe_expanded_24")
     parser.add_argument("--canvas-width", type=int, default=24)
     parser.add_argument("--canvas-height", type=int, default=16)
@@ -441,7 +445,7 @@ def run() -> None:
         )
 
     backends: dict[str, Any] = {}
-    prepared_crops: dict[tuple[str, str], str] = {}
+    prepared_crops: dict[tuple[str, str], Any] = {}
     countries = [flag.country for flag in get_country_pool(args.country_pool)]
     allowed_json = json.dumps(countries, ensure_ascii=True)
     debug_dir = out_dir / "debug"

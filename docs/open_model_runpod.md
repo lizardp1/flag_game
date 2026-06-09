@@ -125,3 +125,52 @@ python scripts/run_qwen_vl_smoke.py \
 ```
 
 If you hit memory pressure, rerun without `--activation-summary`.
+
+## Pairwise Flag-Game Smoke
+
+After the one-image smoke passes, run the same Qwen model through the actual
+pairwise `nnd.flag_game` runner. This uses `m=3`, so agent messages include a
+country plus a one-sentence reason.
+
+```bash
+python -m nnd.cli run \
+  --config configs/open_models/qwen2_5_vl_7b_pairwise_smoke.yaml \
+  --out runs/qwen_pairwise_smoke \
+  --backend transformers_vlm
+```
+
+The config keeps the run intentionally tiny:
+
+- `N=2`, `T=2`, `H=2`
+- `probe_workers=1` to serialize local GPU generation
+- `output.make_plots=false` to avoid spending time on plotting during smoke tests
+
+The backend is selected by:
+
+```yaml
+backend: transformers_vlm
+model: Qwen/Qwen2.5-VL-7B-Instruct
+```
+
+Useful environment switches for the local Transformers backend:
+
+```bash
+export NND_TRANSFORMERS_DTYPE=bfloat16
+export NND_TRANSFORMERS_DEVICE_MAP=auto
+export NND_TRANSFORMERS_ATTN_IMPLEMENTATION=auto
+```
+
+If you install `flash-attn`, you can try:
+
+```bash
+export NND_TRANSFORMERS_ATTN_IMPLEMENTATION=flash_attention_2
+```
+
+Expected outputs include the normal paper-run artifacts under
+`runs/qwen_pairwise_smoke`, plus local crop PNGs under the backend debug
+directory:
+
+```text
+runs/qwen_pairwise_smoke/
+runs/qwen_pairwise_smoke/debug/Qwen_Qwen2.5-VL-7B-Instruct/prepared_crops/
+```

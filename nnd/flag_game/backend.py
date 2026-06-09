@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import threading
 import time
 from typing import Any, Callable
 
@@ -25,7 +27,7 @@ from nnd.flag_game.parsing import (
     parse_probe_response,
 )
 from nnd.flag_game.pricing import MODEL_PRICING_USD_PER_1M_TOKENS
-from nnd.flag_game.render import image_to_data_uri
+from nnd.flag_game.render import image_to_data_uri, image_to_png_bytes
 from nnd.net import force_ipv4
 
 
@@ -528,6 +530,324 @@ class FlagGameAnthropicBackend:
 
 
 @dataclass
+class FlagGameTransformersVLMBackend:
+    model: str
+    temperature: float
+    top_p: float
+    max_tokens: int
+    debug_dir: Path
+    image_detail: str = "original"
+    social_susceptibility: float = 0.5
+    prompt_social_susceptibility: bool = True
+    prompt_style: str = "closed_country_list"
+
+    def __post_init__(self) -> None:
+        try:
+            import torch
+            import torchvision  # noqa: F401
+            from qwen_vl_utils import process_vision_info
+            from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+        except ImportError as exc:
+            raise RuntimeError(
+                "Missing local VLM dependencies. Run: "
+                "python -m pip install -r requirements-open-models.txt"
+            ) from exc
+
+        self.torch = torch
+        self.process_vision_info = process_vision_info
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+        self.usage_rows: list[dict[str, Any]] = []
+        self._generate_lock = threading.Lock()
+
+        dtype = self._resolve_torch_dtype(os.environ.get("NND_TRANSFORMERS_DTYPE", "bfloat16"))
+        device_map = os.environ.get("NND_TRANSFORMERS_DEVICE_MAP", "auto").strip() or "auto"
+        attn_implementation = (
+            os.environ.get("NND_TRANSFORMERS_ATTN_IMPLEMENTATION", "auto").strip() or "auto"
+        )
+        trust_remote_code = _env_flag("NND_TRANSFORMERS_TRUST_REMOTE_CODE", False)
+        low_cpu_mem_usage = _env_flag("NND_TRANSFORMERS_LOW_CPU_MEM_USAGE", True)
+
+        model_kwargs: dict[str, Any] = {
+            "torch_dtype": dtype,
+            "device_map": device_map,
+            "trust_remote_code": trust_remote_code,
+            "low_cpu_mem_usage": low_cpu_mem_usage,
+        }
+        if attn_implementation != "auto":
+            model_kwargs["attn_implementation"] = attn_implementation
+
+        self.model_obj = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            self.model,
+            **model_kwargs,
+        )
+        self.processor = AutoProcessor.from_pretrained(
+            self.model,
+            trust_remote_code=trust_remote_code,
+        )
+        self.model_obj.eval()
+
+    def prepare_crop(self, crop_image: np.ndarray) -> Path:
+        png_bytes = image_to_png_bytes(crop_image)
+        digest = hashlib.sha256(png_bytes).hexdigest()[:16]
+        path = self.debug_dir / "prepared_crops" / f"crop_{digest}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_bytes(png_bytes)
+        return path.resolve()
+
+    def interaction(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: Path,
+        memory_lines: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        messages = self._qwen_multimodal_messages(
+            text=prompt_module.interaction_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_path=prepared_crop,
+        )
+        return self._call_with_retries(
+            messages,
+            lambda text: self._parse_interaction_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.interaction_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+        )
+
+    def probe(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: Path,
+        memory_lines: list[str],
+        m: int = 1,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        messages = self._qwen_multimodal_messages(
+            text=prompt_module.probe_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_path=prepared_crop,
+        )
+        return self._call_with_retries(
+            messages,
+            lambda text: self._parse_probe_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.probe_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+        )
+
+    def _prompt_module(self) -> Any:
+        if self.prompt_style == "closed_country_list":
+            return prompts
+        if self.prompt_style == "open_country":
+            return open_prompts
+        raise ValueError(f"Unsupported prompt_style: {self.prompt_style}")
+
+    def _parse_interaction_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_interaction_response(text, countries, m)
+        return parse_interaction_response(text, countries, m)
+
+    def _parse_probe_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_probe_response(text, countries, m)
+        return parse_probe_response(text, countries, m)
+
+    def _qwen_multimodal_messages(
+        self,
+        *,
+        text: str,
+        crop_path: Path,
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": self._prompt_module().system_prompt()}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": Path(crop_path).resolve().as_uri()},
+                    {"type": "text", "text": text},
+                ],
+            },
+        ]
+
+    def _call(self, messages: list[dict[str, Any]]) -> str:
+        text = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        image_inputs, video_inputs = self.process_vision_info(messages)
+        inputs = self.processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+        device = self._infer_input_device()
+        inputs = {
+            key: value.to(device) if hasattr(value, "to") else value
+            for key, value in inputs.items()
+        }
+        generation_kwargs: dict[str, Any] = {
+            "max_new_tokens": self.max_tokens,
+            "do_sample": self.temperature > 0.0,
+        }
+        if self.temperature > 0.0:
+            generation_kwargs["temperature"] = self.temperature
+            generation_kwargs["top_p"] = self.top_p
+
+        with self._generate_lock:
+            with self.torch.inference_mode():
+                generated_ids = self.model_obj.generate(**inputs, **generation_kwargs)
+        prompt_length = inputs["input_ids"].shape[1]
+        generated_trimmed = generated_ids[:, prompt_length:]
+        outputs = self.processor.batch_decode(
+            generated_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
+        self._record_usage(
+            prompt_tokens=int(prompt_length),
+            completion_tokens=int(generated_trimmed.shape[1]),
+        )
+        return (outputs[0] if outputs else "").strip()
+
+    def _record_usage(self, *, prompt_tokens: int, completion_tokens: int) -> None:
+        self.usage_rows.append(
+            {
+                "model": self.model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+                "estimated_cost_usd": 0.0,
+            }
+        )
+
+    def usage_summary(self) -> dict[str, Any]:
+        prompt_tokens = sum(int(row.get("prompt_tokens", 0)) for row in self.usage_rows)
+        completion_tokens = sum(int(row.get("completion_tokens", 0)) for row in self.usage_rows)
+        total_tokens = sum(int(row.get("total_tokens", 0)) for row in self.usage_rows)
+        return {
+            "model": self.model,
+            "api_call_count": len(self.usage_rows),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": 0.0,
+            "pricing_known": True,
+        }
+
+    def _call_with_retries(
+        self,
+        messages: list[dict[str, Any]],
+        parser: Callable[[str], Any],
+        retry_builder: Callable[[ParseError], str] | None = None,
+        max_retries: int = 2,
+    ) -> Any:
+        attempts: list[dict[str, Any]] = []
+        current_messages = list(messages)
+        for attempt in range(max_retries + 1):
+            response_text = self._call_with_backoff(current_messages)
+            attempts.append({"messages": current_messages, "response": response_text})
+            try:
+                return parser(response_text)
+            except ParseError as exc:
+                if attempt >= max_retries:
+                    self._write_debug(attempts)
+                    raise
+                retry_text = (
+                    retry_builder(exc)
+                    if retry_builder is not None
+                    else "Format error. Respond with STRICT JSON only matching the required schema. No extra text."
+                )
+                current_messages = list(current_messages) + [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": retry_text}],
+                    }
+                ]
+        self._write_debug(attempts)
+        raise ParseError("Exceeded retry limit")
+
+    def _call_with_backoff(
+        self,
+        messages: list[dict[str, Any]],
+        max_retries: int = 3,
+        base_delay: float = 2.0,
+        max_delay: float = 20.0,
+    ) -> str:
+        delay = base_delay
+        for attempt in range(max_retries + 1):
+            try:
+                return self._call(messages)
+            except Exception as exc:
+                if attempt >= max_retries:
+                    raise exc
+                time.sleep(delay)
+                delay = min(delay * 2.0, max_delay)
+        raise RuntimeError("Unreachable backoff state")
+
+    def _write_debug(self, attempts: list[dict[str, Any]]) -> None:
+        timestamp = int(time.time() * 1000)
+        path = self.debug_dir / f"parse_failure_{timestamp}.json"
+        with open(path, "w") as handle:
+            json.dump({"attempts": attempts}, handle, indent=2, default=str)
+
+    def _resolve_torch_dtype(self, value: str) -> Any:
+        cleaned = value.strip().lower()
+        if cleaned == "auto":
+            return "auto"
+        if cleaned == "bfloat16":
+            return self.torch.bfloat16
+        if cleaned == "float16":
+            return self.torch.float16
+        if cleaned == "float32":
+            return self.torch.float32
+        raise ValueError(
+            "NND_TRANSFORMERS_DTYPE must be one of: auto, bfloat16, float16, float32"
+        )
+
+    def _infer_input_device(self) -> Any:
+        if hasattr(self.model_obj, "device"):
+            return self.model_obj.device
+        try:
+            return next(self.model_obj.parameters()).device
+        except StopIteration:
+            return self.torch.device("cuda" if self.torch.cuda.is_available() else "cpu")
+
+
+@dataclass
 class ScriptedFlagGameBackend:
     seed: int = 0
     social_susceptibility: float = 0.5
@@ -711,7 +1031,12 @@ def build_backend(
     prompt_social_susceptibility: bool,
     prompt_style: str = "closed_country_list",
     country_lookup: dict[str, FlagSpec] | None = None,
-) -> FlagGameOpenAIBackend | FlagGameAnthropicBackend | ScriptedFlagGameBackend:
+) -> (
+    FlagGameOpenAIBackend
+    | FlagGameAnthropicBackend
+    | FlagGameTransformersVLMBackend
+    | ScriptedFlagGameBackend
+):
     if backend_name == "scripted":
         return ScriptedFlagGameBackend(
             seed=seed,
@@ -730,14 +1055,28 @@ def build_backend(
             prompt_social_susceptibility=prompt_social_susceptibility,
             prompt_style=prompt_style,
         )
-    return FlagGameOpenAIBackend(
-        model=model,
-        temperature=temperature,
-        top_p=top_p,
-        max_tokens=max_tokens,
-        debug_dir=debug_dir,
-        image_detail=image_detail,
-        social_susceptibility=social_susceptibility,
-        prompt_social_susceptibility=prompt_social_susceptibility,
-        prompt_style=prompt_style,
-    )
+    if backend_name == "transformers_vlm":
+        return FlagGameTransformersVLMBackend(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            debug_dir=debug_dir,
+            image_detail=image_detail,
+            social_susceptibility=social_susceptibility,
+            prompt_social_susceptibility=prompt_social_susceptibility,
+            prompt_style=prompt_style,
+        )
+    if backend_name == "openai":
+        return FlagGameOpenAIBackend(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            debug_dir=debug_dir,
+            image_detail=image_detail,
+            social_susceptibility=social_susceptibility,
+            prompt_social_susceptibility=prompt_social_susceptibility,
+            prompt_style=prompt_style,
+        )
+    raise ValueError(f"Unsupported flag-game backend: {backend_name!r}")

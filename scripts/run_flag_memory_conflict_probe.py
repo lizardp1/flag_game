@@ -158,7 +158,11 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--backend", default=None, choices=["openai", "anthropic", "scripted"])
+    parser.add_argument(
+        "--backend",
+        default=None,
+        choices=["openai", "anthropic", "transformers_vlm", "scripted"],
+    )
     parser.add_argument("--model", action="append", dest="models", default=None)
     parser.add_argument("--m", action="append", dest="m_values", type=int, choices=[1, 3], default=None)
     parser.add_argument("--country-pool", default="stripe_plus_real_triangle_28")

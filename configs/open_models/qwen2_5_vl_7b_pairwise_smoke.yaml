@@ -1,0 +1,25 @@
+backend: transformers_vlm
+model: Qwen/Qwen2.5-VL-7B-Instruct
+N: 2
+T: 2
+H: 2
+interaction_m: 3
+country_pool: stripe_expanded_24
+canvas_width: 24
+canvas_height: 16
+tile_width: 3
+tile_height: 4
+render_scale: 25
+temperature: 0.0
+top_p: 1.0
+max_tokens: 160
+probe_every: 1
+probe_workers: 1
+seed_workers: 1
+condition_workers: 1
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+disable_memory_updates: false
+output:
+  save_crop_images: true
+  make_plots: false

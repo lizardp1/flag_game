@@ -80,7 +80,11 @@ def parse_args() -> argparse.Namespace:
             "for the standard audit path, otherwise <out>/data."
         ),
     )
-    parser.add_argument("--backend", default=None, choices=["openai", "anthropic", "scripted"])
+    parser.add_argument(
+        "--backend",
+        default=None,
+        choices=["openai", "anthropic", "transformers_vlm", "scripted"],
+    )
     parser.add_argument("--model", action="append", dest="models", default=None)
     parser.add_argument("--country-pool", default="stripe_plus_real_triangle_28")
     parser.add_argument(

@@ -15,7 +15,7 @@ class OutputConfig(BaseModel):
 
 
 class FlagGameConfig(BaseModel):
-    backend: Literal["openai", "anthropic", "scripted"] = "openai"
+    backend: Literal["openai", "anthropic", "transformers_vlm", "scripted"] = "openai"
     model: str = "gpt-4o-mini"
     agent_models: list[str] | None = None
     speaker_weights: list[float] | None = None
