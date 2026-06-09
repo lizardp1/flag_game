@@ -1,0 +1,12 @@
+# Install after the base RunPod bootstrap:
+#   source .venv/bin/activate
+#   python -m pip install -r requirements-open-models.txt
+#
+# Use a RunPod PyTorch/CUDA template so torch is already matched to the image's
+# CUDA stack. This file intentionally avoids reinstalling torch/torchvision.
+-r requirements-runpod.txt
+
+accelerate>=1.1.0
+qwen-vl-utils>=0.0.10
+safetensors>=0.4.5
+transformers>=4.49.0

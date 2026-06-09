@@ -88,3 +88,4 @@ python -m nnd.cli run \
   committed to git.
 - Later open-model/mech-interp work should use this Pod-local path so we can run
   Transformers/Accelerate/NNsight and capture internal activations directly.
+- For the first local open-model smoke test, see `docs/open_model_runpod.md`.
