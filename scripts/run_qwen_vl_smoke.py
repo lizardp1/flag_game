@@ -42,7 +42,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--render-scale", type=int, default=25)
     parser.add_argument("--crop-top", type=int, default=None)
     parser.add_argument("--crop-left", type=int, default=None)
-    parser.add_argument("--max-new-tokens", type=int, default=96)
+    parser.add_argument("--m", type=int, choices=[1, 2, 3], default=3)
+    parser.add_argument("--max-new-tokens", type=int, default=160)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument(
@@ -90,6 +91,7 @@ def main() -> None:
             {
                 "status": "dry_run",
                 "model_id": args.model_id,
+                "m": args.m,
                 "prompt_path": str(out_dir / "prompt.txt"),
                 "crop_path": str(artifact_dir / "agent_crop.png"),
                 "stimulus": stimulus["metadata"],
@@ -106,7 +108,7 @@ def main() -> None:
     )
     inputs = prepare_inputs(processor, messages, model, torch)
     raw_output = generate_response(model, processor, inputs, args, torch)
-    parsed = parse_response(raw_output, stimulus["metadata"]["countries"])
+    parsed = parse_response(raw_output, stimulus["metadata"]["countries"], args.m)
     activation_summary = (
         summarize_hidden_states(model, inputs, torch)
         if args.activation_summary
@@ -116,6 +118,7 @@ def main() -> None:
     result = {
         "status": "ok",
         "model_id": args.model_id,
+        "m": args.m,
         "raw_output": raw_output,
         "parsed": parsed,
         "activation_summary": activation_summary,
@@ -164,7 +167,7 @@ def build_stimulus(args: argparse.Namespace) -> dict[str, Any]:
     user_text = prompts.probe_text(
         countries=countries,
         memory_lines=[],
-        m=1,
+        m=args.m,
         social_susceptibility=0.5,
         prompt_social_susceptibility=False,
     )
@@ -174,6 +177,7 @@ def build_stimulus(args: argparse.Namespace) -> dict[str, Any]:
         "user_text": user_text,
         "metadata": {
             "truth_country": truth_flag.country,
+            "m": args.m,
             "country_pool": args.country_pool,
             "countries": countries,
             "crop_box": crop_box.to_dict(),
@@ -294,9 +298,9 @@ def generate_response(model: Any, processor: Any, inputs: dict[str, Any], args: 
     return (outputs[0] if outputs else "").strip()
 
 
-def parse_response(raw_output: str, countries: list[str]) -> dict[str, Any]:
+def parse_response(raw_output: str, countries: list[str], m: int) -> dict[str, Any]:
     try:
-        message = parse_probe_response(raw_output, countries=countries, m=1)
+        message = parse_probe_response(raw_output, countries=countries, m=m)
     except ParseError as exc:
         return {"valid": False, "error": str(exc), "country": None}
     return {"valid": True, **message.to_dict()}

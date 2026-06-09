@@ -81,6 +81,13 @@ Or use the RunPod wrapper:
 
 ## Real Qwen Smoke
 
+The default smoke uses `m=3`, so the model must return both a country and a
+one-sentence reason:
+
+```json
+{"country":"<one allowed country>","reason":"<one sentence>"}
+```
+
 ```bash
 python scripts/run_qwen_vl_smoke.py \
   --model-id Qwen/Qwen2.5-VL-7B-Instruct \
@@ -94,6 +101,8 @@ Equivalent wrapper command:
   --model-id Qwen/Qwen2.5-VL-7B-Instruct \
   --out runs/qwen_vl_smoke
 ```
+
+To reproduce the earlier country-only smoke, add `--m 1`.
 
 The script writes:
 
