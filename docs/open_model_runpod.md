@@ -33,6 +33,21 @@ python -m pip install -r requirements-open-models.txt
 If you did not use a PyTorch template, install the correct CUDA build of PyTorch
 first, then rerun the command above.
 
+Qwen's processor requires `torchvision`. If you installed the open-model
+requirements before this line was added, rerun:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements-open-models.txt
+```
+
+If your PyTorch template has a custom Torch build and pip tries to replace it,
+install only the missing package instead:
+
+```bash
+python -m pip install torchvision --no-deps
+```
+
 ## Cache Location
 
 Keep Hugging Face downloads on the persistent `/workspace` volume:

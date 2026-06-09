@@ -204,6 +204,7 @@ def build_qwen_messages(*, system_text: str, user_text: str, crop_path: Path) ->
 def load_model_and_processor(args: argparse.Namespace) -> tuple[Any, Any, Any]:
     try:
         import torch
+        import torchvision  # noqa: F401
         from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
     except ImportError as exc:
         raise RuntimeError(
