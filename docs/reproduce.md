@@ -5,13 +5,22 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install -r requirements-runpod.txt
 ```
+
+On a fresh RunPod pod, from the repo root:
+
+```bash
+./scripts/runpod_bootstrap.sh
+./scripts/runpod_smoke_test.sh
+```
+
+For the full clone/pull workflow on a regular RunPod Pod, see `docs/runpod_pod.md`.
 
 ## Baseline tests
 
 ```bash
-python -m unittest discover -s tests
+./scripts/runpod_smoke_test.sh
 ```
 
 ## Final Paper Charts
@@ -30,7 +39,7 @@ The bundle contains final figure files in `paper/exports/figures/`, source table
 ## Pairwise control run
 
 ```bash
-python -m nnd.cli run --config configs/pairwise_control.yaml --out runs/pairwise_control --trials 1
+python -m nnd.cli run --config configs/flag_game/stripe_easy_v1.yaml --out runs/pairwise_control --backend scripted --override output.make_plots=false
 ```
 
 ## Group-wise development status

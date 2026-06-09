@@ -1,0 +1,6 @@
+# Install from the repo root with:
+#   python -m pip install -r requirements-runpod.txt
+#
+# Keep this file thin. Core dependency versions live in pyproject.toml so local
+# and RunPod installs use the same package metadata.
+-e .[paper]
