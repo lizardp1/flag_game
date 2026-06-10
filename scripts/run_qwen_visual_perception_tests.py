@@ -91,17 +91,18 @@ class Stimulus:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run visual-only perception tests for local Qwen VLMs: solid colors, "
+            "Run visual-only perception tests for local open VLMs: solid colors, "
             "stripe orientation/count/order, and pixel-size sweeps."
         )
     )
     parser.add_argument(
         "--backend",
-        choices=["qwen", "qwen2_5", "qwen3", "oracle"],
-        default="qwen",
+        choices=["auto", "qwen", "qwen2_5", "qwen3", "llava", "kimi_vl", "oracle"],
+        default="auto",
         help=(
-            "Use qwen to auto-select a Qwen loader from the model id, qwen2_5 or "
-            "qwen3 to force a loader, or oracle for local output/summary smoke tests."
+            "Use auto to infer a loader from the model id. Use qwen, qwen2_5, "
+            "qwen3, llava, or kimi_vl to force a loader, or oracle for local "
+            "output/summary smoke tests."
         ),
     )
     parser.add_argument(
@@ -405,6 +406,8 @@ def save_stimuli(artifact_dir: Path, out_dir: Path, stimuli: list[Stimulus]) -> 
 def build_runner(args: argparse.Namespace, model_id: str) -> Any:
     if args.backend == "oracle":
         return OracleRunner()
+    if args.backend == "auto":
+        return build_auto_runner(args, model_id)
     if args.backend == "qwen2_5":
         return Qwen25Runner(args, model_id)
     if args.backend == "qwen3":
@@ -413,7 +416,26 @@ def build_runner(args: argparse.Namespace, model_id: str) -> Any:
         if is_qwen3_model(model_id):
             return Qwen3Runner(args, model_id)
         return Qwen25Runner(args, model_id)
+    if args.backend == "llava":
+        return LlavaRunner(args, model_id)
+    if args.backend == "kimi_vl":
+        return KimiVLRunner(args, model_id)
     raise ValueError(f"Unsupported backend: {args.backend}")
+
+
+def build_auto_runner(args: argparse.Namespace, model_id: str) -> Any:
+    if is_qwen_model(model_id):
+        if is_qwen3_model(model_id):
+            return Qwen3Runner(args, model_id)
+        return Qwen25Runner(args, model_id)
+    if is_llava_model(model_id):
+        return LlavaRunner(args, model_id)
+    if is_kimi_vl_model(model_id):
+        return KimiVLRunner(args, model_id)
+    raise ValueError(
+        f"Could not infer backend for {model_id!r}. "
+        "Set --backend to qwen2_5, qwen3, llava, or kimi_vl."
+    )
 
 
 def release_runner(runner: Any) -> None:
@@ -482,9 +504,68 @@ class Qwen3Runner:
             self.torch.cuda.empty_cache()
 
 
+class LlavaRunner:
+    def __init__(self, args: argparse.Namespace, model_id: str) -> None:
+        self.args = args
+        self.model_id = model_id
+        self.model, self.processor, self.torch = load_llava_model_and_processor(args, model_id)
+
+    def __call__(self, stimulus: Stimulus, image_path: Path) -> str:
+        messages = build_llava_messages(
+            user_text=build_visual_user_text(stimulus.prompt),
+        )
+        inputs = prepare_llava_inputs(self.processor, messages, image_path, self.model, self.torch)
+        return generate_response(self.model, self.processor, inputs, self.args, self.torch)
+
+    def close(self) -> None:
+        del self.model
+        del self.processor
+        if bool(self.torch.cuda.is_available()):
+            self.torch.cuda.empty_cache()
+
+
+class KimiVLRunner:
+    def __init__(self, args: argparse.Namespace, model_id: str) -> None:
+        self.args = args
+        self.model_id = model_id
+        self.model, self.processor, self.torch = load_kimi_vl_model_and_processor(args, model_id)
+
+    def __call__(self, stimulus: Stimulus, image_path: Path) -> str:
+        messages = build_kimi_vl_messages(
+            user_text=build_visual_user_text(stimulus.prompt),
+            image_path=image_path,
+        )
+        inputs = prepare_kimi_vl_inputs(self.processor, messages, image_path, self.model, self.torch)
+        return generate_response(self.model, self.processor, inputs, self.args, self.torch)
+
+    def close(self) -> None:
+        del self.model
+        del self.processor
+        if bool(self.torch.cuda.is_available()):
+            self.torch.cuda.empty_cache()
+
+
+def is_qwen_model(model_id: str) -> bool:
+    normalized = model_id.lower()
+    return "qwen" in normalized and ("vl" in normalized or "vision" in normalized)
+
+
 def is_qwen3_model(model_id: str) -> bool:
     normalized = model_id.lower()
     return "qwen3-vl" in normalized or "qwen3_vl" in normalized
+
+
+def is_llava_model(model_id: str) -> bool:
+    return "llava" in model_id.lower()
+
+
+def is_kimi_vl_model(model_id: str) -> bool:
+    normalized = model_id.lower()
+    return "kimi-vl" in normalized or "kimi_vl" in normalized
+
+
+def build_visual_user_text(user_text: str) -> str:
+    return f"{system_prompt()}\n\n{user_text}"
 
 
 def build_qwen_messages(
@@ -505,6 +586,34 @@ def build_qwen_messages(
                 {"type": "text", "text": user_text},
             ],
         },
+    ]
+
+
+def build_llava_messages(*, user_text: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image"},
+                {"type": "text", "text": user_text},
+            ],
+        }
+    ]
+
+
+def build_kimi_vl_messages(
+    *,
+    user_text: str,
+    image_path: Path,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": str(image_path)},
+                {"type": "text", "text": user_text},
+            ],
+        }
     ]
 
 
@@ -534,6 +643,61 @@ def load_qwen25_model_and_processor(args: argparse.Namespace, model_id: str) -> 
         model_id,
         trust_remote_code=args.trust_remote_code,
     )
+    model.eval()
+    return model, processor, torch
+
+
+def load_llava_model_and_processor(args: argparse.Namespace, model_id: str) -> tuple[Any, Any, Any]:
+    try:
+        import torch
+        from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+    except ImportError as exc:
+        raise RuntimeError(
+            "Missing LLaVA dependencies. Run: "
+            "python -m pip install -r requirements-open-models.txt"
+        ) from exc
+
+    dtype = resolve_torch_dtype(torch, args.torch_dtype)
+    model_kwargs: dict[str, Any] = {
+        "torch_dtype": dtype,
+        "device_map": args.device_map,
+        "trust_remote_code": args.trust_remote_code,
+        "low_cpu_mem_usage": True,
+    }
+    if args.attn_implementation != "auto":
+        model_kwargs["attn_implementation"] = args.attn_implementation
+
+    model = LlavaNextForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+    processor = AutoProcessor.from_pretrained(
+        model_id,
+        trust_remote_code=args.trust_remote_code,
+    )
+    model.eval()
+    return model, processor, torch
+
+
+def load_kimi_vl_model_and_processor(args: argparse.Namespace, model_id: str) -> tuple[Any, Any, Any]:
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoProcessor
+    except ImportError as exc:
+        raise RuntimeError(
+            "Missing Kimi-VL dependencies. Run: "
+            "python -m pip install -r requirements-open-models.txt"
+        ) from exc
+
+    dtype = resolve_torch_dtype(torch, args.torch_dtype)
+    model_kwargs: dict[str, Any] = {
+        "torch_dtype": dtype,
+        "device_map": args.device_map,
+        "trust_remote_code": True,
+        "low_cpu_mem_usage": True,
+    }
+    if args.attn_implementation != "auto":
+        model_kwargs["attn_implementation"] = args.attn_implementation
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
+    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     model.eval()
     return model, processor, torch
 
@@ -603,7 +767,7 @@ def prepare_inputs(
         return_tensors="pt",
     )
     device = infer_input_device(model, torch)
-    return {key: value.to(device) if hasattr(value, "to") else value for key, value in inputs.items()}
+    return move_inputs_to_device(inputs, device)
 
 
 def prepare_qwen3_inputs(
@@ -620,6 +784,65 @@ def prepare_qwen3_inputs(
         return_tensors="pt",
     )
     device = infer_input_device(model, torch)
+    return move_inputs_to_device(inputs, device)
+
+
+def prepare_llava_inputs(
+    processor: Any,
+    messages: list[dict[str, Any]],
+    image_path: Path,
+    model: Any,
+    torch: Any,
+) -> Any:
+    from PIL import Image
+
+    with Image.open(image_path) as opened:
+        image = opened.convert("RGB")
+    text = processor.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    inputs = processor(
+        images=image,
+        text=text,
+        padding=True,
+        return_tensors="pt",
+    )
+    device = infer_input_device(model, torch)
+    return move_inputs_to_device(inputs, device)
+
+
+def prepare_kimi_vl_inputs(
+    processor: Any,
+    messages: list[dict[str, Any]],
+    image_path: Path,
+    model: Any,
+    torch: Any,
+) -> Any:
+    from PIL import Image
+
+    with Image.open(image_path) as opened:
+        image = opened.convert("RGB")
+    text = processor.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        return_tensors="pt",
+    )
+    inputs = processor(
+        images=image,
+        text=text,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+    )
+    device = infer_input_device(model, torch)
+    return move_inputs_to_device(inputs, device)
+
+
+def move_inputs_to_device(inputs: Any, device: Any) -> Any:
+    if hasattr(inputs, "to"):
+        return inputs.to(device)
     return {key: value.to(device) if hasattr(value, "to") else value for key, value in inputs.items()}
 
 

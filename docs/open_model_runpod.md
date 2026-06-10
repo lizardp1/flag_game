@@ -33,8 +33,9 @@ python -m pip install -r requirements-open-models.txt
 If you did not use a PyTorch template, install the correct CUDA build of PyTorch
 first, then rerun the command above.
 
-Qwen's processor requires `torchvision`. If you installed the open-model
-requirements before this line was added, rerun:
+Qwen's processor requires `torchvision`. Kimi-VL's remote-code tokenizer path
+requires `tiktoken` and `blobfile`. If you installed the open-model
+requirements before those lines were added, rerun:
 
 ```bash
 source .venv/bin/activate
@@ -101,6 +102,16 @@ model run, treat it as a likely process/container kill. Capture logs to a file:
 MODELS="Qwen/Qwen3-VL-4B-Instruct" \
 OUT=runs/qwen3_visual_4b \
 ./scripts/run_qwen_visual_model_sweep.sh 2>&1 | tee runs/qwen3_visual_4b.log
+```
+
+If even a foreground command clears the terminal, launch it in the background
+and tail the log from a fresh terminal:
+
+```bash
+nohup bash -lc 'cd /workspace/flag_game && source .venv/bin/activate && MODELS="llava-hf/llava-v1.6-mistral-7b-hf" OUT=runs/llava_visual_colors ./scripts/run_qwen_visual_model_sweep.sh' \
+  > runs/llava_visual_colors.log 2>&1 &
+
+tail -f runs/llava_visual_colors.log
 ```
 
 For an even smaller Qwen3 check:
@@ -214,6 +225,73 @@ only the larger Qwen2.5-VL models on an 80 GB GPU:
 MODELS="Qwen/Qwen2.5-VL-32B-Instruct Qwen/Qwen2.5-VL-72B-Instruct" \
 OUT=runs/qwen25_visual_32b_72b \
 ./scripts/run_qwen_visual_model_sweep.sh
+```
+
+### LLaVA then Kimi-VL
+
+Use this pair when you want permissive/open-source models outside the Qwen
+family. The sweep script defaults to `BACKEND=auto`, so it chooses the loader
+from the Hugging Face model id.
+
+Run LLaVA first:
+
+```bash
+MODELS="llava-hf/llava-v1.6-mistral-7b-hf" \
+OUT=runs/llava_visual_colors \
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
+For a tiny LLaVA smoke before the full color sweep:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --model-id llava-hf/llava-v1.6-mistral-7b-hf \
+  --suite colors \
+  --colors green,orange,purple \
+  --pixel-sizes 150x100 \
+  --max-tests 3 \
+  --out runs/llava_visual_smoke
+```
+
+Then run Kimi-VL:
+
+```bash
+MODELS="moonshotai/Kimi-VL-A3B-Instruct" \
+OUT=runs/kimi_vl_visual_colors \
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
+Kimi-VL is MIT licensed and modern, but it is much larger on disk than LLaVA:
+the Hugging Face repo is about 32.8 GB and uses remote code. The runner enables
+`trust_remote_code=True` for Kimi-VL because its model card requires custom
+model and processor files.
+
+Compare the model families after both finish:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import pandas as pd
+
+runs = [
+    Path("runs/qwen_visual_model_sweep/results.csv"),
+    Path("runs/llava_visual_colors/results.csv"),
+    Path("runs/kimi_vl_visual_colors/results.csv"),
+]
+frames = [pd.read_csv(path) for path in runs if path.exists()]
+df = pd.concat(frames, ignore_index=True)
+summary = (
+    df[df["task_type"] == "color"]
+    .groupby(["model_id", "expected_color"], dropna=False)
+    .agg(
+        trials=("trial_id", "count"),
+        accuracy=("color_correct", "mean"),
+        predictions=("predicted_color", lambda s: sorted(set(map(str, s.dropna())))),
+    )
+    .reset_index()
+)
+print(summary.to_string(index=False))
+PY
 ```
 
 To test the newer Qwen3-VL family, first upgrade Transformers if your current

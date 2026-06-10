@@ -7,9 +7,11 @@
 -r requirements-runpod.txt
 
 accelerate>=1.1.0
+blobfile>=3.0.0
 qwen-vl-utils>=0.0.10
 safetensors>=0.4.5
-transformers>=4.49.0
+tiktoken>=0.7.0
+transformers>=4.51.3
 torchvision>=0.20.0
 
 # Optional for Qwen3-VL experiments if your image does not already have a new
