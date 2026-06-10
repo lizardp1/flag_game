@@ -147,6 +147,43 @@ python scripts/run_qwen_visual_perception_tests.py \
   --out runs/qwen_visual_perception_3b_7b
 ```
 
+Focused color-confusion sweep:
+
+```bash
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
+By default this tests:
+
+```text
+Qwen/Qwen2.5-VL-7B-Instruct
+Qwen/Qwen2.5-VL-32B-Instruct
+```
+
+on red, blue, green, orange, purple, and yellow at several image sizes. To test
+only the larger Qwen2.5-VL models on an 80 GB GPU:
+
+```bash
+MODELS="Qwen/Qwen2.5-VL-32B-Instruct Qwen/Qwen2.5-VL-72B-Instruct" \
+OUT=runs/qwen25_visual_32b_72b \
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
+To test the newer Qwen3-VL family, first upgrade Transformers if your current
+environment cannot import `Qwen3VLForConditionalGeneration`:
+
+```bash
+python -m pip install -U git+https://github.com/huggingface/transformers accelerate
+```
+
+Then run:
+
+```bash
+MODELS="Qwen/Qwen3-VL-8B-Instruct Qwen/Qwen3-VL-32B-Instruct" \
+OUT=runs/qwen3_visual_8b_32b \
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
 For a fast local bookkeeping check that does not load a model:
 
 ```bash

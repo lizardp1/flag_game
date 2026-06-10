@@ -11,3 +11,7 @@ qwen-vl-utils>=0.0.10
 safetensors>=0.4.5
 transformers>=4.49.0
 torchvision>=0.20.0
+
+# Optional for Qwen3-VL experiments if your image does not already have a new
+# enough Transformers build:
+#   python -m pip install -U git+https://github.com/huggingface/transformers accelerate

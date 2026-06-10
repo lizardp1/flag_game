@@ -97,9 +97,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--backend",
-        choices=["qwen", "oracle"],
+        choices=["qwen", "qwen2_5", "qwen3", "oracle"],
         default="qwen",
-        help="Use qwen for real model calls, oracle for local output/summary smoke tests.",
+        help=(
+            "Use qwen to auto-select a Qwen loader from the model id, qwen2_5 or "
+            "qwen3 to force a loader, or oracle for local output/summary smoke tests."
+        ),
     )
     parser.add_argument(
         "--model-id",
@@ -402,8 +405,14 @@ def save_stimuli(artifact_dir: Path, out_dir: Path, stimuli: list[Stimulus]) -> 
 def build_runner(args: argparse.Namespace, model_id: str) -> Any:
     if args.backend == "oracle":
         return OracleRunner()
+    if args.backend == "qwen2_5":
+        return Qwen25Runner(args, model_id)
+    if args.backend == "qwen3":
+        return Qwen3Runner(args, model_id)
     if args.backend == "qwen":
-        return QwenRunner(args, model_id)
+        if is_qwen3_model(model_id):
+            return Qwen3Runner(args, model_id)
+        return Qwen25Runner(args, model_id)
     raise ValueError(f"Unsupported backend: {args.backend}")
 
 
@@ -429,11 +438,11 @@ class OracleRunner:
         raise ValueError(f"Unsupported task type: {stimulus.task_type}")
 
 
-class QwenRunner:
+class Qwen25Runner:
     def __init__(self, args: argparse.Namespace, model_id: str) -> None:
         self.args = args
         self.model_id = model_id
-        self.model, self.processor, self.torch = load_model_and_processor(args, model_id)
+        self.model, self.processor, self.torch = load_qwen25_model_and_processor(args, model_id)
 
     def __call__(self, stimulus: Stimulus, image_path: Path) -> str:
         messages = build_qwen_messages(
@@ -449,6 +458,33 @@ class QwenRunner:
         del self.processor
         if bool(self.torch.cuda.is_available()):
             self.torch.cuda.empty_cache()
+
+
+class Qwen3Runner:
+    def __init__(self, args: argparse.Namespace, model_id: str) -> None:
+        self.args = args
+        self.model_id = model_id
+        self.model, self.processor, self.torch = load_qwen3_model_and_processor(args, model_id)
+
+    def __call__(self, stimulus: Stimulus, image_path: Path) -> str:
+        messages = build_qwen_messages(
+            system_text=system_prompt(),
+            user_text=stimulus.prompt,
+            image_path=image_path,
+        )
+        inputs = prepare_qwen3_inputs(self.processor, messages, self.model, self.torch)
+        return generate_response(self.model, self.processor, inputs, self.args, self.torch)
+
+    def close(self) -> None:
+        del self.model
+        del self.processor
+        if bool(self.torch.cuda.is_available()):
+            self.torch.cuda.empty_cache()
+
+
+def is_qwen3_model(model_id: str) -> bool:
+    normalized = model_id.lower()
+    return "qwen3-vl" in normalized or "qwen3_vl" in normalized
 
 
 def build_qwen_messages(
@@ -472,7 +508,7 @@ def build_qwen_messages(
     ]
 
 
-def load_model_and_processor(args: argparse.Namespace, model_id: str) -> tuple[Any, Any, Any]:
+def load_qwen25_model_and_processor(args: argparse.Namespace, model_id: str) -> tuple[Any, Any, Any]:
     try:
         import torch
         import torchvision  # noqa: F401
@@ -494,6 +530,36 @@ def load_model_and_processor(args: argparse.Namespace, model_id: str) -> tuple[A
         model_kwargs["attn_implementation"] = args.attn_implementation
 
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+    processor = AutoProcessor.from_pretrained(
+        model_id,
+        trust_remote_code=args.trust_remote_code,
+    )
+    model.eval()
+    return model, processor, torch
+
+
+def load_qwen3_model_and_processor(args: argparse.Namespace, model_id: str) -> tuple[Any, Any, Any]:
+    try:
+        import torch
+        from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+    except ImportError as exc:
+        raise RuntimeError(
+            "Missing Qwen3-VL dependencies. Upgrade Transformers, then rerun. "
+            "The Qwen3-VL model card recommends: "
+            "python -m pip install -U git+https://github.com/huggingface/transformers accelerate"
+        ) from exc
+
+    dtype = resolve_torch_dtype(torch, args.torch_dtype)
+    model_kwargs: dict[str, Any] = {
+        "dtype": dtype,
+        "device_map": args.device_map,
+        "trust_remote_code": args.trust_remote_code,
+        "low_cpu_mem_usage": True,
+    }
+    if args.attn_implementation != "auto":
+        model_kwargs["attn_implementation"] = args.attn_implementation
+
+    model = Qwen3VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
     processor = AutoProcessor.from_pretrained(
         model_id,
         trust_remote_code=args.trust_remote_code,
@@ -534,6 +600,23 @@ def prepare_inputs(
         images=image_inputs,
         videos=video_inputs,
         padding=True,
+        return_tensors="pt",
+    )
+    device = infer_input_device(model, torch)
+    return {key: value.to(device) if hasattr(value, "to") else value for key, value in inputs.items()}
+
+
+def prepare_qwen3_inputs(
+    processor: Any,
+    messages: list[dict[str, Any]],
+    model: Any,
+    torch: Any,
+) -> dict[str, Any]:
+    inputs = processor.apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=True,
+        return_dict=True,
         return_tensors="pt",
     )
     device = infer_input_device(model, torch)
