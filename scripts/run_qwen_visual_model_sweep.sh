@@ -12,6 +12,11 @@ COLORS="${COLORS:-red,blue,green,orange,purple,yellow}"
 PIXEL_SIZES="${PIXEL_SIZES:-24x16,48x32,75x150,150x100,300x200}"
 MODELS="${MODELS:-Qwen/Qwen2.5-VL-7B-Instruct Qwen/Qwen2.5-VL-32B-Instruct}"
 BACKEND="${BACKEND:-qwen}"
+RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
+
+if [[ "$RUN_PREFLIGHT" == "1" ]]; then
+  "$ROOT/scripts/runpod_model_preflight.sh"
+fi
 
 MODEL_ARGS=()
 for model in ${MODELS}; do

@@ -88,6 +88,29 @@ If `/workspace` is also tight, inspect cached models:
 du -h -d 2 /workspace/.cache/huggingface 2>/dev/null | sort -h | tail -40
 ```
 
+Before loading a new open VLM, run:
+
+```bash
+./scripts/runpod_model_preflight.sh
+```
+
+If the RunPod web terminal disconnects or reopens as a blank terminal during a
+model run, treat it as a likely process/container kill. Capture logs to a file:
+
+```bash
+MODELS="Qwen/Qwen3-VL-4B-Instruct" \
+OUT=runs/qwen3_visual_4b \
+./scripts/run_qwen_visual_model_sweep.sh 2>&1 | tee runs/qwen3_visual_4b.log
+```
+
+For an even smaller Qwen3 check:
+
+```bash
+MODELS="Qwen/Qwen3-VL-2B-Instruct" \
+OUT=runs/qwen3_visual_2b \
+./scripts/run_qwen_visual_model_sweep.sh 2>&1 | tee runs/qwen3_visual_2b.log
+```
+
 ## Dry Run
 
 This checks the repo-side prompt, crop rendering, and output paths without
