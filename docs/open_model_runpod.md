@@ -218,8 +218,35 @@ Qwen/Qwen2.5-VL-7B-Instruct
 Qwen/Qwen2.5-VL-32B-Instruct
 ```
 
-on red, blue, green, orange, purple, and yellow at several image sizes. To test
-only the larger Qwen2.5-VL models on an 80 GB GPU:
+on the `flag_core` color set at several image sizes:
+
+```text
+red, blue, green, white, black, yellow, orange, light_blue
+```
+
+This is the recommended first color battery because it stays close to the flag
+game while still separating easy primary/neutral colors from the colors Qwen2.5
+struggled with. The results include `color_group_summary.csv`, which groups
+colors into primary flag colors, neutral flag colors, and non-primary core flag
+colors.
+
+To reproduce the earlier green/orange/purple confusion check:
+
+```bash
+COLOR_SET=legacy \
+OUT=runs/qwen_visual_legacy_colors \
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
+To add flag-adjacent variants such as navy, gold, cyan, and teal:
+
+```bash
+COLOR_SET=flag_extended \
+OUT=runs/qwen_visual_flag_extended \
+./scripts/run_qwen_visual_model_sweep.sh
+```
+
+To test only the larger Qwen2.5-VL models on an 80 GB GPU:
 
 ```bash
 MODELS="Qwen/Qwen2.5-VL-32B-Instruct Qwen/Qwen2.5-VL-72B-Instruct" \
@@ -237,7 +264,8 @@ Run LLaVA first:
 
 ```bash
 MODELS="llava-hf/llava-v1.6-mistral-7b-hf" \
-OUT=runs/llava_visual_colors \
+COLOR_SET=flag_core \
+OUT=runs/llava_visual_flag_core \
 ./scripts/run_qwen_visual_model_sweep.sh
 ```
 
@@ -247,7 +275,7 @@ For a tiny LLaVA smoke before the full color sweep:
 python scripts/run_qwen_visual_perception_tests.py \
   --model-id llava-hf/llava-v1.6-mistral-7b-hf \
   --suite colors \
-  --colors green,orange,purple \
+  --colors green,orange,light_blue \
   --pixel-sizes 150x100 \
   --max-tests 3 \
   --out runs/llava_visual_smoke
@@ -257,7 +285,8 @@ Then run Kimi-VL:
 
 ```bash
 MODELS="moonshotai/Kimi-VL-A3B-Instruct" \
-OUT=runs/kimi_vl_visual_colors \
+COLOR_SET=flag_core \
+OUT=runs/kimi_vl_visual_flag_core \
 ./scripts/run_qwen_visual_model_sweep.sh
 ```
 
@@ -275,8 +304,8 @@ import pandas as pd
 
 runs = [
     Path("runs/qwen_visual_model_sweep/results.csv"),
-    Path("runs/llava_visual_colors/results.csv"),
-    Path("runs/kimi_vl_visual_colors/results.csv"),
+    Path("runs/llava_visual_flag_core/results.csv"),
+    Path("runs/kimi_vl_visual_flag_core/results.csv"),
 ]
 frames = [pd.read_csv(path) for path in runs if path.exists()]
 df = pd.concat(frames, ignore_index=True)
@@ -292,6 +321,16 @@ summary = (
 )
 print(summary.to_string(index=False))
 PY
+```
+
+For a grouped read of whether a model is only getting primary colors:
+
+```bash
+for path in runs/qwen_visual_model_sweep/color_group_summary.csv \
+  runs/llava_visual_flag_core/color_group_summary.csv \
+  runs/kimi_vl_visual_flag_core/color_group_summary.csv; do
+  [ -f "$path" ] && echo "$path" && cat "$path"
+done
 ```
 
 To test the newer Qwen3-VL family, first upgrade Transformers if your current
@@ -323,6 +362,7 @@ The script writes:
 - `results.csv`: one row per model call, including raw JSON and correctness
 - `size_summary.csv`: accuracy by model, task type, and image size
 - `color_summary.csv`: per-color accuracy and predicted colors
+- `color_group_summary.csv`: flag-color accuracy by primary/neutral/non-primary group
 - `stripe_summary.csv`: per-pattern orientation/count/order accuracy
 - `breakpoints.csv`: largest-to-smallest first size below the accuracy threshold
 - `artifacts/`: the exact synthetic images sent to the model

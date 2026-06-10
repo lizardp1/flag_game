@@ -24,7 +24,29 @@ from nnd.flag_game.render import save_png
 
 
 DEFAULT_MODEL_IDS = ["Qwen/Qwen2.5-VL-7B-Instruct"]
-DEFAULT_COLORS = ["red", "blue", "green", "white", "black", "yellow", "orange", "purple"]
+FLAG_CORE_COLORS = ["red", "blue", "green", "white", "black", "yellow", "orange", "light_blue"]
+FLAG_EXTENDED_COLORS = [
+    "red",
+    "blue",
+    "green",
+    "white",
+    "black",
+    "yellow",
+    "orange",
+    "light_blue",
+    "navy",
+    "gold",
+    "cyan",
+    "teal",
+]
+LEGACY_COLORS = ["red", "blue", "green", "white", "black", "yellow", "orange", "purple"]
+COLOR_SETS = {
+    "flag_core": FLAG_CORE_COLORS,
+    "flag_extended": FLAG_EXTENDED_COLORS,
+    "legacy": LEGACY_COLORS,
+}
+DEFAULT_COLOR_SET = "flag_core"
+DEFAULT_COLORS = COLOR_SETS[DEFAULT_COLOR_SET]
 DEFAULT_PIXEL_SIZES = ["24x16", "48x32", "75x150", "150x100", "300x200", "600x400"]
 DEFAULT_STRIPE_PATTERNS: dict[str, tuple[str, tuple[str, ...]]] = {
     "vertical_france": ("vertical", ("blue", "white", "red")),
@@ -114,10 +136,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", type=Path, default=ROOT / "runs" / "qwen_visual_perception")
     parser.add_argument("--suite", choices=["all", "colors", "stripes"], default="all")
     parser.add_argument(
+        "--color-set",
+        choices=sorted(COLOR_SETS),
+        default=DEFAULT_COLOR_SET,
+        help=(
+            "Named solid-color preset used when --colors is omitted. flag_core is "
+            "the recommended flag-color battery."
+        ),
+    )
+    parser.add_argument(
         "--colors",
         action="append",
         default=None,
-        help="Solid-color tests. Repeat or comma-separate. Must be keys in COLOR_MAP.",
+        help=(
+            "Override solid-color tests. Repeat or comma-separate. Must be keys in "
+            "COLOR_MAP."
+        ),
     )
     parser.add_argument(
         "--pixel-sizes",
@@ -173,7 +207,7 @@ def main() -> None:
         raise ValueError("--max-tests must be >= 1")
 
     model_ids = split_values(args.model_id, DEFAULT_MODEL_IDS)
-    colors = parse_colors(split_values(args.colors, DEFAULT_COLORS))
+    colors = parse_colors(resolve_color_values(args))
     sizes = [parse_pixel_size(value) for value in split_values(args.pixel_sizes, DEFAULT_PIXEL_SIZES)]
     stripe_patterns = parse_stripe_patterns(args.stripe_patterns)
 
@@ -236,6 +270,12 @@ def split_values(values: list[str] | None, default: list[str]) -> list[str]:
     for value in values:
         items.extend(part.strip() for part in value.split(","))
     return [item for item in items if item.strip()]
+
+
+def resolve_color_values(args: argparse.Namespace) -> list[str]:
+    if args.colors is not None:
+        return split_values(args.colors, [])
+    return list(COLOR_SETS[args.color_set])
 
 
 def parse_colors(values: list[str]) -> list[str]:
@@ -304,7 +344,7 @@ def build_stimuli(
                         width=width,
                         height=height,
                         image=render_solid_color(color, width=width, height=height),
-                        expected={"color": color},
+                        expected={"color": color, "color_group": color_group(color)},
                         prompt=color_prompt(),
                         artifact_relpath=f"colors/{stimulus_id}.png",
                     )
@@ -342,6 +382,18 @@ def render_solid_color(color: str, *, width: int, height: int) -> np.ndarray:
     image = np.zeros((height, width, 3), dtype=np.uint8)
     image[:, :, :] = COLOR_MAP[color]
     return image
+
+
+def color_group(color: str) -> str:
+    if color in {"red", "blue", "yellow"}:
+        return "primary_flag_color"
+    if color in {"black", "white"}:
+        return "neutral_flag_color"
+    if color in {"green", "orange", "light_blue"}:
+        return "non_primary_core_flag_color"
+    if color in {"navy", "gold", "cyan", "teal"}:
+        return "extended_flag_color"
+    return "other_catalog_color"
 
 
 def render_stripes(
@@ -1064,6 +1116,7 @@ def write_outputs(out_dir: Path, rows: list[dict[str, Any]], break_threshold: fl
     size_summary = summarize_by_size(df)
     size_summary.to_csv(out_dir / "size_summary.csv", index=False)
     summarize_color_details(df).to_csv(out_dir / "color_summary.csv", index=False)
+    summarize_color_group_details(df).to_csv(out_dir / "color_group_summary.csv", index=False)
     summarize_stripe_details(df).to_csv(out_dir / "stripe_summary.csv", index=False)
     summarize_breakpoints(size_summary, break_threshold).to_csv(
         out_dir / "breakpoints.csv",
@@ -1080,6 +1133,7 @@ def write_outputs(out_dir: Path, rows: list[dict[str, Any]], break_threshold: fl
                 "results.jsonl",
                 "size_summary.csv",
                 "color_summary.csv",
+                "color_group_summary.csv",
                 "stripe_summary.csv",
                 "breakpoints.csv",
                 "stimuli.jsonl",
@@ -1132,6 +1186,24 @@ def summarize_color_details(df: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
         .sort_values(["model_id", "width", "height", "expected_color"])
+    )
+
+
+def summarize_color_group_details(df: pd.DataFrame) -> pd.DataFrame:
+    color_df = df[df["task_type"] == "color"].copy()
+    if color_df.empty or "expected_color_group" not in color_df:
+        return pd.DataFrame()
+    return (
+        color_df.groupby(["model_id", "expected_color_group"], dropna=False)
+        .agg(
+            trial_count=("trial_id", "count"),
+            valid_json_rate=("valid_json", "mean"),
+            color_correct_rate=("color_correct", "mean"),
+            expected_colors=("expected_color", unique_json),
+            predicted_colors=("predicted_color", unique_json),
+        )
+        .reset_index()
+        .sort_values(["model_id", "expected_color_group"])
     )
 
 
