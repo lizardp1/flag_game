@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/runpod_cache_env.sh
+source "$ROOT/scripts/runpod_cache_env.sh"
+cd "$ROOT"
+
 OUT="${OUT:-runs/qwen_visual_model_sweep}"
 SUITE="${SUITE:-colors}"
 COLORS="${COLORS:-red,blue,green,orange,purple,yellow}"

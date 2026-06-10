@@ -19,6 +19,7 @@ venv/
 *.pth
 *.bin
 .matplotlib/
+.cache/
 wandb/
 runs/
 checkpoints/

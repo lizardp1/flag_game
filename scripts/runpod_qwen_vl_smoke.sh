@@ -9,16 +9,8 @@ if [[ -f ".venv/bin/activate" ]]; then
   source ".venv/bin/activate"
 fi
 
-if [[ -z "${HF_HOME:-}" ]]; then
-  if [[ -d "/workspace" && -w "/workspace" ]]; then
-    export HF_HOME="/workspace/.cache/huggingface"
-  else
-    export HF_HOME="$ROOT/.cache/huggingface"
-  fi
-fi
-export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME}"
-export MPLCONFIGDIR="${MPLCONFIGDIR:-$ROOT/.matplotlib}"
-mkdir -p "$HF_HOME" "$MPLCONFIGDIR"
+# shellcheck source=scripts/runpod_cache_env.sh
+source "$ROOT/scripts/runpod_cache_env.sh"
 
 if [[ "${SKIP_OPEN_MODEL_INSTALL:-0}" != "1" ]]; then
   python -m pip install -r requirements-open-models.txt

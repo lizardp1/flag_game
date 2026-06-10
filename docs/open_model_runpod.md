@@ -54,7 +54,10 @@ Keep Hugging Face downloads on the persistent `/workspace` volume:
 
 ```bash
 export HF_HOME=/workspace/.cache/huggingface
-export TRANSFORMERS_CACHE=/workspace/.cache/huggingface
+export HF_HUB_CACHE=/workspace/.cache/huggingface/hub
+export HF_ASSETS_CACHE=/workspace/.cache/huggingface/assets
+export TRANSFORMERS_CACHE=/workspace/.cache/huggingface/hub
+export TMPDIR=/workspace/.cache/tmp
 mkdir -p "$HF_HOME"
 ```
 
@@ -62,6 +65,27 @@ If a model is gated, also set:
 
 ```bash
 export HF_TOKEN=...
+```
+
+The Qwen wrapper scripts source `scripts/runpod_cache_env.sh`, which defaults
+these caches to `/workspace/.cache` when `/workspace` is writable. If a failed
+download mentions `/tmp/nnd_matplotlib_cache/huggingface`, clean the partial
+temporary cache and rerun from a shell with workspace cache variables:
+
+```bash
+df -h /workspace /tmp
+rm -rf /tmp/nnd_matplotlib_cache/huggingface
+
+source scripts/runpod_cache_env.sh
+echo "$HF_HOME"
+echo "$HF_HUB_CACHE"
+echo "$TMPDIR"
+```
+
+If `/workspace` is also tight, inspect cached models:
+
+```bash
+du -h -d 2 /workspace/.cache/huggingface 2>/dev/null | sort -h | tail -40
 ```
 
 ## Dry Run
