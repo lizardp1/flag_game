@@ -25,7 +25,7 @@ output:
   make_plots: false
 activation_capture:
   enabled: true
-  scope: initial_probe
+  scope: all_probes
   layers: null
   save_full_sequence: false
   storage_dtype: float16
