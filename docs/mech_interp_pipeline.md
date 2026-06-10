@@ -107,7 +107,39 @@ python scripts/analyze_activation_geometry.py \
   --out runs/qwen_geometry_batch/activation_geometry
 ```
 
-## 4. Optional Linear Probe Dataset
+## 4. Check Model Scale Before Overinterpreting Geometry
+
+If behavior collapses toward one answer such as France, run the visual-only
+scale sweep before treating the geometry as meaningful social convergence:
+
+```bash
+./scripts/run_qwen_scale_capability_sweep.sh
+```
+
+This compares Qwen2.5-VL 3B and 7B by default on initial visual probes only
+(`T=0`). The summary to inspect is:
+
+```text
+runs/qwen_scale_capability/scale_summary/model_scale_metrics.csv
+```
+
+The most important diagnostic columns are:
+
+- `initial_agent_accuracy`
+- `initial_agent_france_rate`
+- `initial_agent_predicted_compatible_rate`
+- `france_when_france_incompatible_rate`
+
+Interpretation:
+
+- If larger models reduce France guesses on France-incompatible crops, this is
+  probably a capabilities/scale issue.
+- If every scale still says France when France is incompatible, the prompt,
+  answer schema, crop size, or country pool is likely inducing a prior.
+- If oracle accuracy is low, the crop setup itself is too ambiguous for the
+  behavioral run to be a clean capability test.
+
+## 5. Optional Linear Probe Dataset
 
 Run initial probes across multiple seeds:
 
@@ -126,7 +158,7 @@ python -m nnd.cli batch \
 This gives `2 * num_seeds` activation samples because the smoke config uses
 `N=2`.
 
-## 5. Optional Linear Probes
+## 6. Optional Linear Probes
 
 Truth-country probe:
 
@@ -160,7 +192,7 @@ informativeness_label
 compatible_country_count
 ```
 
-## 6. Remaining Research Steps
+## 7. Remaining Research Steps
 
 After this first slice works:
 

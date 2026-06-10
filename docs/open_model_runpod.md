@@ -261,3 +261,58 @@ The probe script writes:
 - `linear_probe_results.csv`
 - `summary.json`
 - `samples.csv`
+
+## Model-Scale Capability Sweep
+
+If a model collapses toward one country such as France, first test scale on the
+initial visual probes before communication can spread a wrong answer.
+
+Default sweep, practical for a 48 GB GPU:
+
+```bash
+./scripts/run_qwen_scale_capability_sweep.sh
+```
+
+This runs:
+
+```text
+Qwen/Qwen2.5-VL-3B-Instruct
+Qwen/Qwen2.5-VL-7B-Instruct
+```
+
+The default sweep uses `T=0`, `N=8`, and `num_seeds=8`, giving 64 initial crop
+predictions per model.
+
+For a quick smoke:
+
+```bash
+NUM_SEEDS=2 N_AGENTS=4 ./scripts/run_qwen_scale_capability_sweep.sh
+```
+
+For an 80 GB GPU, optionally try 32B:
+
+```bash
+MODELS="Qwen/Qwen2.5-VL-3B-Instruct Qwen/Qwen2.5-VL-7B-Instruct Qwen/Qwen2.5-VL-32B-Instruct" \
+OUT_ROOT=runs/qwen_scale_capability_3b_7b_32b \
+./scripts/run_qwen_scale_capability_sweep.sh
+```
+
+The summarizer writes:
+
+```text
+runs/qwen_scale_capability/scale_summary/model_scale_metrics.csv
+runs/qwen_scale_capability/scale_summary/initial_probe_country_distribution.csv
+runs/qwen_scale_capability/scale_summary/initial_probe_agent_rows.csv
+```
+
+Key columns:
+
+- `initial_agent_accuracy`
+- `initial_agent_france_rate`
+- `initial_agent_predicted_compatible_rate`
+- `france_when_france_incompatible_rate`
+
+If larger models reduce `france_when_france_incompatible_rate`, that points to a
+capability/scale issue. If every scale still says France when France is
+incompatible, treat it as a prompt/interface bias or crop-resolution issue
+before interpreting the geometry.
