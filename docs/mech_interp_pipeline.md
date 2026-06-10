@@ -14,6 +14,28 @@ python scripts/run_qwen_vl_smoke.py \
   --out runs/qwen_vl_smoke
 ```
 
+If predictions collapse toward one country, run direct visual tests before
+collecting more flag-game data:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --model-id Qwen/Qwen2.5-VL-7B-Instruct \
+  --suite all \
+  --out runs/qwen_visual_perception_7b
+```
+
+Inspect:
+
+```text
+runs/qwen_visual_perception_7b/size_summary.csv
+runs/qwen_visual_perception_7b/color_summary.csv
+runs/qwen_visual_perception_7b/stripe_summary.csv
+runs/qwen_visual_perception_7b/breakpoints.csv
+```
+
+Only move to representation geometry once the model can reliably name solid
+colors and simple stripe patterns at the crop sizes used by the game.
+
 Then run the tiny pairwise game:
 
 ```bash
@@ -107,10 +129,22 @@ python scripts/analyze_activation_geometry.py \
   --out runs/qwen_geometry_batch/activation_geometry
 ```
 
-## 4. Check Model Scale Before Overinterpreting Geometry
+## 4. Check Vision And Model Scale Before Overinterpreting Geometry
 
-If behavior collapses toward one answer such as France, run the visual-only
-scale sweep before treating the geometry as meaningful social convergence:
+If behavior collapses toward one answer such as France, start with the
+visual-only battery:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --model-id Qwen/Qwen2.5-VL-3B-Instruct \
+  --model-id Qwen/Qwen2.5-VL-7B-Instruct \
+  --suite all \
+  --out runs/qwen_visual_perception_3b_7b
+```
+
+This separates raw color/stripe perception from country-choice priors. Then run
+the flag-game scale sweep before treating geometry as meaningful social
+convergence:
 
 ```bash
 ./scripts/run_qwen_scale_capability_sweep.sh

@@ -112,6 +112,70 @@ The script writes:
 - `runs/qwen_vl_smoke/stimulus.json`
 - `runs/qwen_vl_smoke/result.json`
 
+## Visual-Only Perception Tests
+
+If the model keeps guessing one country, test raw vision before running more
+flag-game batches. This removes the country list and asks only about colors,
+stripe orientation, stripe count, and stripe order.
+
+Small color-only pass:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --model-id Qwen/Qwen2.5-VL-7B-Instruct \
+  --suite colors \
+  --pixel-sizes 24x16,48x32,75x150,150x100,300x200 \
+  --out runs/qwen_visual_colors_7b
+```
+
+Full color-plus-stripe size sweep:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --model-id Qwen/Qwen2.5-VL-7B-Instruct \
+  --suite all \
+  --out runs/qwen_visual_perception_7b
+```
+
+Compare model scales with the same visual-only battery:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --model-id Qwen/Qwen2.5-VL-3B-Instruct \
+  --model-id Qwen/Qwen2.5-VL-7B-Instruct \
+  --suite all \
+  --out runs/qwen_visual_perception_3b_7b
+```
+
+For a fast local bookkeeping check that does not load a model:
+
+```bash
+python scripts/run_qwen_visual_perception_tests.py \
+  --backend oracle \
+  --max-tests 8 \
+  --out runs/qwen_visual_perception_oracle
+```
+
+The script writes:
+
+- `results.csv`: one row per model call, including raw JSON and correctness
+- `size_summary.csv`: accuracy by model, task type, and image size
+- `color_summary.csv`: per-color accuracy and predicted colors
+- `stripe_summary.csv`: per-pattern orientation/count/order accuracy
+- `breakpoints.csv`: largest-to-smallest first size below the accuracy threshold
+- `artifacts/`: the exact synthetic images sent to the model
+
+Interpretation:
+
+- If solid colors fail, the model/interface is not reliable enough for crop
+  geometry yet.
+- If colors pass but stripes fail, the bottleneck is likely spatial binding:
+  stripe count, orientation, or left-to-right/top-to-bottom ordering.
+- If large images pass and small images fail, tune crop size/render scale before
+  interpreting social convergence.
+- If these tests pass but country guesses still collapse to France, treat the
+  issue as country-prior, prompt, answer-schema, or candidate-list bias.
+
 ## Optional Hidden-State Shape Check
 
 This does one extra forward pass with `output_hidden_states=True` and saves only
