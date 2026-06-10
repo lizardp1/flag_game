@@ -8,7 +8,7 @@ country_pool: stripe_expanded_24
 canvas_width: 24
 canvas_height: 16
 tile_width: 3
-tile_height: 4
+tile_height: 6
 render_scale: 25
 temperature: 0.0
 top_p: 1.0
@@ -23,3 +23,9 @@ disable_memory_updates: false
 output:
   save_crop_images: true
   make_plots: false
+activation_capture:
+  enabled: true
+  scope: initial_probe
+  layers: null
+  save_full_sequence: false
+  storage_dtype: float16

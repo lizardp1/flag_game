@@ -80,6 +80,7 @@ class FlagGameOpenAIBackend:
         prepared_crop: str,
         memory_lines: list[str],
         m: int,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
         messages = prompt_module.openai_multimodal_messages(
@@ -110,6 +111,7 @@ class FlagGameOpenAIBackend:
         prepared_crop: str,
         memory_lines: list[str],
         m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
         messages = prompt_module.openai_multimodal_messages(
@@ -305,6 +307,7 @@ class FlagGameAnthropicBackend:
         prepared_crop: str,
         memory_lines: list[str],
         m: int,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
         request_parts = self._anthropic_multimodal_messages(
@@ -334,6 +337,7 @@ class FlagGameAnthropicBackend:
         prepared_crop: str,
         memory_lines: list[str],
         m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
         request_parts = self._anthropic_multimodal_messages(
@@ -540,6 +544,8 @@ class FlagGameTransformersVLMBackend:
     social_susceptibility: float = 0.5
     prompt_social_susceptibility: bool = True
     prompt_style: str = "closed_country_list"
+    activation_dir: Path | None = None
+    activation_config: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         try:
@@ -558,6 +564,10 @@ class FlagGameTransformersVLMBackend:
         self.debug_dir.mkdir(parents=True, exist_ok=True)
         self.usage_rows: list[dict[str, Any]] = []
         self._generate_lock = threading.Lock()
+        self._activation_rows: list[dict[str, Any]] = []
+        self._activation_config = self._normalize_activation_config(self.activation_config)
+        if self.activation_dir is not None:
+            self.activation_dir.mkdir(parents=True, exist_ok=True)
 
         dtype = self._resolve_torch_dtype(os.environ.get("NND_TRANSFORMERS_DTYPE", "bfloat16"))
         device_map = os.environ.get("NND_TRANSFORMERS_DEVICE_MAP", "auto").strip() or "auto"
@@ -602,6 +612,7 @@ class FlagGameTransformersVLMBackend:
         prepared_crop: Path,
         memory_lines: list[str],
         m: int,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
         messages = self._qwen_multimodal_messages(
@@ -622,6 +633,14 @@ class FlagGameTransformersVLMBackend:
                 m=m,
                 error_text=str(exc),
             ),
+            call_metadata=self._call_metadata(
+                call_metadata,
+                call_type="interaction",
+                m=m,
+                countries=countries,
+                memory_lines=memory_lines,
+                prepared_crop=prepared_crop,
+            ),
         )
 
     def probe(
@@ -631,6 +650,7 @@ class FlagGameTransformersVLMBackend:
         prepared_crop: Path,
         memory_lines: list[str],
         m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
         messages = self._qwen_multimodal_messages(
@@ -650,6 +670,14 @@ class FlagGameTransformersVLMBackend:
                 countries=countries,
                 m=m,
                 error_text=str(exc),
+            ),
+            call_metadata=self._call_metadata(
+                call_metadata,
+                call_type="probe",
+                m=m,
+                countries=countries,
+                memory_lines=memory_lines,
+                prepared_crop=prepared_crop,
             ),
         )
 
@@ -700,7 +728,12 @@ class FlagGameTransformersVLMBackend:
             },
         ]
 
-    def _call(self, messages: list[dict[str, Any]]) -> str:
+    def _call(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> str:
         text = self.processor.apply_chat_template(
             messages,
             tokenize=False,
@@ -729,6 +762,13 @@ class FlagGameTransformersVLMBackend:
 
         with self._generate_lock:
             with self.torch.inference_mode():
+                self._capture_activations_if_needed(
+                    inputs=inputs,
+                    messages=messages,
+                    prompt_text=text,
+                    call_metadata=call_metadata,
+                    prompt_length=int(inputs["input_ids"].shape[1]),
+                )
                 generated_ids = self.model_obj.generate(**inputs, **generation_kwargs)
         prompt_length = inputs["input_ids"].shape[1]
         generated_trimmed = generated_ids[:, prompt_length:]
@@ -773,12 +813,20 @@ class FlagGameTransformersVLMBackend:
         messages: list[dict[str, Any]],
         parser: Callable[[str], Any],
         retry_builder: Callable[[ParseError], str] | None = None,
+        call_metadata: dict[str, Any] | None = None,
         max_retries: int = 2,
     ) -> Any:
         attempts: list[dict[str, Any]] = []
         current_messages = list(messages)
         for attempt in range(max_retries + 1):
-            response_text = self._call_with_backoff(current_messages)
+            attempt_metadata = {
+                **(call_metadata or {}),
+                "retry_attempt": attempt,
+            }
+            response_text = self._call_with_backoff(
+                current_messages,
+                call_metadata=attempt_metadata,
+            )
             attempts.append({"messages": current_messages, "response": response_text})
             try:
                 return parser(response_text)
@@ -803,6 +851,8 @@ class FlagGameTransformersVLMBackend:
     def _call_with_backoff(
         self,
         messages: list[dict[str, Any]],
+        *,
+        call_metadata: dict[str, Any] | None = None,
         max_retries: int = 3,
         base_delay: float = 2.0,
         max_delay: float = 20.0,
@@ -810,7 +860,7 @@ class FlagGameTransformersVLMBackend:
         delay = base_delay
         for attempt in range(max_retries + 1):
             try:
-                return self._call(messages)
+                return self._call(messages, call_metadata=call_metadata)
             except Exception as exc:
                 if attempt >= max_retries:
                     raise exc
@@ -823,6 +873,215 @@ class FlagGameTransformersVLMBackend:
         path = self.debug_dir / f"parse_failure_{timestamp}.json"
         with open(path, "w") as handle:
             json.dump({"attempts": attempts}, handle, indent=2, default=str)
+
+    def _call_metadata(
+        self,
+        call_metadata: dict[str, Any] | None,
+        *,
+        call_type: str,
+        m: int,
+        countries: list[str],
+        memory_lines: list[str],
+        prepared_crop: Path,
+    ) -> dict[str, Any]:
+        metadata = dict(call_metadata or {})
+        metadata.setdefault("call_type", call_type)
+        metadata.setdefault("m", m)
+        metadata.setdefault("model", self.model)
+        metadata.setdefault("country_count", len(countries))
+        metadata.setdefault("memory_line_count", len(memory_lines))
+        metadata.setdefault("prepared_crop", str(prepared_crop))
+        return metadata
+
+    def _normalize_activation_config(self, config: dict[str, Any] | None) -> dict[str, Any]:
+        config = dict(config or {})
+        return {
+            "enabled": bool(config.get("enabled", False)),
+            "scope": str(config.get("scope", "initial_probe")),
+            "layers": config.get("layers"),
+            "save_full_sequence": bool(config.get("save_full_sequence", False)),
+            "storage_dtype": str(config.get("storage_dtype", "float16")),
+        }
+
+    def _capture_activations_if_needed(
+        self,
+        *,
+        inputs: dict[str, Any],
+        messages: list[dict[str, Any]],
+        prompt_text: str,
+        call_metadata: dict[str, Any] | None,
+        prompt_length: int,
+    ) -> None:
+        if not self._should_capture(call_metadata):
+            return
+        if self.activation_dir is None:
+            raise RuntimeError("Activation capture is enabled but no activation_dir was configured")
+
+        outputs = self.model_obj(**inputs, output_hidden_states=True, return_dict=True)
+        hidden_states = getattr(outputs, "hidden_states", None)
+        if hidden_states is None:
+            raise RuntimeError("Model did not return hidden_states for activation capture")
+
+        resolved_layers = self._resolve_capture_layers(len(hidden_states))
+        storage_dtype = self._activation_storage_dtype()
+        last_prompt_index = max(prompt_length - 1, 0)
+        last_prompt_token = self.torch.stack(
+            [
+                hidden_states[layer][0, last_prompt_index, :].detach().to(storage_dtype).cpu()
+                for layer in resolved_layers
+            ]
+        )
+        mean_prompt = self.torch.stack(
+            [
+                hidden_states[layer][0, :prompt_length, :].detach().float().mean(dim=0).to(storage_dtype).cpu()
+                for layer in resolved_layers
+            ]
+        )
+
+        metadata = self._json_safe(dict(call_metadata or {}))
+        call_id = self._activation_call_id(metadata)
+        tensor_relpath = Path("tensors") / f"{call_id}.pt"
+        tensor_path = self.activation_dir / tensor_relpath
+        tensor_path.parent.mkdir(parents=True, exist_ok=True)
+        input_ids = inputs["input_ids"][0].detach().cpu()
+        attention_mask = inputs.get("attention_mask")
+        saved_attention_mask = (
+            attention_mask[0].detach().cpu()
+            if hasattr(attention_mask, "detach")
+            else self.torch.ones_like(input_ids)
+        )
+        payload: dict[str, Any] = {
+            "metadata": metadata,
+            "layers": self.torch.tensor(resolved_layers, dtype=self.torch.int64),
+            "last_prompt_token": last_prompt_token,
+            "mean_prompt": mean_prompt,
+            "input_ids": input_ids,
+            "attention_mask": saved_attention_mask,
+            "prompt_length": prompt_length,
+            "last_prompt_token_index": last_prompt_index,
+            "prompt_text": prompt_text,
+            "tokens": self._tokens_from_input_ids(input_ids),
+        }
+        if self._activation_config["save_full_sequence"]:
+            payload["hidden_states"] = self.torch.stack(
+                [
+                    hidden_states[layer][0, :prompt_length, :].detach().to(storage_dtype).cpu()
+                    for layer in resolved_layers
+                ]
+            )
+        self.torch.save(payload, tensor_path)
+
+        row = {
+            **metadata,
+            "call_id": call_id,
+            "tensor_path": str(tensor_relpath),
+            "activation_dir": str(self.activation_dir),
+            "feature_keys": ["last_prompt_token", "mean_prompt"],
+            "layers": resolved_layers,
+            "prompt_length": prompt_length,
+            "last_prompt_token_index": last_prompt_index,
+            "input_shape": list(inputs["input_ids"].shape),
+            "model": self.model,
+            "messages": self._message_summary(messages),
+            "saved_at_unix_ms": int(time.time() * 1000),
+        }
+        if self._activation_config["save_full_sequence"]:
+            row["feature_keys"].append("hidden_states")
+        self._activation_rows.append(row)
+        with open(self.activation_dir / "index.jsonl", "a") as handle:
+            handle.write(json.dumps(self._json_safe(row), ensure_ascii=True) + "\n")
+
+    def _should_capture(self, call_metadata: dict[str, Any] | None) -> bool:
+        if not self._activation_config["enabled"]:
+            return False
+        if call_metadata is None:
+            return False
+        if int(call_metadata.get("retry_attempt", 0) or 0) != 0:
+            return False
+        scope = self._activation_config["scope"]
+        call_type = call_metadata.get("call_type")
+        if scope == "all_calls":
+            return True
+        if scope == "all_probes":
+            return call_type == "probe"
+        if scope == "initial_probe":
+            return call_type == "probe" and int(call_metadata.get("t", -1)) == 0 and int(call_metadata.get("m", 0)) == 3
+        raise ValueError(f"Unsupported activation_capture.scope: {scope!r}")
+
+    def _resolve_capture_layers(self, layer_count: int) -> list[int]:
+        configured = self._activation_config["layers"]
+        if configured is None:
+            return list(range(layer_count))
+        resolved: list[int] = []
+        for raw_layer in configured:
+            layer = int(raw_layer)
+            if layer < 0:
+                layer = layer_count + layer
+            if layer < 0 or layer >= layer_count:
+                raise ValueError(
+                    f"Activation capture layer {raw_layer} is out of range for {layer_count} hidden-state tensors"
+                )
+            resolved.append(layer)
+        return resolved
+
+    def _activation_storage_dtype(self) -> Any:
+        value = self._activation_config["storage_dtype"]
+        if value == "float16":
+            return self.torch.float16
+        if value == "bfloat16":
+            return self.torch.bfloat16
+        if value == "float32":
+            return self.torch.float32
+        raise ValueError("activation_capture.storage_dtype must be one of: float16, bfloat16, float32")
+
+    def _activation_call_id(self, metadata: dict[str, Any]) -> str:
+        prefix_parts = [
+            str(metadata.get("call_type", "call")),
+            f"t{metadata.get('t', 'x')}",
+            f"agent{metadata.get('agent_id', metadata.get('speaker_id', 'x'))}",
+            f"m{metadata.get('m', 'x')}",
+        ]
+        prefix = "_".join(self._safe_slug(part) for part in prefix_parts)
+        payload = json.dumps(metadata, sort_keys=True, default=str)
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:10]
+        return f"{prefix}_{digest}"
+
+    def _tokens_from_input_ids(self, input_ids: Any) -> list[str] | None:
+        tokenizer = getattr(self.processor, "tokenizer", self.processor)
+        if not hasattr(tokenizer, "convert_ids_to_tokens"):
+            return None
+        ids = [int(value) for value in input_ids.tolist()]
+        return list(tokenizer.convert_ids_to_tokens(ids))
+
+    def _message_summary(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        summary: list[dict[str, Any]] = []
+        for message in messages:
+            content_summary: list[dict[str, Any]] = []
+            for block in message.get("content", []):
+                if block.get("type") == "text":
+                    content_summary.append({"type": "text", "char_count": len(str(block.get("text", "")))})
+                elif block.get("type") == "image":
+                    content_summary.append({"type": "image", "image": str(block.get("image", ""))})
+                else:
+                    content_summary.append({"type": str(block.get("type", "unknown"))})
+            summary.append({"role": message.get("role"), "content": content_summary})
+        return summary
+
+    def _safe_slug(self, value: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "x"
+
+    def _json_safe(self, value: Any) -> Any:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [self._json_safe(item) for item in value]
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        return value
 
     def _resolve_torch_dtype(self, value: str) -> Any:
         cleaned = value.strip().lower()
@@ -866,6 +1125,7 @@ class ScriptedFlagGameBackend:
         prepared_crop: np.ndarray,
         memory_lines: list[str],
         m: int,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         return self.probe(
             countries=countries,
@@ -881,6 +1141,7 @@ class ScriptedFlagGameBackend:
         prepared_crop: np.ndarray,
         memory_lines: list[str],
         m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         scores = {country: self._country_score(country, prepared_crop, memory_lines) for country in countries}
         ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
@@ -1031,6 +1292,8 @@ def build_backend(
     prompt_social_susceptibility: bool,
     prompt_style: str = "closed_country_list",
     country_lookup: dict[str, FlagSpec] | None = None,
+    activation_dir: Path | None = None,
+    activation_config: dict[str, Any] | None = None,
 ) -> (
     FlagGameOpenAIBackend
     | FlagGameAnthropicBackend
@@ -1066,6 +1329,8 @@ def build_backend(
             social_susceptibility=social_susceptibility,
             prompt_social_susceptibility=prompt_social_susceptibility,
             prompt_style=prompt_style,
+            activation_dir=activation_dir,
+            activation_config=activation_config,
         )
     if backend_name == "openai":
         return FlagGameOpenAIBackend(

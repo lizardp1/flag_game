@@ -142,7 +142,10 @@ python -m nnd.cli run \
 The config keeps the run intentionally tiny:
 
 - `N=2`, `T=2`, `H=2`
+- `tile_height=6`, which avoids the default-seed case where both agents see
+  visually identical stripes
 - `probe_workers=1` to serialize local GPU generation
+- `activation_capture.enabled=true`, scoped to the initial `t=0`, `m=3` probe
 - `output.make_plots=false` to avoid spending time on plotting during smoke tests
 
 The backend is selected by:
@@ -167,10 +170,56 @@ export NND_TRANSFORMERS_ATTN_IMPLEMENTATION=flash_attention_2
 ```
 
 Expected outputs include the normal paper-run artifacts under
-`runs/qwen_pairwise_smoke`, plus local crop PNGs under the backend debug
-directory:
+`runs/qwen_pairwise_smoke`, local crop PNGs under the backend debug directory,
+and compact activation shards for the initial probe:
 
 ```text
 runs/qwen_pairwise_smoke/
+runs/qwen_pairwise_smoke/activations/index.jsonl
+runs/qwen_pairwise_smoke/activations/tensors/
 runs/qwen_pairwise_smoke/debug/Qwen_Qwen2.5-VL-7B-Instruct/prepared_crops/
 ```
+
+## First Activation Dataset
+
+For linear probes, collect a small batch of initial probes only. This avoids
+spending GPU time on full social interaction rounds while you are just checking
+that representation capture works.
+
+```bash
+python -m nnd.cli batch \
+  --config configs/open_models/qwen2_5_vl_7b_pairwise_smoke.yaml \
+  --out runs/qwen_activation_t0_batch \
+  --backend transformers_vlm \
+  --start-seed 0 \
+  --num-seeds 8 \
+  --probe-workers 1 \
+  --seed-workers 1 \
+  --override T=0
+```
+
+Then train a first per-layer linear probe:
+
+```bash
+python scripts/analyze_activation_linear_probe.py \
+  --runs runs/qwen_activation_t0_batch \
+  --target truth_country \
+  --feature last_prompt_token \
+  --out runs/qwen_activation_t0_batch/linear_probe_truth_country
+```
+
+Useful alternate targets:
+
+```bash
+python scripts/analyze_activation_linear_probe.py \
+  --runs runs/qwen_activation_t0_batch \
+  --target informativeness_label \
+  --feature mean_prompt \
+  --out runs/qwen_activation_t0_batch/linear_probe_informativeness
+```
+
+The probe script writes:
+
+- `linear_probe_results.csv`
+- `summary.json`
+- `samples.csv`

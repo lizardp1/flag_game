@@ -277,6 +277,8 @@ def _build_agent_backends(
             prompt_social_susceptibility=config.prompt_social_susceptibility,
             prompt_style=config.prompt_style,
             country_lookup=country_lookup,
+            activation_dir=out_dir / "activations",
+            activation_config=config.activation_capture.model_dump(),
         )
     return [backend_cache[model] for model in agent_models]
 
@@ -523,6 +525,24 @@ def run_flag_game_experiment(
                     prepared_crop=prepared_crops[agent_id],
                     memory_lines=memory_snapshots[agent_id],
                     m=probe_m,
+                    call_metadata={
+                        "call_type": "probe",
+                        "t": t,
+                        "agent_id": agent_id,
+                        "model": agent_models[agent_id],
+                        "m": probe_m,
+                        "truth_country": truth_flag.country,
+                        "countries": countries,
+                        "crop_path": str(out_dir / "artifacts" / f"agent_{agent_id:02d}_crop.png")
+                        if config.output.save_crop_images
+                        else None,
+                        "crop_box": assignments[agent_id].to_dict(),
+                        "pixel_crop_box": scaled_assignments[agent_id].to_dict(),
+                        "crop_diagnostic": crop_diagnostics[agent_id]
+                        if agent_id < len(crop_diagnostics)
+                        else None,
+                        "memory_line_count": len(memory_snapshots[agent_id]),
+                    },
                 )
                 if isinstance(message, str):
                     message = InteractionMessage(country=message)
@@ -599,6 +619,28 @@ def run_flag_game_experiment(
                     prepared_crop=prepared_crops[speaker_id],
                     memory_lines=list(memories[speaker_id]),
                     m=config.interaction_m,
+                    call_metadata={
+                        "call_type": "interaction",
+                        "t": t,
+                        "agent_id": speaker_id,
+                        "speaker_id": speaker_id,
+                        "listener_id": listener_id,
+                        "speaker_model": agent_models[speaker_id],
+                        "listener_model": agent_models[listener_id],
+                        "model": agent_models[speaker_id],
+                        "m": config.interaction_m,
+                        "truth_country": truth_flag.country,
+                        "countries": countries,
+                        "crop_path": str(out_dir / "artifacts" / f"agent_{speaker_id:02d}_crop.png")
+                        if config.output.save_crop_images
+                        else None,
+                        "crop_box": assignments[speaker_id].to_dict(),
+                        "pixel_crop_box": scaled_assignments[speaker_id].to_dict(),
+                        "crop_diagnostic": crop_diagnostics[speaker_id]
+                        if speaker_id < len(crop_diagnostics)
+                        else None,
+                        "memory_line_count": len(memories[speaker_id]),
+                    },
                 )
             except ParseError as exc:
                 interaction_rows.append(
@@ -690,6 +732,7 @@ def run_flag_game_experiment(
             "prompt_style": config.prompt_style,
             "render_scale": config.render_scale,
             "image_detail": config.image_detail,
+            "activation_capture": config.activation_capture.model_dump(),
             "observation_overlap_target": config.observation_overlap,
             "observation_overlap_mode": config.observation_overlap_mode,
             "observation_overlap_realized": actual_overlap,
@@ -751,6 +794,7 @@ def run_flag_game_experiment(
                 "canvas": {"width": config.canvas_width, "height": config.canvas_height},
                 "render": {"scale": config.render_scale, "width": render_width, "height": render_height},
                 "image_detail": config.image_detail,
+                "activation_capture": config.activation_capture.model_dump(),
                 "social_susceptibility": config.social_susceptibility,
                 "prompt_social_susceptibility": config.prompt_social_susceptibility,
                 "prompt_style": config.prompt_style,
