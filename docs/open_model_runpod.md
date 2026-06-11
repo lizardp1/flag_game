@@ -298,9 +298,18 @@ Install Ollama, keep its model store on `/workspace`, and start the server:
 
 ```bash
 cd /workspace/flag_game
+./scripts/runpod_install_ollama.sh
+```
+
+The script installs `zstd` first when the RunPod image is missing it. If you
+want to do that manually on a Debian/Ubuntu image:
+
+```bash
+apt-get update
+apt-get install -y zstd
+
 mkdir -p /workspace/ollama_models runs
 export OLLAMA_MODELS=/workspace/ollama_models
-
 curl -fsSL https://ollama.com/install.sh | sh
 nohup ollama serve > runs/ollama_server.log 2>&1 &
 ```
