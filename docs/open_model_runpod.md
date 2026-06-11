@@ -289,6 +289,52 @@ Use this pair when you want permissive/open-source models outside the Qwen
 family. The sweep script defaults to `BACKEND=auto`, so it chooses the loader
 from the Hugging Face model id.
 
+If Hugging Face/Xet downloads kill the RunPod web terminal, do not keep trying
+the Transformers path for LLaVA. Use the Ollama API path first as a capability
+gate. This avoids `snapshot_download` entirely and talks to a local Ollama
+server instead.
+
+Install Ollama, keep its model store on `/workspace`, and start the server:
+
+```bash
+cd /workspace/flag_game
+mkdir -p /workspace/ollama_models runs
+export OLLAMA_MODELS=/workspace/ollama_models
+
+curl -fsSL https://ollama.com/install.sh | sh
+nohup ollama serve > runs/ollama_server.log 2>&1 &
+```
+
+Pull the smaller Ollama-packaged LLaVA model:
+
+```bash
+export OLLAMA_MODELS=/workspace/ollama_models
+ollama pull llava:7b
+```
+
+If the web terminal is unstable during downloads, launch the pull in the
+background and tail the log from a fresh terminal:
+
+```bash
+nohup bash -lc 'export OLLAMA_MODELS=/workspace/ollama_models; ollama pull llava:7b' \
+  > runs/ollama_pull_llava.log 2>&1 &
+
+tail -f runs/ollama_pull_llava.log
+```
+
+Then run the flag-color battery through the Ollama API backend:
+
+```bash
+MODELS="llava:7b" \
+COLOR_SET=flag_core \
+OUT=runs/ollama_llava_visual_flag_core \
+./scripts/run_ollama_visual_model_sweep.sh
+```
+
+This route is for model-capability screening. It does not give internal
+activations. If LLaVA passes the flag-color battery through Ollama, then it is
+worth spending effort on a raw-weights/mech-interp setup for the model family.
+
 Run LLaVA first:
 
 ```bash

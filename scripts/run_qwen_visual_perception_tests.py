@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from dataclasses import dataclass
 import json
 import os
@@ -119,12 +120,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--backend",
-        choices=["auto", "qwen", "qwen2_5", "qwen3", "llava", "kimi_vl", "oracle"],
+        choices=[
+            "auto",
+            "qwen",
+            "qwen2_5",
+            "qwen3",
+            "llava",
+            "kimi_vl",
+            "ollama",
+            "oracle",
+        ],
         default="auto",
         help=(
             "Use auto to infer a loader from the model id. Use qwen, qwen2_5, "
-            "qwen3, llava, or kimi_vl to force a loader, or oracle for local "
-            "output/summary smoke tests."
+            "qwen3, llava, kimi_vl, or ollama to force a loader, or oracle for "
+            "local output/summary smoke tests."
         ),
     )
     parser.add_argument(
@@ -173,6 +183,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-new-tokens", type=int, default=160)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float, default=1.0)
+    parser.add_argument(
+        "--request-timeout",
+        type=float,
+        default=300.0,
+        help="HTTP timeout in seconds for API-backed runners such as Ollama.",
+    )
+    parser.add_argument(
+        "--ollama-url",
+        default=os.environ.get("OLLAMA_URL")
+        or os.environ.get("OLLAMA_HOST")
+        or "http://127.0.0.1:11434",
+        help="Ollama API base URL for --backend ollama.",
+    )
     parser.add_argument(
         "--torch-dtype",
         default="bfloat16",
@@ -472,6 +495,8 @@ def build_runner(args: argparse.Namespace, model_id: str) -> Any:
         return LlavaRunner(args, model_id)
     if args.backend == "kimi_vl":
         return KimiVLRunner(args, model_id)
+    if args.backend == "ollama":
+        return OllamaRunner(args, model_id)
     raise ValueError(f"Unsupported backend: {args.backend}")
 
 
@@ -597,6 +622,43 @@ class KimiVLRunner:
             self.torch.cuda.empty_cache()
 
 
+class OllamaRunner:
+    def __init__(self, args: argparse.Namespace, model_id: str) -> None:
+        self.args = args
+        self.model_id = model_id
+        self.url = normalize_api_base_url(args.ollama_url)
+
+    def __call__(self, stimulus: Stimulus, image_path: Path) -> str:
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError(
+                "Missing httpx. Run: python -m pip install -r requirements-runpod.txt"
+            ) from exc
+
+        prompt = build_visual_user_text(stimulus.prompt)
+        payload = {
+            "model": self.model_id,
+            "prompt": prompt,
+            "images": [base64.b64encode(image_path.read_bytes()).decode("ascii")],
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": self.args.temperature,
+                "top_p": self.args.top_p,
+                "num_predict": self.args.max_new_tokens,
+            },
+        }
+        response = httpx.post(
+            f"{self.url}/api/generate",
+            json=payload,
+            timeout=self.args.request_timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return str(data.get("response", "")).strip()
+
+
 def is_qwen_model(model_id: str) -> bool:
     normalized = model_id.lower()
     return "qwen" in normalized and ("vl" in normalized or "vision" in normalized)
@@ -618,6 +680,15 @@ def is_kimi_vl_model(model_id: str) -> bool:
 
 def build_visual_user_text(user_text: str) -> str:
     return f"{system_prompt()}\n\n{user_text}"
+
+
+def normalize_api_base_url(url: str) -> str:
+    value = str(url).strip().rstrip("/")
+    if not value:
+        return "http://127.0.0.1:11434"
+    if not re.match(r"^https?://", value):
+        value = f"http://{value}"
+    return value
 
 
 def build_qwen_messages(
