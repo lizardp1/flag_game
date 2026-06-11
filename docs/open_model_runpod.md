@@ -57,9 +57,12 @@ Keep Hugging Face downloads on the persistent `/workspace` volume:
 export HF_HOME=/workspace/.cache/huggingface
 export HF_HUB_CACHE=/workspace/.cache/huggingface/hub
 export HF_ASSETS_CACHE=/workspace/.cache/huggingface/assets
+export HF_XET_CACHE=/workspace/.cache/huggingface/xet
 export TRANSFORMERS_CACHE=/workspace/.cache/huggingface/hub
 export TMPDIR=/workspace/.cache/tmp
-mkdir -p "$HF_HOME"
+export HF_XET_NUM_CONCURRENT_RANGE_GETS=2
+export HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY=1
+mkdir -p "$HF_HOME" "$HF_XET_CACHE" "$TMPDIR"
 ```
 
 If a model is gated, also set:
@@ -80,6 +83,7 @@ rm -rf /tmp/nnd_matplotlib_cache/huggingface
 source scripts/runpod_cache_env.sh
 echo "$HF_HOME"
 echo "$HF_HUB_CACHE"
+echo "$HF_XET_CACHE"
 echo "$TMPDIR"
 ```
 
@@ -87,6 +91,31 @@ If `/workspace` is also tight, inspect cached models:
 
 ```bash
 du -h -d 2 /workspace/.cache/huggingface 2>/dev/null | sort -h | tail -40
+```
+
+If a download fails inside `xet_get` with an error like `Internal Writer Error`
+or `Background writer channel closed`, pre-download the model once with
+conservative Hugging Face/Xet settings, then rerun the visual sweep from cache:
+
+```bash
+cd /workspace/flag_game
+source .venv/bin/activate
+source scripts/runpod_cache_env.sh
+
+./scripts/runpod_hf_download_model.sh llava-hf/llava-v1.6-mistral-7b-hf
+```
+
+For Kimi-VL:
+
+```bash
+./scripts/runpod_hf_download_model.sh moonshotai/Kimi-VL-A3B-Instruct
+```
+
+The downloader uses `snapshot_download(..., max_workers=1)` by default. To try
+two workers:
+
+```bash
+HF_SNAPSHOT_MAX_WORKERS=2 ./scripts/runpod_hf_download_model.sh llava-hf/llava-v1.6-mistral-7b-hf
 ```
 
 Before loading a new open VLM, run:

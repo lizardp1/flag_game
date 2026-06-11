@@ -34,6 +34,9 @@ fi
 if [[ -z "${HF_ASSETS_CACHE:-}" ]] || is_tmp_path "${HF_ASSETS_CACHE:-}"; then
   export HF_ASSETS_CACHE="$HF_HOME/assets"
 fi
+if [[ -z "${HF_XET_CACHE:-}" ]] || is_tmp_path "${HF_XET_CACHE:-}"; then
+  export HF_XET_CACHE="$HF_HOME/xet"
+fi
 if [[ -z "${TMPDIR:-}" ]] || is_tmp_path "${TMPDIR:-}"; then
   export TMPDIR="$CACHE_ROOT/tmp"
 fi
@@ -41,9 +44,22 @@ if [[ -z "${MPLCONFIGDIR:-}" ]] || is_tmp_path "${MPLCONFIGDIR:-}"; then
   export MPLCONFIGDIR="$CACHE_ROOT/matplotlib"
 fi
 
-mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$TRANSFORMERS_CACHE" "$HF_ASSETS_CACHE" "$TMPDIR" "$MPLCONFIGDIR"
+export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-60}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-120}"
+export HF_XET_NUM_CONCURRENT_RANGE_GETS="${HF_XET_NUM_CONCURRENT_RANGE_GETS:-2}"
+export HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY="${HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY:-1}"
+
+mkdir -p \
+  "$HF_HOME" \
+  "$HF_HUB_CACHE" \
+  "$TRANSFORMERS_CACHE" \
+  "$HF_ASSETS_CACHE" \
+  "$HF_XET_CACHE" \
+  "$TMPDIR" \
+  "$MPLCONFIGDIR"
 
 echo "RunPod cache env:"
 echo "  HF_HOME=$HF_HOME"
 echo "  HF_HUB_CACHE=$HF_HUB_CACHE"
+echo "  HF_XET_CACHE=$HF_XET_CACHE"
 echo "  TMPDIR=$TMPDIR"

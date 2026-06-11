@@ -40,6 +40,7 @@ echo "  RAM available:  ${mem_available_gb} GB"
 echo "  GPU free:       ${gpu_free_gb} GB"
 echo "  HF_HOME:        ${HF_HOME}"
 echo "  HF_HUB_CACHE:   ${HF_HUB_CACHE}"
+echo "  HF_XET_CACHE:   ${HF_XET_CACHE}"
 echo "  TMPDIR:         ${TMPDIR}"
 echo
 
