@@ -597,6 +597,44 @@ runs/llava_mech_interp/geometry_batch/activation_geometry_last_prompt_token/
 runs/llava_mech_interp/activation_t0_batch/linear_probe_truth_country/
 ```
 
+## Controlled Memory-Conflict Probe
+
+Use this before making internal-representation claims. It reproduces the
+single-agent private-vs-social psychology setup from the paper code with an
+open VLM.
+
+Behavior-only first:
+
+```bash
+REPLICATES=3 \
+OUT=runs/llava_memory_conflict_probe \
+./scripts/run_llava_memory_conflict_probe.sh
+```
+
+Then rerun with compact hidden-state capture:
+
+```bash
+ACTIVATION_CAPTURE=1 \
+REPLICATES=3 \
+OUT=runs/llava_memory_conflict_probe_activations \
+./scripts/run_llava_memory_conflict_probe.sh
+```
+
+Summarize the early phases:
+
+```bash
+python scripts/summarize_open_model_behavior.py \
+  --visual-run runs/ollama_llava_visual_flag_core \
+  --memory-conflict-run runs/llava_memory_conflict_probe \
+  --out runs/open_model_phase1_behavior
+```
+
+Phase 3 concept-geometry outputs are written under:
+
+```text
+runs/llava_memory_conflict_probe_activations/activation_concepts_last_prompt_token/
+```
+
 For representation geometry across communication rounds:
 
 ```bash

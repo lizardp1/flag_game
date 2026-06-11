@@ -210,6 +210,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-plots", action="store_true")
     parser.add_argument("--no-save-crops", action="store_true")
     parser.add_argument(
+        "--activation-capture",
+        action="store_true",
+        help="Capture hidden-state features for each probe call when the backend supports it.",
+    )
+    parser.add_argument(
+        "--activation-scope",
+        default="all_probes",
+        choices=["all_calls", "all_probes", "initial_probe"],
+        help="Backend activation-capture scope. all_probes is the right default for this single-agent probe.",
+    )
+    parser.add_argument(
+        "--activation-layers",
+        default=None,
+        help="Optional comma-separated layer ids to store. Defaults to every captured layer.",
+    )
+    parser.add_argument(
+        "--activation-save-full-sequence",
+        action="store_true",
+        help="Also store full hidden-state sequences. This can be large; compact layer features are the default.",
+    )
+    parser.add_argument(
+        "--activation-storage-dtype",
+        default="float16",
+        choices=["float16", "bfloat16", "float32"],
+        help="Storage dtype for captured activation tensors.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -236,6 +263,28 @@ def _parse_memory_counts(raw: str, h: int) -> list[int]:
 def _safe_model_dir(model: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", model).strip("._")
     return cleaned or "model"
+
+
+def _parse_activation_layers(raw: str | None) -> list[int] | None:
+    if raw is None or not raw.strip():
+        return None
+    values: list[int] = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        values.append(int(item))
+    return values or None
+
+
+def _activation_config_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "enabled": bool(args.activation_capture),
+        "scope": args.activation_scope,
+        "layers": _parse_activation_layers(args.activation_layers),
+        "save_full_sequence": bool(args.activation_save_full_sequence),
+        "storage_dtype": args.activation_storage_dtype,
+    }
 
 
 def _country_names(pool: list[FlagSpec]) -> list[str]:
@@ -728,6 +777,40 @@ def _row_from_result(
     }
 
 
+def _trial_call_metadata(spec: TrialSpec) -> dict[str, Any]:
+    memory_total = spec.false_memory_count + spec.true_memory_count
+    false_memory_fraction = (
+        float(spec.false_memory_count / memory_total) if memory_total else None
+    )
+    return {
+        "call_type": "probe",
+        "t": 0,
+        "agent_id": 0,
+        "trial_id": spec.trial_id,
+        "model": spec.model,
+        "m": spec.m,
+        "truth_country": spec.truth_country,
+        "lure_country": spec.lure_country,
+        "lure_relation": spec.lure_relation,
+        "crop_condition": spec.crop_condition,
+        "private_evidence_strength": _private_evidence_strength(spec.crop_condition),
+        "social_evidence_type": _social_evidence_type(spec.lure_relation),
+        "false_memory_count": spec.false_memory_count,
+        "true_memory_count": spec.true_memory_count,
+        "memory_total": memory_total,
+        "false_memory_fraction": false_memory_fraction,
+        "false_majority": spec.false_memory_count > spec.true_memory_count,
+        "true_majority": spec.true_memory_count > spec.false_memory_count,
+        "memory_tie": spec.false_memory_count == spec.true_memory_count,
+        "rep": spec.rep,
+        "seed": spec.seed,
+        "crop_box": spec.crop_box.to_dict(),
+        "crop_diagnostic": spec.crop_diagnostic,
+        "allowed_countries": list(spec.allowed_countries),
+        "memory_lines": list(spec.memory_lines),
+    }
+
+
 def run_trials(
     *,
     args: argparse.Namespace,
@@ -741,6 +824,8 @@ def run_trials(
     backend_name = args.backend or choose_default_backend()
     pool = get_country_pool(args.country_pool)
     lookup = _country_lookup(pool)
+    activation_dir = out_dir / "activations" if args.activation_capture else None
+    activation_config = _activation_config_from_args(args) if args.activation_capture else None
 
     backend_cache: dict[str, Any] = {}
     prepared_crop_cache: dict[tuple[str, str, str], Any] = {}
@@ -760,6 +845,8 @@ def run_trials(
                 prompt_social_susceptibility=args.prompt_social_susceptibility,
                 prompt_style="closed_country_list",
                 country_lookup=lookup,
+                activation_dir=activation_dir,
+                activation_config=activation_config,
             )
         return backend_cache[model]
 
@@ -788,6 +875,7 @@ def run_trials(
                     prepared_crop=prepared_crop_for(spec),
                     memory_lines=list(spec.memory_lines),
                     m=spec.m,
+                    call_metadata=_trial_call_metadata(spec),
                 )
                 if isinstance(message, str):
                     message = InteractionMessage(country=message)
@@ -1679,6 +1767,10 @@ def main() -> None:
         "replicates": args.replicates,
         "h": args.h,
         "backend": args.backend or choose_default_backend(),
+        "activation_capture": bool(args.activation_capture),
+        "activation_config": _activation_config_from_args(args)
+        if args.activation_capture
+        else None,
     }
     (args.out / "plan_meta.json").write_text(json.dumps(plan_meta, indent=2))
     print(json.dumps(plan_meta, indent=2))

@@ -4,6 +4,125 @@ This is the current path from open-model flag-game runs to representation
 geometry analyses. Linear probes are optional later; the first-class question is
 how agent representations align, separate, and move across communication rounds.
 
+## Early-Phase Study Plan
+
+The open-model study should start behavior-first, then move to internals only
+after the task is demonstrably meaningful for the model family.
+
+### Phase 1: Visible Capabilities And Social Behavior
+
+Run the visual gate first. For LLaVA, the behavior-only Ollama path has already
+shown stronger non-primary flag-color recognition than Qwen2.5-VL; use raw
+Transformers only when hidden states are needed.
+
+```bash
+MODELS="llava:7b" \
+COLOR_SET=flag_core \
+OUT=runs/ollama_llava_visual_flag_core \
+./scripts/run_ollama_visual_model_sweep.sh
+```
+
+After you have any mix of visual, flag-game, or memory-conflict outputs, build
+a single model-behavior report:
+
+```bash
+python scripts/summarize_open_model_behavior.py \
+  --visual-run runs/ollama_llava_visual_flag_core \
+  --flag-run runs/llava_mech_interp/geometry_batch \
+  --memory-conflict-run runs/llava_memory_conflict_probe \
+  --out runs/open_model_phase1_behavior
+```
+
+If you omit explicit run dirs, the script discovers compatible outputs under
+`runs/`.
+
+Key outputs:
+
+```text
+runs/open_model_phase1_behavior/model_behavior_report.md
+runs/open_model_phase1_behavior/visual_capability_summary.csv
+runs/open_model_phase1_behavior/flag_game_behavior_summary.csv
+runs/open_model_phase1_behavior/memory_conflict_thresholds.csv
+```
+
+### Phase 2: Controlled Private-Vs-Social Psychology Probe
+
+The original paper-style phase already lives in:
+
+```text
+scripts/run_flag_memory_conflict_probe.py
+```
+
+For LLaVA on RunPod, use the wrapper:
+
+```bash
+source .venv/bin/activate
+source scripts/runpod_cache_env.sh
+
+REPLICATES=3 \
+OUT=runs/llava_memory_conflict_probe \
+./scripts/run_llava_memory_conflict_probe.sh
+```
+
+This tests weak/strong private evidence, compatible/incompatible social
+evidence, and every memory composition from `8:0` through `0:8`, using `m=3` by
+default.
+
+Key outputs:
+
+```text
+runs/llava_memory_conflict_probe/results.csv
+runs/llava_memory_conflict_probe/summary_by_count.csv
+runs/llava_memory_conflict_probe/threshold_summary.csv
+runs/llava_memory_conflict_probe/agent_response_decomposition.png
+```
+
+Interpret this before internals. You want to see at least some logically
+ordered opinion change as social evidence grows, plus stronger resistance when
+private evidence is diagnostic.
+
+### Phase 3: Single-Agent Internal Concept Geometry
+
+Once Phase 2 shows meaningful behavior, rerun the same controlled probe with
+compact activation capture:
+
+```bash
+ACTIVATION_CAPTURE=1 \
+REPLICATES=3 \
+OUT=runs/llava_memory_conflict_probe_activations \
+./scripts/run_llava_memory_conflict_probe.sh
+```
+
+The runner stores `last_prompt_token` and `mean_prompt` for each layer by
+default. The wrapper automatically runs:
+
+```bash
+python scripts/analyze_memory_conflict_activations.py \
+  --runs runs/llava_memory_conflict_probe_activations \
+  --feature last_prompt_token \
+  --out runs/llava_memory_conflict_probe_activations/activation_concepts_last_prompt_token
+```
+
+Key outputs:
+
+```text
+runs/llava_memory_conflict_probe_activations/activations/index.jsonl
+runs/llava_memory_conflict_probe_activations/activation_concepts_last_prompt_token/activation_samples.csv
+runs/llava_memory_conflict_probe_activations/activation_concepts_last_prompt_token/concept_separation_by_layer.csv
+runs/llava_memory_conflict_probe_activations/activation_concepts_last_prompt_token/centroid_similarity_by_layer.csv
+```
+
+The concept analyzer is not a trained probe. It asks whether concepts cluster in
+representation geometry across layers:
+
+- stimulus-side concepts: `private_evidence_strength`, `social_evidence_type`
+- social-composition concepts: `false_memory_bin`, `memory_majority`
+- decision-side concepts: `response_type`, `choice_axis`, `correct`
+
+This is the early internal-representation bridge before manager/observer
+comparisons, polarization cases, or more expensive cross-agent trajectory
+analyses.
+
 ## 1. Validate The Model
 
 For LLaVA, use the raw Hugging Face/Transformers path when you need
