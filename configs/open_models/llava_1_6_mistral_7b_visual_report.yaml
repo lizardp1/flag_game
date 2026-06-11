@@ -1,0 +1,32 @@
+backend: transformers_vlm
+model: llava-hf/llava-v1.6-mistral-7b-hf
+N: 5
+T: 8
+H: 4
+interaction_m: 3
+country_pool: stripe_plus_real_triangle_28
+fixed_truth_country: Czech Republic
+canvas_width: 24
+canvas_height: 16
+tile_width: 6
+tile_height: 4
+render_scale: 25
+temperature: 0.0
+top_p: 1.0
+max_tokens: 180
+probe_every: 1
+probe_workers: 1
+seed_workers: 1
+condition_workers: 1
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+disable_memory_updates: false
+output:
+  save_crop_images: true
+  make_plots: true
+activation_capture:
+  enabled: false
+  scope: all_probes
+  layers: null
+  save_full_sequence: false
+  storage_dtype: float16

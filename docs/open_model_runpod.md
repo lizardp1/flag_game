@@ -597,6 +597,40 @@ runs/llava_mech_interp/geometry_batch/activation_geometry_last_prompt_token/
 runs/llava_mech_interp/activation_t0_batch/linear_probe_truth_country/
 ```
 
+## One-Run Visual Report
+
+Use this when you want a qualitative LLaVA run that saves images like the paper
+dashboard: full flag, agent crop windows, country-share trajectory, and final
+outcome summary.
+
+```bash
+OUT=runs/llava_visual_report_run \
+SEED=0 \
+./scripts/run_llava_visual_report_run.sh
+```
+
+The default is a five-agent run with `T=8`, `H=4`, `m=3`, and
+`fixed_truth_country=Czech Republic` so it works without downloaded
+world-flag image assets. If your pod has world-rectangle flag assets and you
+want a Japan-style run, override both the config/pool and truth country:
+
+```bash
+COUNTRY_POOL=world_rectangle_images \
+TRUTH_COUNTRY=Japan \
+./scripts/run_llava_visual_report_run.sh
+```
+
+Key outputs:
+
+```text
+runs/llava_visual_report_run/visual_report.html
+runs/llava_visual_report_run/plots/run_card.png
+runs/llava_visual_report_run/plots/country_share_trajectories.png
+runs/llava_visual_report_run/plots/run_overview.png
+runs/llava_visual_report_run/artifacts/truth_flag.png
+runs/llava_visual_report_run/artifacts/agent_00_crop.png
+```
+
 ## Controlled Memory-Conflict Probe
 
 Use this before making internal-representation claims. It reproduces the

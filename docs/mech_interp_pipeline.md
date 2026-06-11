@@ -45,6 +45,21 @@ runs/open_model_phase1_behavior/flag_game_behavior_summary.csv
 runs/open_model_phase1_behavior/memory_conflict_thresholds.csv
 ```
 
+For one qualitative LLaVA run that saves a dashboard-style image with the full
+flag, crop windows, country trajectory, and outcome summary:
+
+```bash
+OUT=runs/llava_visual_report_run \
+./scripts/run_llava_visual_report_run.sh
+```
+
+Inspect:
+
+```text
+runs/llava_visual_report_run/visual_report.html
+runs/llava_visual_report_run/plots/run_card.png
+```
+
 ### Phase 2: Controlled Private-Vs-Social Psychology Probe
 
 The original paper-style phase already lives in:
