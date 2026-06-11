@@ -1,0 +1,31 @@
+backend: transformers_vlm
+model: llava-hf/llava-v1.6-mistral-7b-hf
+N: 2
+T: 2
+H: 2
+interaction_m: 3
+country_pool: stripe_expanded_24
+canvas_width: 24
+canvas_height: 16
+tile_width: 3
+tile_height: 6
+render_scale: 25
+temperature: 0.0
+top_p: 1.0
+max_tokens: 160
+probe_every: 1
+probe_workers: 1
+seed_workers: 1
+condition_workers: 1
+consensus_threshold: 0.9
+polarization_threshold: 0.2
+disable_memory_updates: false
+output:
+  save_crop_images: true
+  make_plots: false
+activation_capture:
+  enabled: true
+  scope: all_probes
+  layers: null
+  save_full_sequence: false
+  storage_dtype: float16

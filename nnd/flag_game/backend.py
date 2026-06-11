@@ -551,8 +551,7 @@ class FlagGameTransformersVLMBackend:
         try:
             import torch
             import torchvision  # noqa: F401
-            from qwen_vl_utils import process_vision_info
-            from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+            from transformers import AutoProcessor
         except ImportError as exc:
             raise RuntimeError(
                 "Missing local VLM dependencies. Run: "
@@ -560,7 +559,7 @@ class FlagGameTransformersVLMBackend:
             ) from exc
 
         self.torch = torch
-        self.process_vision_info = process_vision_info
+        self.vlm_family = self._infer_vlm_family(self.model)
         self.debug_dir.mkdir(parents=True, exist_ok=True)
         self.usage_rows: list[dict[str, Any]] = []
         self._generate_lock = threading.Lock()
@@ -586,10 +585,35 @@ class FlagGameTransformersVLMBackend:
         if attn_implementation != "auto":
             model_kwargs["attn_implementation"] = attn_implementation
 
-        self.model_obj = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            self.model,
-            **model_kwargs,
-        )
+        if self.vlm_family == "qwen2_5":
+            try:
+                from qwen_vl_utils import process_vision_info
+                from transformers import Qwen2_5_VLForConditionalGeneration
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Missing Qwen VLM dependencies. Run: "
+                    "python -m pip install -r requirements-open-models.txt"
+                ) from exc
+            self.process_vision_info = process_vision_info
+            self.model_obj = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                self.model,
+                **model_kwargs,
+            )
+        elif self.vlm_family == "llava_next":
+            try:
+                from transformers import LlavaNextForConditionalGeneration
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Missing LLaVA dependencies. Run: "
+                    "python -m pip install -r requirements-open-models.txt"
+                ) from exc
+            self.process_vision_info = None
+            self.model_obj = LlavaNextForConditionalGeneration.from_pretrained(
+                self.model,
+                **model_kwargs,
+            )
+        else:
+            raise ValueError(f"Unsupported local VLM family: {self.vlm_family!r}")
         self.processor = AutoProcessor.from_pretrained(
             self.model,
             trust_remote_code=trust_remote_code,
@@ -615,7 +639,7 @@ class FlagGameTransformersVLMBackend:
         call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
-        messages = self._qwen_multimodal_messages(
+        messages = self._multimodal_messages(
             text=prompt_module.interaction_text(
                 countries=countries,
                 memory_lines=memory_lines,
@@ -653,7 +677,7 @@ class FlagGameTransformersVLMBackend:
         call_metadata: dict[str, Any] | None = None,
     ) -> InteractionMessage:
         prompt_module = self._prompt_module()
-        messages = self._qwen_multimodal_messages(
+        messages = self._multimodal_messages(
             text=prompt_module.probe_text(
                 countries=countries,
                 memory_lines=memory_lines,
@@ -708,12 +732,25 @@ class FlagGameTransformersVLMBackend:
             return parse_open_country_probe_response(text, countries, m)
         return parse_probe_response(text, countries, m)
 
-    def _qwen_multimodal_messages(
+    def _multimodal_messages(
         self,
         *,
         text: str,
         crop_path: Path,
     ) -> list[dict[str, Any]]:
+        if self.vlm_family == "llava_next":
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": str(Path(crop_path).resolve())},
+                        {
+                            "type": "text",
+                            "text": f"{self._prompt_module().system_prompt()}\n\n{text}",
+                        },
+                    ],
+                }
+            ]
         return [
             {
                 "role": "system",
@@ -739,14 +776,7 @@ class FlagGameTransformersVLMBackend:
             tokenize=False,
             add_generation_prompt=True,
         )
-        image_inputs, video_inputs = self.process_vision_info(messages)
-        inputs = self.processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
+        inputs = self._prepare_processor_inputs(text=text, messages=messages)
         device = self._infer_input_device()
         inputs = {
             key: value.to(device) if hasattr(value, "to") else value
@@ -918,13 +948,14 @@ class FlagGameTransformersVLMBackend:
             raise RuntimeError("Activation capture is enabled but no activation_dir was configured")
 
         outputs = self.model_obj(**inputs, output_hidden_states=True, return_dict=True)
-        hidden_states = getattr(outputs, "hidden_states", None)
+        hidden_states = self._hidden_states_from_outputs(outputs)
         if hidden_states is None:
             raise RuntimeError("Model did not return hidden_states for activation capture")
 
         resolved_layers = self._resolve_capture_layers(len(hidden_states))
         storage_dtype = self._activation_storage_dtype()
-        last_prompt_index = max(prompt_length - 1, 0)
+        activation_sequence_length = int(hidden_states[resolved_layers[0]].shape[1])
+        last_prompt_index = max(activation_sequence_length - 1, 0)
         last_prompt_token = self.torch.stack(
             [
                 hidden_states[layer][0, last_prompt_index, :].detach().to(storage_dtype).cpu()
@@ -933,7 +964,12 @@ class FlagGameTransformersVLMBackend:
         )
         mean_prompt = self.torch.stack(
             [
-                hidden_states[layer][0, :prompt_length, :].detach().float().mean(dim=0).to(storage_dtype).cpu()
+                hidden_states[layer][0, :activation_sequence_length, :]
+                .detach()
+                .float()
+                .mean(dim=0)
+                .to(storage_dtype)
+                .cpu()
                 for layer in resolved_layers
             ]
         )
@@ -958,6 +994,7 @@ class FlagGameTransformersVLMBackend:
             "input_ids": input_ids,
             "attention_mask": saved_attention_mask,
             "prompt_length": prompt_length,
+            "activation_sequence_length": activation_sequence_length,
             "last_prompt_token_index": last_prompt_index,
             "prompt_text": prompt_text,
             "tokens": self._tokens_from_input_ids(input_ids),
@@ -965,7 +1002,10 @@ class FlagGameTransformersVLMBackend:
         if self._activation_config["save_full_sequence"]:
             payload["hidden_states"] = self.torch.stack(
                 [
-                    hidden_states[layer][0, :prompt_length, :].detach().to(storage_dtype).cpu()
+                    hidden_states[layer][0, :activation_sequence_length, :]
+                    .detach()
+                    .to(storage_dtype)
+                    .cpu()
                     for layer in resolved_layers
                 ]
             )
@@ -979,6 +1019,7 @@ class FlagGameTransformersVLMBackend:
             "feature_keys": ["last_prompt_token", "mean_prompt"],
             "layers": resolved_layers,
             "prompt_length": prompt_length,
+            "activation_sequence_length": activation_sequence_length,
             "last_prompt_token_index": last_prompt_index,
             "input_shape": list(inputs["input_ids"].shape),
             "model": self.model,
@@ -1066,6 +1107,86 @@ class FlagGameTransformersVLMBackend:
                     content_summary.append({"type": str(block.get("type", "unknown"))})
             summary.append({"role": message.get("role"), "content": content_summary})
         return summary
+
+    def _infer_vlm_family(self, model: str) -> str:
+        configured = os.environ.get("NND_TRANSFORMERS_VLM_FAMILY", "").strip().lower()
+        if configured:
+            aliases = {
+                "qwen": "qwen2_5",
+                "qwen2.5": "qwen2_5",
+                "qwen2_5": "qwen2_5",
+                "llava": "llava_next",
+                "llava_next": "llava_next",
+                "llava-next": "llava_next",
+            }
+            if configured not in aliases:
+                valid = ", ".join(sorted(aliases))
+                raise ValueError(f"NND_TRANSFORMERS_VLM_FAMILY must be one of: {valid}")
+            return aliases[configured]
+        normalized = model.lower()
+        if "llava" in normalized:
+            return "llava_next"
+        if "qwen" in normalized and "vl" in normalized:
+            return "qwen2_5"
+        raise ValueError(
+            f"Could not infer local VLM family for {model!r}. "
+            "Set NND_TRANSFORMERS_VLM_FAMILY=qwen2_5 or llava_next."
+        )
+
+    def _prepare_processor_inputs(
+        self,
+        *,
+        text: str,
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if self.vlm_family == "qwen2_5":
+            image_inputs, video_inputs = self.process_vision_info(messages)
+            return self.processor(
+                text=[text],
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                return_tensors="pt",
+            )
+        if self.vlm_family == "llava_next":
+            from PIL import Image
+
+            image_path = self._image_path_from_metadata(messages)
+            with Image.open(image_path) as opened:
+                image = opened.convert("RGB")
+            return self.processor(
+                images=image,
+                text=text,
+                padding=True,
+                return_tensors="pt",
+            )
+        raise ValueError(f"Unsupported local VLM family: {self.vlm_family!r}")
+
+    def _image_path_from_metadata(self, messages: list[dict[str, Any]]) -> Path:
+        for message in messages:
+            for block in message.get("content", []):
+                raw_image = block.get("image")
+                if raw_image:
+                    text = str(raw_image)
+                    if text.startswith("file://"):
+                        from urllib.parse import urlparse, unquote
+
+                        return Path(unquote(urlparse(text).path))
+                    return Path(text)
+        for row in reversed(self._activation_rows):
+            prepared_crop = row.get("prepared_crop")
+            if prepared_crop:
+                return Path(str(prepared_crop))
+        raise ValueError("Could not find image path in local VLM messages")
+
+    def _hidden_states_from_outputs(self, outputs: Any) -> Any:
+        hidden_states = getattr(outputs, "hidden_states", None)
+        if hidden_states is not None:
+            return hidden_states
+        language_outputs = getattr(outputs, "language_model_outputs", None)
+        if language_outputs is not None:
+            return getattr(language_outputs, "hidden_states", None)
+        return None
 
     def _safe_slug(self, value: str) -> str:
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "x"

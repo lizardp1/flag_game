@@ -549,6 +549,54 @@ runs/qwen_pairwise_smoke/debug/Qwen_Qwen2.5-VL-7B-Instruct/prepared_crops/
 
 ## First Activation Dataset
 
+### LLaVA Raw-Weights Pipeline
+
+Use this after the Ollama LLaVA color gate looks better than Qwen. Ollama is
+behavior-only; this raw Hugging Face path is the one that captures hidden
+states for representation geometry.
+
+```bash
+cd /workspace/flag_game
+git checkout codex-runpod-pod-bootstrap
+git pull --ff-only origin codex-runpod-pod-bootstrap
+
+source .venv/bin/activate
+python -m pip install -r requirements-open-models.txt
+source scripts/runpod_cache_env.sh
+./scripts/runpod_model_preflight.sh
+
+mkdir -p runs
+./scripts/run_llava_mech_interp_pipeline.sh 2>&1 | tee runs/llava_mech_interp.log
+```
+
+For a faster first pass that only does visual tests, pairwise smoke, and
+geometry on the smoke run:
+
+```bash
+mkdir -p runs
+RUN_BATCH=0 RUN_T0_PROBES=0 RUN_LINEAR_PROBES=0 \
+./scripts/run_llava_mech_interp_pipeline.sh 2>&1 | tee runs/llava_mech_interp_smoke.log
+```
+
+Useful LLaVA environment switches:
+
+```bash
+export NND_TRANSFORMERS_VLM_FAMILY=llava_next
+export NND_TRANSFORMERS_DTYPE=bfloat16
+export NND_TRANSFORMERS_DEVICE_MAP=auto
+export NND_TRANSFORMERS_ATTN_IMPLEMENTATION=auto
+```
+
+Key outputs:
+
+```text
+runs/llava_mech_interp/visual_perception/color_group_summary.csv
+runs/llava_mech_interp/pairwise_smoke/activations/index.jsonl
+runs/llava_mech_interp/pairwise_smoke/activation_geometry_last_prompt_token/
+runs/llava_mech_interp/geometry_batch/activation_geometry_last_prompt_token/
+runs/llava_mech_interp/activation_t0_batch/linear_probe_truth_country/
+```
+
 For representation geometry across communication rounds:
 
 ```bash

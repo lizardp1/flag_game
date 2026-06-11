@@ -10,6 +10,7 @@ accelerate>=1.1.0
 blobfile>=3.0.0
 qwen-vl-utils>=0.0.10
 safetensors>=0.4.5
+sentencepiece>=0.2.0
 tiktoken>=0.7.0
 transformers>=4.51.3
 torchvision>=0.20.0

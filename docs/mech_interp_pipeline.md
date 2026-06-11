@@ -6,6 +6,40 @@ how agent representations align, separate, and move across communication rounds.
 
 ## 1. Validate The Model
 
+For LLaVA, use the raw Hugging Face/Transformers path when you need
+activations. The Ollama backend is useful for behavior-only color screening,
+but it cannot expose hidden states for representation geometry.
+
+End-to-end LLaVA pipeline:
+
+```bash
+source .venv/bin/activate
+source scripts/runpod_cache_env.sh
+
+./scripts/run_llava_mech_interp_pipeline.sh
+```
+
+The script runs:
+
+- raw-HF LLaVA visual perception tests on flag colors and stripe patterns
+- a tiny pairwise flag-game smoke run with activation capture
+- cross-agent/temporal activation geometry analysis
+- a multi-seed geometry batch
+- optional T=0 linear-probe datasets and probe analyses
+
+To run a faster first pass:
+
+```bash
+RUN_BATCH=0 RUN_T0_PROBES=0 RUN_LINEAR_PROBES=0 \
+./scripts/run_llava_mech_interp_pipeline.sh
+```
+
+The default LLaVA config is:
+
+```text
+configs/open_models/llava_1_6_mistral_7b_pairwise_smoke.yaml
+```
+
 Run the one-image Qwen smoke first:
 
 ```bash
