@@ -14,6 +14,7 @@ NUM_SEEDS="${NUM_SEEDS:-8}"
 PROBE_WORKERS="${PROBE_WORKERS:-1}"
 SEED_WORKERS="${SEED_WORKERS:-1}"
 GEOMETRY_FEATURE="${GEOMETRY_FEATURE:-last_prompt_token}"
+EXCLUDE_SAME_CROP="${EXCLUDE_SAME_CROP:-1}"
 RUN_VISUAL="${RUN_VISUAL:-1}"
 RUN_SMOKE="${RUN_SMOKE:-1}"
 RUN_BATCH="${RUN_BATCH:-1}"
@@ -53,7 +54,8 @@ if [[ "$RUN_SMOKE" == "1" ]]; then
   python scripts/analyze_activation_geometry.py \
     --runs "$OUT_ROOT/pairwise_smoke" \
     --feature "$GEOMETRY_FEATURE" \
-    --out "$OUT_ROOT/pairwise_smoke/activation_geometry_$GEOMETRY_FEATURE"
+    --out "$OUT_ROOT/pairwise_smoke/activation_geometry_$GEOMETRY_FEATURE" \
+    $(if [[ "$EXCLUDE_SAME_CROP" == "1" ]]; then echo "--exclude-same-crop"; fi)
 fi
 
 if [[ "$RUN_BATCH" == "1" ]]; then
@@ -71,7 +73,8 @@ if [[ "$RUN_BATCH" == "1" ]]; then
   python scripts/analyze_activation_geometry.py \
     --runs "$OUT_ROOT/geometry_batch" \
     --feature "$GEOMETRY_FEATURE" \
-    --out "$OUT_ROOT/geometry_batch/activation_geometry_$GEOMETRY_FEATURE"
+    --out "$OUT_ROOT/geometry_batch/activation_geometry_$GEOMETRY_FEATURE" \
+    $(if [[ "$EXCLUDE_SAME_CROP" == "1" ]]; then echo "--exclude-same-crop"; fi)
 fi
 
 if [[ "$RUN_T0_PROBES" == "1" ]]; then

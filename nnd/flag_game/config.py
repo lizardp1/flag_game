@@ -55,6 +55,7 @@ class FlagGameConfig(BaseModel):
         "legacy_clustered",
         "distinct_geometric",
     ] = "duplicated_redundancy"
+    require_distinct_crop_images: bool = False
     overlap_search_trials: int = 200
     engineered_crop_agent_id: int | None = None
     engineered_crop_preference: Literal["best", "worst"] | None = None

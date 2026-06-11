@@ -10,6 +10,9 @@ canvas_width: 24
 canvas_height: 16
 tile_width: 6
 tile_height: 4
+observation_overlap: 0.0
+observation_overlap_mode: distinct_geometric
+require_distinct_crop_images: true
 render_scale: 25
 temperature: 0.0
 top_p: 1.0

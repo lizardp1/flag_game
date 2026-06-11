@@ -670,6 +670,26 @@ Phase 3 concept-geometry outputs are written under:
 runs/llava_memory_conflict_probe_activations/activation_concepts_last_prompt_token/
 ```
 
+For multi-agent activation geometry, check crop distinctness before reading high
+cosine as meaningful convergence. New runs write crop hashes and duplicate
+counts to:
+
+```text
+summary.json
+trial_manifest.json
+```
+
+The main LLaVA geometry wrapper excludes same-crop pairs by default; direct
+calls can do the same with:
+
+```bash
+python scripts/analyze_activation_geometry.py \
+  --runs runs/llava_mech_interp/geometry_batch \
+  --feature last_prompt_token \
+  --out runs/llava_mech_interp/geometry_batch/activation_geometry_last_prompt_token \
+  --exclude-same-crop
+```
+
 For representation geometry across communication rounds:
 
 ```bash

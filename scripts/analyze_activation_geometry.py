@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional timestep filter. Defaults to every captured timestep.",
     )
+    parser.add_argument(
+        "--exclude-same-crop",
+        action="store_true",
+        help="Exclude agent pairs that have the same exact crop image hash or crop location.",
+    )
     return parser.parse_args()
 
 
@@ -69,7 +74,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sample_rows = sample_table(samples)
-    pair_rows = pairwise_agent_cosines(samples)
+    pair_rows = pairwise_agent_cosines(samples, exclude_same_crop=args.exclude_same_crop)
     drift_rows = temporal_drift(samples)
     layer_summary_rows = summarize_pairs(pair_rows)
     drift_summary_rows = summarize_drift(drift_rows)
@@ -84,6 +89,7 @@ def main() -> None:
             {
                 "feature": args.feature,
                 "call_type": args.call_type,
+                "exclude_same_crop": bool(args.exclude_same_crop),
                 "run_dirs": [str(path) for path in run_dirs],
                 "sample_count": len(samples),
                 "pair_count": len(pair_rows),
@@ -236,6 +242,9 @@ def sample_table(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "crop_left": crop_box.get("left"),
                 "crop_height": crop_box.get("height"),
                 "crop_width": crop_box.get("width"),
+                "crop_image_sha256": crop_image_sha256(sample),
+                "crop_image_duplicate_count": crop_diagnostic.get("crop_image_duplicate_count")
+                or crop_box.get("crop_image_duplicate_count"),
                 "truth_compatible": crop_diagnostic.get("truth_compatible"),
                 "informativeness_label": crop_diagnostic.get("informativeness_label"),
                 "compatible_country_count": crop_diagnostic.get("compatible_country_count"),
@@ -245,7 +254,11 @@ def sample_table(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-def pairwise_agent_cosines(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def pairwise_agent_cosines(
+    samples: list[dict[str, Any]],
+    *,
+    exclude_same_crop: bool,
+) -> list[dict[str, Any]]:
     grouped: dict[tuple[Path, str, int], list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
         grouped[(sample["run_dir"], sample["call_type"], int(sample["t"]))].append(sample)
@@ -255,6 +268,10 @@ def pairwise_agent_cosines(samples: list[dict[str, Any]]) -> list[dict[str, Any]
         group = sorted(group, key=lambda sample: int(sample["agent_id"]))
         for left_idx, left in enumerate(group):
             for right in group[left_idx + 1 :]:
+                same_crop_image = same_or_none(crop_image_sha256(left), crop_image_sha256(right))
+                same_crop_location = same_or_none(crop_location_key(left), crop_location_key(right))
+                if exclude_same_crop and (same_crop_image is True or same_crop_location is True):
+                    continue
                 shared_layers = sorted(set(left["layers"]).intersection(right["layers"]))
                 left_lookup = layer_feature_lookup(left)
                 right_lookup = layer_feature_lookup(right)
@@ -270,6 +287,10 @@ def pairwise_agent_cosines(samples: list[dict[str, Any]]) -> list[dict[str, Any]
                             "layer": layer,
                             "agent_a": left["agent_id"],
                             "agent_b": right["agent_id"],
+                            "crop_image_sha256_a": crop_image_sha256(left),
+                            "crop_image_sha256_b": crop_image_sha256(right),
+                            "same_crop_image": same_crop_image,
+                            "same_crop_location": same_crop_location,
                             "cosine_similarity": cosine(left_vec, right_vec),
                             "l2_distance": l2_distance(left_vec, right_vec),
                             "truth_country": left["truth_country"],
@@ -382,6 +403,35 @@ def layer_feature_lookup(sample: dict[str, Any] | None) -> dict[int, np.ndarray]
         int(layer): sample["features"][idx]
         for idx, layer in enumerate(sample["layers"])
     }
+
+
+def crop_image_sha256(sample: dict[str, Any] | None) -> str | None:
+    if sample is None:
+        return None
+    crop_diagnostic = sample.get("crop_diagnostic") or {}
+    crop_box = sample.get("crop_box") or {}
+    metadata = sample.get("metadata") or {}
+    value = (
+        crop_diagnostic.get("crop_image_sha256")
+        or crop_box.get("crop_image_sha256")
+        or metadata.get("crop_image_sha256")
+    )
+    return str(value) if value else None
+
+
+def crop_location_key(sample: dict[str, Any] | None) -> tuple[int, int, int, int] | None:
+    if sample is None:
+        return None
+    crop_box = sample.get("crop_box") or {}
+    try:
+        return (
+            int(crop_box["top"]),
+            int(crop_box["left"]),
+            int(crop_box["height"]),
+            int(crop_box["width"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def cosine(left: np.ndarray, right: np.ndarray) -> float:

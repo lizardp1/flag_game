@@ -63,6 +63,19 @@ runs/llava_visual_report_run/visual_report.html
 runs/llava_visual_report_run/plots/run_card.png
 ```
 
+The LLaVA configs used for geometry request distinct crop images:
+
+```yaml
+observation_overlap: 0.0
+observation_overlap_mode: distinct_geometric
+require_distinct_crop_images: true
+```
+
+Each run also records `crop_image_sha256`, `duplicate_crop_image_count`, and
+`duplicate_crop_location_count` in `summary.json` / `trial_manifest.json`. This
+is the sanity check that high cross-agent cosine is not just coming from two
+agents seeing the exact same crop.
+
 ### Phase 2: Controlled Private-Vs-Social Psychology Probe
 
 The original paper-style phase already lives in:
@@ -260,7 +273,8 @@ Then compute cross-agent cosine similarity and temporal drift:
 python scripts/analyze_activation_geometry.py \
   --runs runs/qwen_geometry_smoke \
   --feature last_prompt_token \
-  --out runs/qwen_geometry_smoke/activation_geometry
+  --out runs/qwen_geometry_smoke/activation_geometry \
+  --exclude-same-crop
 ```
 
 This writes:
@@ -270,6 +284,9 @@ This writes:
 - `agent_temporal_drift.csv`: each agent's drift from its own initial state
 - `by_layer_similarity_summary.csv`: average cross-agent similarity by layer
 - `by_layer_temporal_summary.csv`: average temporal drift by layer
+
+`agent_pair_cosine.csv` includes `same_crop_image` and `same_crop_location`.
+Use `--exclude-same-crop` for the main cross-agent readout.
 
 Useful variants:
 
