@@ -314,35 +314,52 @@ curl -fsSL https://ollama.com/install.sh | sh
 nohup ollama serve > runs/ollama_server.log 2>&1 &
 ```
 
-Pull the smaller Ollama-packaged LLaVA model:
+If `ollama pull llava:7b` fails with `disk quota exceeded`, clean the partial
+blob and use a smaller vision model first:
 
 ```bash
 export OLLAMA_MODELS=/workspace/ollama_models
-ollama pull llava:7b
+rm -f /workspace/ollama_models/blobs/*-partial
+ollama pull moondream
 ```
 
 If the web terminal is unstable during downloads, launch the pull in the
 background and tail the log from a fresh terminal:
 
 ```bash
-nohup bash -lc 'export OLLAMA_MODELS=/workspace/ollama_models; ollama pull llava:7b' \
-  > runs/ollama_pull_llava.log 2>&1 &
+nohup bash -lc 'export OLLAMA_MODELS=/workspace/ollama_models; ollama pull moondream' \
+  > runs/ollama_pull_moondream.log 2>&1 &
 
-tail -f runs/ollama_pull_llava.log
+tail -f runs/ollama_pull_moondream.log
 ```
 
 Then run the flag-color battery through the Ollama API backend:
 
 ```bash
+MODELS="moondream" \
+COLOR_SET=flag_core \
+OUT=runs/ollama_moondream_visual_flag_core \
+./scripts/run_ollama_visual_model_sweep.sh
+```
+
+This route is for model-capability screening. It does not give internal
+activations. If the smaller Ollama vision model passes the flag-color battery,
+then it is worth spending effort on a raw-weights/mech-interp setup for the
+model family. If it fails, the pod still needs more storage before `llava:7b`
+or Kimi-VL can be meaningfully tested.
+
+If your pod has enough storage for a 4.1 GB Ollama blob, you can test LLaVA
+through the same API path:
+
+```bash
+export OLLAMA_MODELS=/workspace/ollama_models
+ollama pull llava:7b
+
 MODELS="llava:7b" \
 COLOR_SET=flag_core \
 OUT=runs/ollama_llava_visual_flag_core \
 ./scripts/run_ollama_visual_model_sweep.sh
 ```
-
-This route is for model-capability screening. It does not give internal
-activations. If LLaVA passes the flag-color battery through Ollama, then it is
-worth spending effort on a raw-weights/mech-interp setup for the model family.
 
 Run LLaVA first:
 
