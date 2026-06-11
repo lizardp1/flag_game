@@ -609,10 +609,11 @@ SEED=0 \
 ./scripts/run_llava_visual_report_run.sh
 ```
 
-The default is a five-agent run with `T=8`, `H=4`, `m=3`, and
+The default is a five-agent run with `T=20`, `H=4`, `m=3`, and
 `fixed_truth_country=Czech Republic` so it works without downloaded
-world-flag image assets. If your pod has world-rectangle flag assets and you
-want a Japan-style run, override both the config/pool and truth country:
+world-flag image assets. It stops early after three consecutive probe rounds
+with at least `85%` consensus. If your pod has world-rectangle flag assets and
+you want a Japan-style run, override both the config/pool and truth country:
 
 ```bash
 COUNTRY_POOL=world_rectangle_images \

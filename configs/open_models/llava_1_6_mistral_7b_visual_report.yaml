@@ -1,7 +1,7 @@
 backend: transformers_vlm
 model: llava-hf/llava-v1.6-mistral-7b-hf
 N: 5
-T: 8
+T: 20
 H: 4
 interaction_m: 3
 country_pool: stripe_plus_real_triangle_28
@@ -18,7 +18,8 @@ probe_every: 1
 probe_workers: 1
 seed_workers: 1
 condition_workers: 1
-consensus_threshold: 0.9
+early_stop_probe_window: 3
+consensus_threshold: 0.85
 polarization_threshold: 0.2
 disable_memory_updates: false
 output:

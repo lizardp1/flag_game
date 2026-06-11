@@ -53,6 +53,9 @@ OUT=runs/llava_visual_report_run \
 ./scripts/run_llava_visual_report_run.sh
 ```
 
+This run defaults to `T=20` and stops early after three consecutive probe
+rounds with at least `85%` consensus.
+
 Inspect:
 
 ```text

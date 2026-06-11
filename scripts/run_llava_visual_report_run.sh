@@ -13,11 +13,13 @@ SEED="${SEED:-0}"
 TRUTH_COUNTRY="${TRUTH_COUNTRY:-Czech Republic}"
 COUNTRY_POOL="${COUNTRY_POOL:-stripe_plus_real_triangle_28}"
 N="${N:-5}"
-T="${T:-8}"
+T="${T:-20}"
 H="${H:-4}"
 TILE="${TILE:-6x4}"
 MAX_TOKENS="${MAX_TOKENS:-180}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
+CONSENSUS_THRESHOLD="${CONSENSUS_THRESHOLD:-0.85}"
+EARLY_STOP_WINDOW="${EARLY_STOP_WINDOW:-3}"
 
 export NND_TRANSFORMERS_VLM_FAMILY="${NND_TRANSFORMERS_VLM_FAMILY:-llava_next}"
 export NND_TRANSFORMERS_DTYPE="${NND_TRANSFORMERS_DTYPE:-bfloat16}"
@@ -39,6 +41,7 @@ echo "  N/T/H: $N/$T/$H"
 echo "  truth: $TRUTH_COUNTRY"
 echo "  pool:  $COUNTRY_POOL"
 echo "  tile:  $TILE"
+echo "  early stop: consensus >= $CONSENSUS_THRESHOLD for $EARLY_STOP_WINDOW consecutive probe rounds"
 
 python -m nnd.cli run \
   --config "$CONFIG" \
@@ -55,6 +58,8 @@ python -m nnd.cli run \
   --override "tile_height=$tile_height" \
   --override "temperature=$TEMPERATURE" \
   --override "max_tokens=$MAX_TOKENS" \
+  --override "consensus_threshold=$CONSENSUS_THRESHOLD" \
+  --override "early_stop_probe_window=$EARLY_STOP_WINDOW" \
   --override "output.save_crop_images=true" \
   --override "output.make_plots=true" \
   --override "activation_capture.enabled=false"

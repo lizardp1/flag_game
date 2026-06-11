@@ -163,10 +163,11 @@ def oracle_summary_from_crop_diagnostics(
     }
 
 
-def _has_stable_full_consensus(
+def _has_stable_consensus(
     per_round_df: pd.DataFrame,
     window: int,
     expected_probe_count: int,
+    consensus_threshold: float,
 ) -> tuple[bool, str | None]:
     if window <= 0 or per_round_df.empty or len(per_round_df) < window:
         return False, None
@@ -176,7 +177,7 @@ def _has_stable_full_consensus(
         return False, None
     if len(set(countries)) != 1:
         return False, None
-    if not all(abs(float(value) - 1.0) < 1e-9 for value in recent["top1_share"]):
+    if not all(float(value) >= consensus_threshold for value in recent["top1_share"]):
         return False, None
     if not all(int(value) == expected_probe_count for value in recent["valid_probe_count"]):
         return False, None
@@ -589,10 +590,11 @@ def run_flag_game_experiment(
             )
         if config.output.make_plots and not SKIP_PLOTS and partial_df is not None:
             plot_country_share_trajectories(partial_df, out_dir)
-        should_stop, stop_country = _has_stable_full_consensus(
+        should_stop, stop_country = _has_stable_consensus(
             partial_df if partial_df is not None else pd.DataFrame(),
             config.early_stop_probe_window,
             config.N,
+            config.consensus_threshold,
         )
         return partial_df, should_stop, stop_country
 
