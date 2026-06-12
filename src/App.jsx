@@ -513,7 +513,7 @@ const S={page:{minHeight:'100vh',background:T.bg,color:T.txt,fontFamily:T.san},h
   ar:{display:'flex',gap:5,alignItems:'center',padding:'4px 6px',borderRadius:6,fontSize:10,background:T.card,marginBottom:2},sep:{width:1,height:18,background:T.bdr,flexShrink:0}};
 
 /* ═══════ FLAG DISPLAY — real SVG with agent overlay ═══════ */
-function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing,hintExtra}){
+function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing,hintExtra,hoverText,setupText,emptyCursor='crosshair'}){
   const wrapRef=useRef(null);
   const[hoverId,setHoverId]=useState(null);
   const click=useCallback(e=>{if(!placing||!wrapRef.current)return;const r=wrapRef.current.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*GW;const y=(e.clientY-r.top)/r.height*GH;onClickCell(Math.max(0,Math.min(Math.floor(y),GH-TH)),Math.max(0,Math.min(Math.floor(x),GW-TW)),e.shiftKey);},[placing,onClickCell]);
@@ -521,17 +521,17 @@ function FlagDisplay({flag,agents,guesses,phase,onClickCell,placing,hintExtra}){
   const leave=useCallback(()=>setHoverId(null),[]);
   const hovered=hoverId!=null?agents.find(a=>a.id===hoverId):null;
   return(<div style={{width:'100%',maxWidth:560,margin:'0 auto'}}>
-    <div ref={wrapRef} style={{position:'relative',cursor:hovered?'pointer':(placing?'crosshair':'default')}} onClick={click} onMouseMove={move} onMouseLeave={leave}>
+    <div ref={wrapRef} style={{position:'relative',cursor:hovered?'pointer':(placing?emptyCursor:'default')}} onClick={click} onMouseMove={move} onMouseLeave={leave}>
       <div dangerouslySetInnerHTML={{__html:(FLAG_SVG[flag.c]||'').replace('<svg ','<svg width="100%" ')}} style={{width:'100%',lineHeight:0,borderRadius:4,overflow:'hidden'}}/>
       <svg viewBox={`0 0 ${GW} ${GH}`} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}}>
         <defs><filter id="agentglow"><feGaussianBlur stdDeviation="0.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
         {agents.map((a,i)=>{const run=phase!=='setup';const g=run?guesses[i]:null;const mm=modelMeta(a.model);const mc=a.adv?'#e87b6f':mm.color;const bc=g?(CCOL[g]||T.mut):mc;const modelLabel=a.adv?'ADV':mm.short;
           return(<g key={a.id}><rect x={a.left} y={a.top} width={TW} height={TH} fill={bc} opacity={0.18} rx={0.3}/><rect x={a.left} y={a.top} width={TW} height={TH} fill="none" stroke={bc} strokeWidth={0.35} rx={0.3} opacity={0.95} filter="url(#agentglow)"/>{g&&FLAG_SVG[g]?<image x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} href={`data:image/svg+xml,${encodeURIComponent(FLAG_SVG[g])}`} preserveAspectRatio="xMidYMid slice"/>:<><rect x={a.left+0.2} y={a.top+0.2} width={1.8} height={1.4} rx={0.35} fill={mc} opacity={0.9}/><text x={a.left+1.1} y={a.top+1.25} textAnchor="middle" fontSize={1} fontWeight={700} fill="#fff">{i+1}</text></>}<text x={a.left+2.2} y={a.top+1.2} textAnchor="start" fontSize={0.7} fontWeight={400} fill="#fff">{modelLabel}</text></g>);})}
       </svg>
-      {hovered&&<div style={{position:'absolute',left:`${(hovered.left+TW/2)/GW*100}%`,top:`${hovered.top/GH*100}%`,transform:'translate(-50%,-100%)',marginTop:-6,background:'rgba(40,30,20,0.92)',color:'#fff',fontSize:10,fontWeight:500,padding:'4px 9px',borderRadius:5,whiteSpace:'nowrap',pointerEvents:'none',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.3)'}}>Click to remove{hintExtra?' · Shift+click for adversary':''}</div>}
+      {hovered&&<div style={{position:'absolute',left:`${(hovered.left+TW/2)/GW*100}%`,top:`${hovered.top/GH*100}%`,transform:'translate(-50%,-100%)',marginTop:-6,background:'rgba(40,30,20,0.92)',color:'#fff',fontSize:10,fontWeight:500,padding:'4px 9px',borderRadius:5,whiteSpace:'nowrap',pointerEvents:'none',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.3)'}}>{typeof hoverText==='function'?hoverText(hovered):(hoverText||`Click to remove${hintExtra?' · Shift+click for adversary':''}`)}</div>}
     </div>
     <div style={{textAlign:'center',fontFamily:T.ser,fontSize:26,fontStyle:'italic',color:T.txt,marginTop:12,letterSpacing:'-0.3px'}}>{flag.c}</div>
-    {placing&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>{agents.length<MAX_A?`Click empty area to place agent ${agents.length+1} · Click an agent to remove`:'At max — click an agent to remove'}{hintExtra?` · ${hintExtra}`:''}</div>}
+    {placing&&<div style={{textAlign:'center',fontSize:9.5,color:T.fnt,marginTop:4}}>{setupText||`${agents.length<MAX_A?`Click empty area to place agent ${agents.length+1} · Click an agent to remove`:'At max — click an agent to remove'}${hintExtra?` · ${hintExtra}`:''}`}</div>}
   </div>);}
 
 function InlineFlag({country,w=18}){const svg=FLAG_SVG[country];if(!svg)return null;const h=Math.round(w*0.72);
@@ -807,8 +807,19 @@ function FlagGame({keys}){
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ADVERSARIAL MODE — same placement UX, toggle agents to adversary
+   ADVERSARIAL MODE — pre-placed agents, click to toggle adversary
    ══════════════════════════════════════════════════════════════════ */
+const ADV_AGENT_LAYOUT=[
+  {top:1,left:1},
+  {top:1,left:9},
+  {top:1,left:17},
+  {top:10,left:1},
+  {top:10,left:9},
+  {top:10,left:17},
+];
+function makeAdvAgents(model,advMask){
+  return ADV_AGENT_LAYOUT.map((pos,i)=>({id:i+1,...pos,model,memory:[],adv:advMask?!!advMask[i]:i>=4}));
+}
 function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si];const g=speaker.adv?advTarget:bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory,speaker);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
@@ -819,10 +830,10 @@ function AdversarialGame({keys}){
   const[advTarget,setAdvTarget]=useState(()=>{const ts=LEVELS[0].truth;return ts.find(c=>c!==ts[0])||ts[0];});
   const[advReason,setAdvReason]=useState(()=>describeFlag(LEVELS[0].truth[1]||LEVELS[0].truth[0]));
   useEffect(()=>{setAdvReason(describeFlag(advTarget));},[advTarget]);
-  const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
+  const[model,setModel]=useState('gpt-4o');const[agents,setAgents]=useState(()=>makeAdvAgents('gpt-4o'));
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[active,setActive]=useState([]);
-  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
+  const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);
   const canvasRef=useRef(null);const cropCacheRef=useRef(new Map());
   const truthFlag=useMemo(()=>F.find(f=>f.c===truth)||F[0],[truth]);const grid=useMemo(()=>renderGrid(truthFlag),[truthFlag]);
   const levelPool=LEVELS[lvl].truth;
@@ -835,8 +846,10 @@ function AdversarialGame({keys}){
   const getCrop=useCallback((t,l)=>{const k=`${t},${l}`;if(cropCacheRef.current.has(k))return cropCacheRef.current.get(k);if(!canvasRef.current)return null;const url=cropAgentView(canvasRef.current,t,l);cropCacheRef.current.set(k,url);return url;},[]);
 
   useEffect(()=>{if(avail.length&&!avail.some(m=>m.id===model))setModel(avail[0].id);},[avail,model]);
-  const place=useCallback((t,l,shift)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(ex){if(shift){setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));}else{setAgents(p=>p.filter(a=>a.id!==ex.id));}return;}if(N<MAX_A)setAgents(p=>[...p,{id:nid.current++,top:t,left:l,model,memory:[],adv:false}]);},[N,model,phase,agents]);
-  const quick=useCallback(()=>{if(phase!=='setup')return;const rng=mkRng(Date.now());setAgents(Array.from({length:6},(_,i)=>({id:nid.current++,top:Math.floor(rng()*(GH-TH)),left:Math.floor(rng()*(GW-TW)),model,memory:[],adv:i>=4})));},[phase,model]);
+  useEffect(()=>{if(phase==='setup')setAgents(p=>p.map(a=>({...a,model})));},[model,phase]);
+  useEffect(()=>{if(phase==='setup'&&others.length&&!others.includes(advTarget))setAdvTarget(others[0]);},[advTarget,others,phase]);
+  const toggleAgent=useCallback((t,l)=>{if(phase!=='setup')return;const ex=agents.find(a=>a.top<=t&&t<a.top+TH&&a.left<=l&&l<a.left+TW);if(!ex)return;setAgents(p=>p.map(a=>a.id===ex.id?{...a,adv:!a.adv}:a));},[phase,agents]);
+  const resetLayout=useCallback(()=>{if(phase!=='setup')return;setAgents(makeAdvAgents(model));},[phase,model]);
 
   const start=useCallback(async()=>{
     if(N<2||nAdv<1)return;
@@ -904,10 +917,10 @@ function AdversarialGame({keys}){
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
       await new Promise(r=>setTimeout(r,25));}})();
-    return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,advTarget,live,keys,getCrop]);
+    return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,advTarget,advReason,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
-  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents([]);};
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents(p=>(p.length?p:makeAdvAgents(model)).map(a=>({...a,memory:[]})));};
   const nextFlag=()=>{reset();const ts=LEVELS[lvl].truth.filter(c=>F.some(f=>f.c===c));const newTruth=ts[Math.floor(Math.random()*ts.length)];setTruth(newTruth);const o=ts.filter(c=>c!==newTruth);setAdvTarget(o[Math.floor(Math.random()*o.length)]||newTruth);};
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
@@ -915,24 +928,24 @@ function AdversarialGame({keys}){
   return(<div style={{marginTop:48,borderTop:`1px solid ${T.bdr}`,paddingTop:32}}>
     <header style={{textAlign:'center',marginBottom:20}}>
       <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>Adversarial <span style={{fontWeight:700,fontStyle:'italic'}}>Flip</span></h2>
-      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Click on the flag to place an agent. Shift+click a placed agent to toggle it adversarial — adversaries always claim the target country. Can they flip the honest agents?</p>
+      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Agents start in place on the flag. Click any agent to toggle honest/adversary — red adversaries always claim the target country. Can they flip the honest agents?</p>
     </header>
     <div style={S.bar}>
-      <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);setAgents([]);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
-      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){setTruth(e.target.value);setAgents([]);}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{[...truthOptions].sort((a,b)=>a.localeCompare(b)).map(c=><option key={c} value={c}>{c}</option>)}</select>
+      <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
+      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){const nt=e.target.value;setTruth(nt);if(advTarget===nt){const o=truthOptions.filter(c=>c!==nt);setAdvTarget(o[0]||nt);}}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{[...truthOptions].sort((a,b)=>a.localeCompare(b)).map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary reason</label><input type="text" value={advReason} onChange={e=>{if(phase==='setup')setAdvReason(e.target.value);}} disabled={phase!=='setup'} title="Static reason appended after the country on every adversary message — keep it plausible to avoid signaling 'this is an adversary'." style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,width:260}}/>
-      <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'}/>
-      <div style={S.sep}/>{phase==='setup'&&<><button onClick={quick} style={S.btn(true,'#7a6db0')}>⚡ Quick</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
+      <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'} label="Honest agents"/>
+      <div style={S.sep}/>{phase==='setup'&&<><button onClick={resetLayout} style={S.btn(true,'#7a6db0')}>↺ Reset Agents</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
       {phase==='probing'&&<span style={{fontSize:11,color:T.mut,fontStyle:'italic'}}>Round 0 probe…</span>}
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
-      {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N}/{MAX_A}</span>
+      {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N} agents</span>
     </div>
     {apiError&&<div style={{textAlign:'center',padding:'8px 14px',margin:'8px auto',maxWidth:620,background:'#e87b6f15',border:`1px solid #e87b6f`,borderRadius:7,color:'#a85047',fontSize:12}}>{apiError}</div>}
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
     <div style={S.row}>
       <div style={S.pan}>
-        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={place} placing={phase==='setup'} hintExtra="Shift+click to toggle adversary"/>
+        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={toggleAgent} placing={phase==='setup'} emptyCursor="default" hoverText={a=>a.adv?'Click to make honest':'Click to make adversary'} setupText="Agents are pre-placed. Click any agent to toggle honest/adversary. Red agents are adversaries."/>
       </div>
       <div style={S.pan}>
         <TrajChart data={traj} active={active} truth={truthFlag.c} onHover={setHovIdx}/>
