@@ -809,16 +809,29 @@ function FlagGame({keys}){
 /* ══════════════════════════════════════════════════════════════════
    ADVERSARIAL MODE — pre-placed agents, click to toggle adversary
    ══════════════════════════════════════════════════════════════════ */
-const ADV_AGENT_LAYOUT=[
-  {top:1,left:1},
-  {top:1,left:9},
-  {top:1,left:17},
-  {top:10,left:1},
-  {top:10,left:9},
-  {top:10,left:17},
-];
+const ADV_AGENT_COUNT=6,ADV_DEFAULT_ADVERSARIES=2;
+function overlapAgent(a,b){return a.left<b.left+TW&&a.left+TW>b.left&&a.top<b.top+TH&&a.top+TH>b.top;}
+function randomAdvPositions(rng=Math.random){
+  const positions=[];
+  for(let i=0;i<ADV_AGENT_COUNT;i++){
+    for(let tries=0;tries<500;tries++){
+      const pos={top:Math.floor(rng()*(GH-TH+1)),left:Math.floor(rng()*(GW-TW+1))};
+      if(!positions.some(p=>overlapAgent(pos,p))){positions.push(pos);break;}
+    }
+    if(positions.length<=i)positions.push({top:Math.floor(rng()*(GH-TH+1)),left:Math.floor(rng()*(GW-TW+1))});
+  }
+  return positions;
+}
+function randomAdvMask(rng=Math.random){
+  const ids=[...Array(ADV_AGENT_COUNT).keys()];
+  for(let i=ids.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]];}
+  const adv=new Set(ids.slice(0,ADV_DEFAULT_ADVERSARIES));
+  return ids.map((_,i)=>adv.has(i));
+}
 function makeAdvAgents(model,advMask){
-  return ADV_AGENT_LAYOUT.map((pos,i)=>({id:i+1,...pos,model,memory:[],adv:advMask?!!advMask[i]:i>=4}));
+  const positions=randomAdvPositions();
+  const mask=advMask||randomAdvMask();
+  return positions.map((pos,i)=>({id:i+1,...pos,model,memory:[],adv:!!mask[i]}));
 }
 function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.floor(rng()*ag.length);let li=Math.floor(rng()*(ag.length-1));if(li>=si)li++;const speaker=ag[si];const g=speaker.adv?advTarget:bestGuess(analyzeCrop(grid,speaker.top,speaker.left),speaker.memory,speaker);const l=ag[li];if(l.memory.length>=H_MEM)l.memory.shift();l.memory.push(g);}
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
@@ -920,7 +933,7 @@ function AdversarialGame({keys}){
     return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,advTarget,advReason,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
-  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents(p=>(p.length?p:makeAdvAgents(model)).map(a=>({...a,memory:[]})));};
+  const reset=()=>{if(iRef.current)clearInterval(iRef.current);setPhase('setup');setStep(0);setPr(0);setCons(false);setTraj([]);setGuesses([]);setAllG([]);setActive([]);setFS(null);setHovIdx(null);sim.current=null;setAgents(makeAdvAgents(model));};
   const nextFlag=()=>{reset();const ts=LEVELS[lvl].truth.filter(c=>F.some(f=>f.c===c));const newTruth=ts[Math.floor(Math.random()*ts.length)];setTruth(newTruth);const o=ts.filter(c=>c!==newTruth);setAdvTarget(o[Math.floor(Math.random()*o.length)]||newTruth);};
   const legend=useMemo(()=>{if(!traj.length)return[];const last=traj[traj.length-1];const pk={};traj.forEach(d=>active.forEach(c=>{pk[c]=Math.max(pk[c]||0,d[c]||0);}));return active.filter(c=>pk[c]>0.02||c===truthFlag.c).sort((a,b)=>(last[b]||0)-(last[a]||0)).slice(0,14);},[active,traj,truthFlag.c]);
   const flipped=fShares&&Object.entries(fShares).sort((a,b)=>b[1]-a[1])[0]?.[0]===advTarget;
@@ -928,15 +941,15 @@ function AdversarialGame({keys}){
   return(<div style={{marginTop:48,borderTop:`1px solid ${T.bdr}`,paddingTop:32}}>
     <header style={{textAlign:'center',marginBottom:20}}>
       <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>Adversarial <span style={{fontWeight:700,fontStyle:'italic'}}>Flip</span></h2>
-      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Agents start in place on the flag. Click any agent to toggle honest/adversary — red adversaries always claim the target country. Can they flip the honest agents?</p>
+      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Agents start in random places on the flag. Click any agent to toggle honest/adversary — red adversaries always claim the target country. Can they flip the honest agents?</p>
     </header>
     <div style={S.bar}>
-      <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
-      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){const nt=e.target.value;setTruth(nt);if(advTarget===nt){const o=truthOptions.filter(c=>c!==nt);setAdvTarget(o[0]||nt);}}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{[...truthOptions].sort((a,b)=>a.localeCompare(b)).map(c=><option key={c} value={c}>{c}</option>)}</select>
+      <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);setAgents(makeAdvAgents(model));}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
+      <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Truth</label><select value={truth} onChange={e=>{if(phase==='setup'){const nt=e.target.value;setTruth(nt);if(advTarget===nt){const o=truthOptions.filter(c=>c!==nt);setAdvTarget(o[0]||nt);}setAgents(makeAdvAgents(model));}}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{[...truthOptions].sort((a,b)=>a.localeCompare(b)).map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary claims</label><select value={advTarget} onChange={e=>{if(phase==='setup')setAdvTarget(e.target.value);}} style={{...S.sel,maxWidth:140}} disabled={phase!=='setup'}>{others.map(c=><option key={c} value={c}>{c}</option>)}</select>
       <div style={S.sep}/><label style={{fontSize:10,color:T.dim}}>Adversary reason</label><input type="text" value={advReason} onChange={e=>{if(phase==='setup')setAdvReason(e.target.value);}} disabled={phase!=='setup'} title="Static reason appended after the country on every adversary message — keep it plausible to avoid signaling 'this is an adversary'." style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,width:260}}/>
       <div style={S.sep}/><ModelPicker keys={keys} model={model} setModel={setModel} disabled={phase!=='setup'} label="Honest agents"/>
-      <div style={S.sep}/>{phase==='setup'&&<><button onClick={resetLayout} style={S.btn(true,'#7a6db0')}>↺ Reset Agents</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
+      <div style={S.sep}/>{phase==='setup'&&<><button onClick={resetLayout} style={S.btn(true,'#7a6db0')}>↺ Shuffle Agents</button><button onClick={start} disabled={N<2||nAdv<1} style={{...S.btn(N>=2&&nAdv>=1,'#6ec89b'),opacity:N<2||nAdv<1?0.4:1}}>▶ Run</button></>}
       {phase==='probing'&&<span style={{fontSize:11,color:T.mut,fontStyle:'italic'}}>Round 0 probe…</span>}
         {phase==='running'&&<button onClick={()=>{if(iRef.current)clearInterval(iRef.current);setPhase('done');}} style={S.btn(true,'#e87b6f')}>■ Stop</button>}
       {phase==='done'&&<><button onClick={reset} style={S.btn(true,'#7a6db0')}>↺ Try Again</button><button onClick={nextFlag} style={S.btn(true,'#5b86c4')}>→ Next Flag</button></>}<span style={{fontSize:9,color:T.fnt}}>{nHon} honest + {nAdv} adv = {N} agents</span>
@@ -945,7 +958,7 @@ function AdversarialGame({keys}){
     {hovIdx!=null&&phase==='done'&&<div style={{textAlign:'center',fontSize:11,color:'#7a6db0',marginBottom:6,fontWeight:600}}>◀ Viewing round {traj[hovIdx]?.round??hovIdx} — hover the chart to time-travel ▶</div>}
     <div style={S.row}>
       <div style={S.pan}>
-        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={toggleAgent} placing={phase==='setup'} emptyCursor="default" hoverText={a=>a.adv?'Click to make honest':'Click to make adversary'} setupText="Agents are pre-placed. Click any agent to toggle honest/adversary. Red agents are adversaries."/>
+        <FlagDisplay flag={truthFlag} agents={agents} guesses={dg} phase={phase} onClickCell={toggleAgent} placing={phase==='setup'} emptyCursor="default" hoverText={a=>a.adv?'Click to make honest':'Click to make adversary'} setupText="Agents are randomized each setup. Click any agent to toggle honest/adversary. Red agents are adversaries."/>
       </div>
       <div style={S.pan}>
         <TrajChart data={traj} active={active} truth={truthFlag.c} onHover={setHovIdx}/>
