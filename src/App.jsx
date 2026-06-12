@@ -941,7 +941,7 @@ function AdversarialGame({keys}){
   return(<div style={{marginTop:48,borderTop:`1px solid ${T.bdr}`,paddingTop:32}}>
     <header style={{textAlign:'center',marginBottom:20}}>
       <h2 style={{fontSize:32,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>Adversarial <span style={{fontWeight:700,fontStyle:'italic'}}>Flip</span></h2>
-      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Agents start in random places on the flag. Click any agent to toggle honest/adversary — red adversaries always claim the target country. Can they flip the honest agents?</p>
+      <p style={{fontSize:13,color:T.mut,maxWidth:560,margin:'0 auto',lineHeight:1.6}}>Click any agent to toggle honest/adversary — red adversaries always claim the target country. Can they flip the honest agents?</p>
     </header>
     <div style={S.bar}>
       <label style={{fontSize:10,color:T.dim}}>Level</label><select value={lvl} onChange={e=>{if(phase==='setup'){const nl=+e.target.value;setLvl(nl);const ts=LEVELS[nl].truth.filter(c=>F.some(f=>f.c===c));const nt=ts[Math.floor(Math.random()*ts.length)];setTruth(nt);const o=ts.filter(c=>c!==nt);setAdvTarget(o[Math.floor(Math.random()*o.length)]||nt);setAgents(makeAdvAgents(model));}}} style={S.sel} disabled={phase!=='setup'}>{LEVELS.map((l,i)=><option key={l.name} value={i} title={l.desc}>{l.name} ({l.truth.length})</option>)}</select>
