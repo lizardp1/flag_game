@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import REAL_GRIDS_RAW from './realGrids.json';
-import { rasterizeFlag, cropAgentView, llmInteraction, PROVIDERS, availableModels, anyKey, modelMeta } from './llm';
+import { rasterizeFlag, cropAgentView, llmInteraction, availableModels, anyKey, modelMeta } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -87,7 +87,6 @@ const FLAG_SVG={
 "Tanzania":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><defs><clipPath id="ftza"><path fill-opacity=".7" d="M10 0h160v120H10z"/></clipPath></defs><g fill-rule="evenodd" stroke-width="1pt" clip-path="url(#ftza)" transform="matrix(4 0 0 4 -40 0)"><path fill="#09f" d="M0 0h180v120H0z"/><path fill="#090" d="M0 0h180L0 120z"/><path fill="#000001" d="M0 120h40l140-95V0h-40L0 95z"/><path fill="#ff0" d="M0 91.5 137.2 0h13.5L0 100.5zM29.3 120 180 19.5v9L42.8 120z"/></g></svg>`,
 "Togo":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><defs><clipPath id="ftga"><path fill-opacity=".7" d="M0 0h682.7v512H0z"/></clipPath></defs><g fill-rule="evenodd" clip-path="url(#ftga)" transform="scale(.9375)"><path fill="#ffe300" d="M0 0h767.6v512H0z"/><path fill="#118600" d="M0 208.1h767.6V311H0zM0 .2h767.6v102.9H0z"/><path fill="#d80000" d="M0 .3h306.5v310.6H0z"/><path fill="#fff" d="M134.4 128.4c0-.8 18.9-53 18.9-53l17 52.2s57.4 1.7 57.4.8-45.3 34.3-45.3 34.3 21.4 60 20.5 58.2-49.6-36-49.6-36-49.7 34.3-48.8 34.3c.8 0 18.8-56.5 18.8-56.5l-44.5-33.4z"/><path fill="#118600" d="M0 409.2h767.6V512H0z"/></g></svg>`,
 "Trinidad and Tobago":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><path fill="#fff" d="M0 0h640v480H0z"/><path fill="#e00000" fill-rule="evenodd" d="M463.7 480 0 1v478.8zM176.3 0 640 479V.2z"/><path fill="#000001" fill-rule="evenodd" d="M27.7.2h118.6l468.2 479.3H492.2z"/></svg>`,
-"United States":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><path fill="#bd3d44" d="M0 0h640v480H0"/><path stroke="#fff" stroke-width="37" d="M0 55.3h640M0 129h640M0 203h640M0 277h640M0 351h640M0 425h640"/><path fill="#192f5d" d="M0 0h364.8v258.5H0"/><marker id="fusa" markerHeight="30" markerWidth="30"><path fill="#fff" d="m14 0 9 27L0 10h28L5 27z"/></marker><path fill="none" marker-mid="fusurl(#fusa)" d="m0 0 16 11h61 61 61 61 60L47 37h61 61 60 61L16 63h61 61 61 61 60L47 89h61 61 60 61L16 115h61 61 61 61 60L47 141h61 61 60 61L16 166h61 61 61 61 60L47 192h61 61 60 61L16 218h61 61 61 61 60z"/></svg>`,
 "Vietnam":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><defs><clipPath id="fvna"><path fill-opacity=".7" d="M-85.3 0h682.6v512H-85.3z"/></clipPath></defs><g fill-rule="evenodd" clip-path="url(#fvna)" transform="translate(80)scale(.9375)"><path fill="#da251d" d="M-128 0h768v512h-768z"/><path fill="#ff0" d="M349.6 381 260 314.3l-89 67.3L204 272l-89-67.7 110.1-1 34.2-109.4L294 203l110.1.1-88.5 68.4 33.9 109.6z"/></g></svg>`,
 "Madagascar":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><g fill-rule="evenodd" stroke-width="1pt"><path fill="#fc3d32" d="M213.3 0H640v240H213.3z"/><path fill="#007e3a" d="M213.3 240H640v240H213.3z"/><path fill="#fff" d="M0 0h213.3v480H0z"/></g></svg>`,
 "UAE":`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480"><path fill="#00732f" d="M0 0h640v160H0z"/><path fill="#fff" d="M0 160h640v160H0z"/><path fill="#000001" d="M0 320h640v160H0z"/><path fill="red" d="M0 0h220v480H0z"/></svg>`,
@@ -297,7 +296,6 @@ const F_RAW=[
 {c:'Tanzania',diag:['green','blue','black']},
 {c:'Togo',o:'h',s:['green','yellow','green','white','red'],canton:'red',star:'white'},
 {c:'Trinidad and Tobago',bg:'red',bend:'black'},
-{c:'United States',o:'h',s:['red','white','red','white','red','white','red','white','red','white','red','white','red'],canton:'navy',stars:{n:[6,5],rows:9,color:'white'}},
 {c:'Vietnam',bg:'red',pstars:{color:'yellow',pts:[[0.5,0.5,0.18]]}},
 {c:'Madagascar',o:'h',s:['red','green'],tri:'white'},
 {c:'UAE',o:'h',s:['green','white','black'],tri:'red'},
@@ -803,7 +801,7 @@ function FlagGame({keys}){
       {phase==='done'&&sim.current&&sim.current.gossipLog&&<MechanisticTrace agents={agents} allG={allG} gossipLog={sim.current.gossipLog} truth={truthFlag.c} pe={pe}/>}
       <div style={{marginTop:24,padding:'18px 22px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:11,maxWidth:740,margin:'24px auto 0'}}>
         <h3 style={{fontSize:14,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>How it works</h3>
-        <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>{F.length} real country flags are embedded as SVGs (from the flag-icons project). With an API key set, each step the chosen speaker calls its selected model (OpenAI, Anthropic, or Google) with its private crop and its transcript memory of prior interactions, and returns JSON {`{country, reason}`} — the listener appends that line to its own memory (last {H_MEM}). The prompts mirror those used in the paper (nnd/flag_game/prompts.py), exposing the interplay between private visual evidence and social signal. Without any key, agents use a local color-matching heuristic. Stops after {CON_RUNS} consecutive probe rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or N×14 steps.</p>
+        <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>Each agent sees only a small fragment of a hidden flag. Step by step, one agent shares its current guess with another, who adds it to its memory of recent observations. The game ends when agents settle on the same country for {CON_RUNS} consecutive rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or after N×14 steps.</p>
       </div>
     </div></div>);
 }
@@ -1219,22 +1217,10 @@ function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,
 }
 
 /* ═══════ ROOT ═══════ */
-const PROVIDER_ORDER=['openai','anthropic','google'];
-function ApiKeyBar({keys,setKeys}){
-  const[shown,setShown]=useState(false);
-  const live=anyKey(keys);
-  const set=(p,v)=>setKeys(k=>({...k,[p]:v.trim()}));
+function ApiKeyBar(){
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
-    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
-      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Scripted heuristic (no key)'}</span>
-      {PROVIDER_ORDER.map(p=>(<span key={p} style={{display:'flex',alignItems:'center',gap:6}}>
-        <span style={{color:T.dim,whiteSpace:'nowrap'}}>{PROVIDERS[p].label} key</span>
-        <input type={shown?'text':'password'} placeholder={PROVIDERS[p].placeholder} value={keys[p]} onChange={e=>set(p,e.target.value)}
-          style={{flex:'1 1 170px',minWidth:130,maxWidth:260,padding:'4px 8px',borderRadius:5,border:`1px solid ${keys[p]?'#3a8a64':T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
-        {keys[p]&&<button onClick={()=>set(p,'')} title={`Clear ${PROVIDERS[p].label} key`} style={{padding:'4px 7px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:'#e87b6f',cursor:'pointer',fontSize:10}}>×</button>}
-      </span>))}
-      <button onClick={()=>setShown(s=>!s)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.mut,cursor:'pointer',fontSize:10}}>{shown?'hide':'show'}</button>
-      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10,maxWidth:520}}>Stored in your browser (localStorage).</span>
+    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,fontSize:11}}>
+      <span style={{color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live API mode</span>
     </div>
   </div>);
 }
@@ -1294,7 +1280,7 @@ const LOC_SVG={};LOCATIONS.forEach(l=>{LOC_SVG[l.name]=locationSvg(l);});
 function FlagGameSeries({keys}){
   return(<>
     <header style={S.hdr}><h1 style={S.h1}>The <span style={S.h1b}>Flag Game</span></h1>
-      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>What does alignment even mean, when it&apos;s collective? We propose a model social organism to study coordination dynamics among bounded agents that see only fragments.</p></header>
+      <p style={{fontSize:18,fontFamily:T.ser,fontStyle:'italic',fontWeight:400,color:T.txt,maxWidth:720,margin:'14px auto 0',lineHeight:1.5}}>The world is bigger than any of us. We bring our unique minds together to see the whole picture.</p></header>
     <div style={{maxWidth:1400,margin:'0 auto',padding:'0 14px'}}>
       <FlagGame keys={keys}/>
       <FirstPersonGame keys={keys}/>
@@ -1304,16 +1290,8 @@ function FlagGameSeries({keys}){
 }
 
 export default function App(){
-  const[keys,setKeys]=useState(()=>({
-    // Migrate the legacy single-key store into the OpenAI slot.
-    openai:localStorage.getItem('flag_game_key_openai')||localStorage.getItem('flag_game_api_key')||'',
-    anthropic:localStorage.getItem('flag_game_key_anthropic')||'',
-    google:localStorage.getItem('flag_game_key_google')||'',
-  }));
-  useEffect(()=>{['openai','anthropic','google'].forEach(p=>{if(keys[p])localStorage.setItem(`flag_game_key_${p}`,keys[p]);else localStorage.removeItem(`flag_game_key_${p}`);});},[keys]);
   return(<div style={S.page}>
-    <ApiKeyBar keys={keys} setKeys={setKeys}/>
-    <FlagGameSeries keys={keys}/>
-    <div style={{textAlign:'center',padding:'32px 0',fontSize:10,color:T.fnt}}>Flag SVGs from <span style={{color:T.dim}}>flag-icons</span> · Game engine inspired by the Flag Game experiment</div>
+    <ApiKeyBar/>
+    <FlagGameSeries/>
   </div>);
 }
