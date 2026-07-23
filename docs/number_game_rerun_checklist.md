@@ -13,11 +13,11 @@ prompt_social_susceptibility: false
 The new prompt explicitly tells agents:
 
 ```text
-The hidden integer was sampled uniformly from the integers 1 through 100, inclusive.
+The hidden integer is in the range 1 through 100, inclusive.
 ```
 
-This makes the information-theory clue metric interpretable as the model-visible
-uniform prior:
+The information-theory clue metric is computed outside the prompt using an
+analysis-only uniform baseline over the configured range:
 
 ```text
 I(clue) = -log2 P(clue)
@@ -31,10 +31,10 @@ I(clue) = -log2 P(clue)
 - [x] Active configs use prompted `1..100`.
 - [x] Conflict rows include clue candidate counts, prior probability, bits, and phase.
 - [x] Visual code labels clue information as self-information and uses the actual candidate count denominator.
-- [x] Rerun local Qwen3-1.7B smoke results under the new prompt.
+- [ ] Rerun local Qwen3-1.7B smoke results under the range-only prompt.
 - [ ] Rerun RunPod Qwen behavioral matrix under the new prompt.
 - [ ] Rerun Kimi endpoint behavioral matrix under the new prompt.
-- [ ] Regenerate all showable figures from new prompted-prior outputs.
+- [ ] Regenerate all showable figures from new prompted-range outputs.
 - [ ] Start activation/probe/steering runs only after the behavioral reruns pass sanity checks.
 
 ## Files To Use
@@ -74,10 +74,10 @@ python -m py_compile \
 python -c 'from pathlib import Path; from nnd.number_game.config import load_number_game_config; [load_number_game_config(p) for p in Path("configs/number_game").glob("*.yaml") if p.name != "README.md"]; print("ok")'
 ```
 
-- [x] Save or inspect one exact prompt sample and confirm it has the range sentence but no allowed-number list.
+- [x] Save or inspect one exact prompt sample and confirm it has the range sentence, no sampling assumption, and no allowed-number list.
 
 ```bash
-python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(numbers=list(range(1,101)), private_clue="the number is odd", memory_lines=["12", "7 | The number is prime."], m=3, prompt_social_susceptibility=False, prompt_number_range=True))'
+python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(numbers=list(range(1,101)), private_clue="the number is odd", memory_lines=["12 | The number is even.", "7 | The number is prime."], m=3, prompt_social_susceptibility=False, prompt_number_range=True))'
 ```
 
 ## Local Reruns
@@ -85,7 +85,7 @@ python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(n
 Keep local runs small. The goal is to prove the new prompt and metrics work, not
 to make final claims.
 
-- [x] Pairwise `m=1` vs `m=3`, Qwen3-1.7B, 5 seeds, `N=4`.
+- [ ] Pairwise `m=1` vs `m=3`, Qwen3-1.7B, 5 seeds, `N=4`.
 
 ```bash
 python -m nnd.number_game.cli compare-pairwise-m \
@@ -97,7 +97,7 @@ python -m nnd.number_game.cli compare-pairwise-m \
   --m 3
 ```
 
-- [x] Actual pairwise `m=3` trajectory with dialogues.
+- [ ] Actual pairwise `m=3` trajectory with dialogues.
 
 ```bash
 python -m nnd.number_game.cli run \
@@ -109,7 +109,7 @@ python -m nnd.number_game.cli run \
   --override H=8
 ```
 
-- [x] Social/private conflict probe, local smoke, `memory_total=8`.
+- [ ] Social/private conflict probe, local smoke, `memory_total=8`.
 
 ```bash
 python -m nnd.number_game.cli conflict-battery \
@@ -124,15 +124,17 @@ python -m nnd.number_game.cli conflict-battery \
 
 Local success criteria:
 
-- [x] `config_resolved.yaml` shows `max_number: 100` and `prompt_number_range: true`.
-- [x] Prompt diagnostics show the exact range sentence.
-- [x] `clue_information.csv` has `candidate_range_count=100`.
-- [x] Conflict outputs include weak/medium/strong clue phases.
-- [x] Pairwise outputs include `dialogues.md`, probe timelines, and number-share trajectory plots.
+- [ ] `config_resolved.yaml` shows `max_number: 100` and `prompt_number_range: true`.
+- [ ] Prompt diagnostics show the exact range sentence and no sampling assumption.
+- [ ] `clue_information.csv` has `candidate_range_count=100`.
+- [ ] Conflict outputs include weak/medium/strong clue phases.
+- [ ] Pairwise outputs include `dialogues.md`, probe timelines, and number-share trajectory plots.
 
-## Latest Local Rerun Results
+## Superseded Local Smoke Results
 
-Completed on 2026-07-23 with `Qwen/Qwen3-1.7B`.
+Completed on 2026-07-23 with `Qwen/Qwen3-1.7B`, before the prompt was changed
+from sampled-uniform wording to range-only wording. Treat these as smoke tests,
+not final comparable outputs.
 
 Outputs:
 
@@ -142,10 +144,10 @@ Outputs:
 
 Preflight:
 
-- unit tests: 7 passed
+- unit tests: 8 passed
 - py_compile: passed
 - active configs loaded: 3
-- exact prompt sample included the `1 through 100` range sentence and no allowed-number list
+- exact prompt sample included the older sampled-uniform `1 through 100` range sentence and no allowed-number list
 
 Pairwise `m=1` vs `m=3`, 5 seeds:
 
@@ -163,7 +165,7 @@ Dedicated `m=3` trajectory, seed 0:
 
 Conflict smoke, 1 seed, `memory_total=8`:
 
-- prompt rows: 108/108 contain the prompted `1..100` prior
+- prompt rows: 108/108 contain the prompted `1..100` range
 - `clue_information.csv` uses `candidate_range_count=100`
 - all conflict rows have valid JSON outputs
 - at `4:4` memory, private target rate was `0.83` for `m=1` and `0.67` for `m=3`

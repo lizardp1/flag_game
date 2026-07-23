@@ -15,14 +15,14 @@ class NumberGameMemoryFormatTest(unittest.TestCase):
         text = prompts.interaction_text(
             numbers=[1, 2, 3],
             private_clue="the number is odd",
-            memory_lines=["12", "7 | I am confident the answer is 7."],
+            memory_lines=["12 | The number is even.", "7 | I am confident the answer is 7."],
             m=3,
             prompt_social_susceptibility=False,
         )
 
         self.assertIn(
             "Transcript memory (oldest -> newest):\n"
-            "- 12\n"
+            "- 12 | The number is even.\n"
             "- 7 | I am confident the answer is 7.",
             text,
         )
@@ -31,6 +31,38 @@ class NumberGameMemoryFormatTest(unittest.TestCase):
         self.assertIn('Output JSON exactly: {"number":<integer>,"reason":"<one sentence>"}', text)
         self.assertNotIn('"hint"', text)
         self.assertNotIn("sampled uniformly", text)
+
+    def test_m1_and_m3_memory_formats_are_not_mixed(self) -> None:
+        prompts.interaction_text(
+            numbers=[1, 2, 3],
+            private_clue="the number is odd",
+            memory_lines=["12", "7"],
+            m=1,
+            prompt_social_susceptibility=False,
+        )
+        prompts.interaction_text(
+            numbers=[1, 2, 3],
+            private_clue="the number is odd",
+            memory_lines=["12 | The number is even.", "7 | The number is prime."],
+            m=3,
+            prompt_social_susceptibility=False,
+        )
+        with self.assertRaises(ValueError):
+            prompts.interaction_text(
+                numbers=[1, 2, 3],
+                private_clue="the number is odd",
+                memory_lines=["12 | The number is even."],
+                m=1,
+                prompt_social_susceptibility=False,
+            )
+        with self.assertRaises(ValueError):
+            prompts.interaction_text(
+                numbers=[1, 2, 3],
+                private_clue="the number is odd",
+                memory_lines=["12"],
+                m=3,
+                prompt_social_susceptibility=False,
+            )
 
     def test_prompt_can_include_integer_range_without_allowed_list(self) -> None:
         text = prompts.interaction_text(
@@ -42,7 +74,9 @@ class NumberGameMemoryFormatTest(unittest.TestCase):
             prompt_number_range=True,
         )
 
-        self.assertIn("sampled uniformly from the integers 1 through 100, inclusive", text)
+        self.assertIn("The hidden integer is in the range 1 through 100, inclusive.", text)
+        self.assertNotIn("sampled", text)
+        self.assertNotIn("uniformly", text)
         self.assertNotIn("Allowed numbers", text)
         self.assertNotIn("[1, 2, 3", text)
 

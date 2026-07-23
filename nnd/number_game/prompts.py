@@ -16,13 +16,24 @@ def _memory_block(memory_lines: list[str]) -> str:
     return "Transcript memory (oldest -> newest):\n" + "\n".join(f"- {line}" for line in memory_lines)
 
 
+def _validate_memory_lines(memory_lines: list[str], m: int) -> None:
+    if m == 1:
+        bad = [line for line in memory_lines if " | " in line]
+        if bad:
+            raise ValueError("m=1 transcript memory must contain number-only entries")
+        return
+    if m == 3:
+        bad = [line for line in memory_lines if " | " not in line]
+        if bad:
+            raise ValueError("m=3 transcript memory must contain entries formatted as 'number | reason'")
+        return
+    raise ValueError("number game supports m=1 or m=3")
+
+
 def _range_line(numbers: list[int]) -> str:
     if not numbers:
-        return "The hidden integer was sampled from the experiment's configured integer range."
-    return (
-        "The hidden integer was sampled uniformly from the integers "
-        f"{min(numbers)} through {max(numbers)}, inclusive."
-    )
+        return "The hidden integer is in the experiment's configured integer range."
+    return f"The hidden integer is in the range {min(numbers)} through {max(numbers)}, inclusive."
 
 
 def _base_header(
@@ -88,6 +99,7 @@ def interaction_text(
     prompt_social_susceptibility: bool = True,
     prompt_number_range: bool = False,
 ) -> str:
+    _validate_memory_lines(memory_lines, m)
     lines = [
         _base_header(
             numbers=numbers,
@@ -118,6 +130,7 @@ def final_decision_text(
     prompt_social_susceptibility: bool = True,
     prompt_number_range: bool = False,
 ) -> str:
+    _validate_memory_lines(memory_lines, m)
     lines = [
         _base_header(
             numbers=numbers,
@@ -143,6 +156,7 @@ def organization_decision_text(
     m: int,
     prompt_number_range: bool = False,
 ) -> str:
+    _validate_memory_lines(memory_lines, m)
     lines = [
         "You are the manager in a number identification organization.",
         "Observers each saw a private clue about the same hidden integer.",

@@ -1,6 +1,6 @@
 # RunPod Number Game Instructions
 
-Use this after the local prompted-prior checks have passed. The current
+Use this after the local prompted-range checks have passed. The current
 experiment contract is:
 
 ```yaml
@@ -11,14 +11,14 @@ prompt_social_susceptibility: false
 early_stop_window: 5
 ```
 
-The model is explicitly told:
+The model is explicitly told only the integer range:
 
 ```text
-The hidden integer was sampled uniformly from the integers 1 through 100, inclusive.
+The hidden integer is in the range 1 through 100, inclusive.
 ```
 
 Old number-game outputs are stale unless their `config_resolved.yaml` matches
-that contract.
+that contract and their saved prompts contain the range-only sentence above.
 
 ## 1. Pod Setup
 
@@ -67,7 +67,7 @@ python -c 'from pathlib import Path; from nnd.number_game.config import load_num
 Verify the exact prompt contract:
 
 ```bash
-python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(numbers=list(range(1,101)), private_clue="the number is odd", memory_lines=["12", "7 | The number is prime."], m=3, prompt_social_susceptibility=False, prompt_number_range=True))'
+python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(numbers=list(range(1,101)), private_clue="the number is odd", memory_lines=["12 | The number is even.", "7 | The number is prime."], m=3, prompt_social_susceptibility=False, prompt_number_range=True))'
 ```
 
 The printed prompt should include `1 through 100` and should not include an
@@ -111,7 +111,7 @@ Sanity checks:
 
 - `config_resolved.yaml` has `max_number: 100` and `prompt_number_range: True`.
 - `clue_information.csv` has `candidate_range_count=100`.
-- `conflict_prompts.jsonl` contains the `1 through 100` sentence.
+- `conflict_prompts.jsonl` contains the `1 through 100` range sentence.
 - `conflict_phase_summary.csv` has weak, medium, and strong clue rows.
 - `valid_rate` is close to 1.0; if not, inspect `debug/`.
 

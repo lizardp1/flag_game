@@ -24,7 +24,9 @@ I(clue) = -log2 P(clue)
         = log2(total candidate integers / clue-consistent integers)
 ```
 
-The current prompted-prior behavioral probes use a uniform prior over the configured integer range, now `1..100`.
+The current behavioral probes prompt the configured integer range, now `1..100`.
+The clue-information metric uses an analysis-only uniform baseline over that
+range; the model prompt does not say the hidden integer was sampled uniformly.
 The model is told this support when `prompt_number_range: true`.
 
 Example: for `1..100`, `the digits sum to 7` matches 8 integers (`7, 16, 25, 34, 43, 52, 61, 70`), so:

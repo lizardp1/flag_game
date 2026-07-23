@@ -210,7 +210,7 @@ def write_clue_information_outputs() -> None:
     fig.text(
         0.23,
         0.94,
-        "I(clue) = -log2 P(clue) = log2(total candidates / clue-consistent candidates), uniform prior",
+        "I(clue) = -log2 P(clue) = log2(total candidates / clue-consistent candidates), uniform analysis baseline",
         ha="left",
         fontsize=9.4,
         color="#4A5565",
@@ -628,7 +628,7 @@ def write_index() -> None:
                 "- `03_private_vs_social_memory_ratio_flag_style.svg`: flag-style stacked response composition over private-target versus social-evidence memory ratios.",
                 "- `04_conflict_probe_by_clue_information_phase.svg`: the same conflict probe split into weak/medium/strong private-clue information phases.",
                 "- `00_clue_information_values.svg`: information value for every clue under the configured candidate range.",
-                "- `clue_information.csv`: candidate counts, prior probabilities, information bits, and phase for every configured clue.",
+                "- `clue_information.csv`: candidate counts, analysis-baseline probabilities, information bits, and phase for every configured clue.",
                 "- `conflict_phase_summary_from_trials.csv`: phase-split response composition derived from the corrected local Qwen conflict trials.",
                 "",
                 "Note: the ratio figures use the corrected local Qwen3-1.7B reason-schema ratio-conflict run with `memory_total=4`. The RunPod version should use `memory_total=8` and keep the phase split.",

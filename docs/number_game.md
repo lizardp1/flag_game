@@ -17,7 +17,7 @@ The rerun checklist for the prompted `1..100` experiment contract is in
 `docs/number_game_rerun_checklist.md`.
 RunPod setup and command details are in `docs/RUNPOD_NUMBER_GAME.md`.
 
-All active configs use a prompted prior:
+All active configs use a prompted range:
 
 ```yaml
 min_number: 1
@@ -30,7 +30,7 @@ early_stop_window: 5
 This means the prompt tells the model:
 
 ```text
-The hidden integer was sampled uniformly from the integers 1 through 100, inclusive.
+The hidden integer is in the range 1 through 100, inclusive.
 ```
 
 It does not print an allowed-number list, and parser validity does not require
@@ -44,11 +44,15 @@ answers to lie inside `1..100`.
 - `broadcast`: every agent broadcasts, then each agent makes a final decision.
 - `org`: observers send clue-conditioned statements to a manager.
 
-Pairwise memory matches the flag-game surface format: each memory entry is just
-the communicated answer, optionally followed by a reason after a pipe.
+Pairwise memory matches the flag-game surface format. Within one run the
+format is determined by `m`: `m=1` memory is number-only, and `m=3` memory is
+number plus reason after a pipe.
 
 ```text
 17
+```
+
+```text
 17 | It fits my prime clue.
 ```
 
