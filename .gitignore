@@ -26,6 +26,7 @@ logs/
 # Large experimental outputs — keep local, archive to Zenodo
 results/
 sweeps/
+outputs/
 
 # Editors
 .vscode/
@@ -39,4 +40,3 @@ dist/
 .env
 .env.local
 test/results-*.json
-

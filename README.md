@@ -8,6 +8,9 @@ This directory is the compact reproduction bundle for the figures used in the pa
 - `paper/exports/data/`: compact CSV/JSON source tables and exported summaries used by the plotting scripts.
 - `paper/*.py`: plotting scripts.
 - `scripts/`: run helpers and the one-command rebuild script.
+- `nnd/number_game/`: text-only number-game extension for open-source model behavior and representation-geometry work.
+- `configs/number_game/`: handoff-safe number-game configs for local Qwen, RunPod Qwen, and Kimi endpoint runs.
+- `docs/number_game.md`: number-game overview; `docs/RUNPOD_NUMBER_GAME.md` has cloud-run instructions.
 - `results/`: slimmed source data required by the final plots. Full per-seed image artifact dumps are intentionally omitted; only the stimulus PNGs needed by image-bearing final panels are retained.
 - `poster/exports/support_visuals/`: compact broadcast sweep summary used by the broadcast and slot figures.
 
