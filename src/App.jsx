@@ -182,6 +182,7 @@ function genPal(n){const o=[];for(let i=0;i<n;i++){const h=(i*137.508)%360;o.pus
 /* ═══════ CONFIG ═══════ */
 const GW=24,GH=16,TW=6,TH=4;
 const MAX_A=10,H_MEM=8,ALPHA=0.5,CON_T=0.85,CON_RUNS=3,POL_T=0.25;
+const RUN_STEP_DELAY=350;
 function mkRng(seed){let s=seed|0;return()=>{s=(s*1664525+1013904223)&0x7fffffff;return s/0x7fffffff;};}
 
 /* ═══════ INTERNAL RENDERING (for agent scoring only — never displayed) ═══════ */
@@ -771,7 +772,7 @@ function FlagGame({keys}){
       if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-      await new Promise(r=>setTimeout(r,25));}})();
+      await new Promise(r=>setTimeout(r,RUN_STEP_DELAY));}})();
     return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
@@ -803,7 +804,7 @@ function FlagGame({keys}){
       {phase==='done'&&sim.current&&sim.current.gossipLog&&<MechanisticTrace agents={agents} allG={allG} gossipLog={sim.current.gossipLog} truth={truthFlag.c} pe={pe}/>}
       <div style={{marginTop:24,padding:'18px 22px',background:T.pan,border:`1px solid ${T.bdr}`,borderRadius:11,maxWidth:740,margin:'24px auto 0'}}>
         <h3 style={{fontSize:14,fontWeight:400,fontStyle:'italic',fontFamily:T.ser,color:T.txt,marginBottom:6}}>How it works</h3>
-        <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>Each agent sees only a small fragment of a hidden flag. Step by step, one agent shares its current guess with another, who adds it to its memory of recent observations. With no API key, agents use a local scripted heuristic. The game ends when agents settle on the same country for {CON_RUNS} consecutive rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or after N×14 steps.</p>
+        <p style={{fontSize:11,color:T.mut,lineHeight:1.7,margin:0}}>Each agent sees only a small fragment of a hidden flag. Step by step, one agent shares its current guess with another, who adds it to its memory of recent observations. The game ends when agents settle on the same country for {CON_RUNS} consecutive rounds at ≥{(CON_T*100).toFixed(0)}% agreement, or after N×14 steps.</p>
       </div>
     </div></div>);
 }
@@ -931,7 +932,7 @@ function AdversarialGame({keys}){
       if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-      await new Promise(r=>setTimeout(r,25));}})();
+      await new Promise(r=>setTimeout(r,RUN_STEP_DELAY));}})();
     return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,advTarget,advReason,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
@@ -1227,7 +1228,7 @@ function ApiKeyBar({keys,setKeys}){
   const set=(provider,value)=>setKeys(current=>({...current,[provider]:value.trim()}));
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
     <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
-      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Scripted fallback (no key)'}</span>
+      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Ready to play'}</span>
       {KEY_PROVIDERS.map(provider=>(<span key={provider} style={{display:'flex',alignItems:'center',gap:6}}>
         <span style={{color:T.dim,whiteSpace:'nowrap'}}>{KEY_FIELD_LABELS[provider]}</span>
         <input type={shown?'text':'password'} placeholder={PROVIDERS[provider].placeholder} value={keys[provider]} onChange={event=>set(provider,event.target.value)} style={{width:154,padding:'4px 8px',borderRadius:5,border:`1px solid ${keys[provider]?'#3a8a64':T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
@@ -1239,8 +1240,7 @@ function ApiKeyBar({keys,setKeys}){
   </div>);
 }
 
-/* Per-agent model dropdown. Hides providers without a key; falls back to the
-   scripted heuristic label when no key is set anywhere. */
+/* When no key is entered, all model choices remain available for the game. */
 function ModelPicker({keys,model,setModel,disabled,label='Next agent'}){
   const avail=availableModels(keys);
   if(!avail.length)return(<><label style={{fontSize:10,color:T.dim}}>{label}</label>
