@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import REAL_GRIDS_RAW from './realGrids.json';
-import { rasterizeFlag, cropAgentView, llmInteraction, PROVIDERS, availableModels, anyKey, modelMeta } from './llm';
+import { rasterizeFlag, cropAgentView, llmInteraction, PROVIDERS, availableModels, anyKey, hasModelKey, modelMeta } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -692,8 +692,8 @@ function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;con
 
 /* ═══════ MAIN ═══════ */
 function FlagGame({keys}){
-  const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[lvl,setLvl]=useState(1);const[truth,setTruth]=useState('Japan');const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
+  const live=hasModelKey(model,keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
@@ -840,13 +840,14 @@ function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.f
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
 function AdversarialGame({keys}){
-  const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
+  const[model,setModel]=useState('gpt-4o');
+  const live=hasModelKey(model,keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[lvl,setLvl]=useState(0);
   const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
   const[advTarget,setAdvTarget]=useState(()=>{const ts=LEVELS[0].truth;return ts.find(c=>c!==ts[0])||ts[0];});
   const[advReason,setAdvReason]=useState(()=>describeFlag(LEVELS[0].truth[1]||LEVELS[0].truth[0]));
   useEffect(()=>{setAdvReason(describeFlag(advTarget));},[advTarget]);
-  const[model,setModel]=useState('gpt-4o');const[agents,setAgents]=useState(()=>makeAdvAgents('gpt-4o'));
+  const[agents,setAgents]=useState(()=>makeAdvAgents('gpt-4o'));
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);
@@ -985,8 +986,8 @@ function AdversarialGame({keys}){
 /* ═══════ FIRST-PERSON GAME ═══════ */
 const FP_TOTAL_ROUNDS=8;
 function FirstPersonGame({keys}){
-  const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[model,setModel]=useState('gpt-4o');
+  const live=hasModelKey(model,keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[lvl,setLvl]=useState(0);
   const[truth,setTruth]=useState(()=>F[0].c);
   const[playerTop,setPlayerTop]=useState(0);
@@ -1240,13 +1241,11 @@ function ApiKeyBar({keys,setKeys}){
   </div>);
 }
 
-/* When no key is entered, all model choices remain available for the game. */
+/* Models remain selectable; a missing provider key runs that choice locally. */
 function ModelPicker({keys,model,setModel,disabled,label='Next agent'}){
   const avail=availableModels(keys);
-  if(!avail.length)return(<><label style={{fontSize:10,color:T.dim}}>{label}</label>
-    <select style={{...S.sel,maxWidth:200}} disabled value="scripted"><option value="scripted">Scripted heuristic</option></select></>);
   const main=avail.filter(m=>m.group==='main'),fast=avail.filter(m=>m.group==='fast');
-  const opt=m=><option key={m.id} value={m.id}>{m.label}</option>;
+  const opt=m=><option key={m.id} value={m.id}>{m.label}{keys?.[m.provider]?'':' (scripted)'}</option>;
   return(<><label style={{fontSize:10,color:T.dim}}>{label}</label>
     <select value={model} onChange={e=>setModel(e.target.value)} style={{...S.sel,maxWidth:320}} disabled={disabled}>
       {main.length>0&&<optgroup label="Models">{main.map(opt)}</optgroup>}

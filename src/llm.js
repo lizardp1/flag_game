@@ -27,8 +27,12 @@ export function anyKey(keys) {
 }
 
 export function availableModels(keys) {
-  const keyedModels = MODELS.filter(model => keys?.[model.provider])
-  return keyedModels.length ? keyedModels : MODELS
+  return MODELS
+}
+
+export function hasModelKey(model, keys) {
+  const definition = MODEL_BY_ID[model]
+  return !!(definition && keys?.[definition.provider])
 }
 
 export function modelMeta(id) {
