@@ -22,8 +22,8 @@ class NumberGameMemoryFormatTest(unittest.TestCase):
 
         self.assertIn(
             "Transcript memory (oldest -> newest):\n"
-            "- 12 | The number is even.\n"
-            "- 7 | I am confident the answer is 7.",
+            "12 | The number is even.\n"
+            "7 | I am confident the answer is 7.",
             text,
         )
         self.assertNotIn("A02 said", text)
@@ -31,15 +31,18 @@ class NumberGameMemoryFormatTest(unittest.TestCase):
         self.assertIn('Output JSON exactly: {"number":<integer>,"reason":"<one sentence>"}', text)
         self.assertNotIn('"hint"', text)
         self.assertNotIn("sampled uniformly", text)
+        self.assertNotIn("- 12", text)
 
     def test_m1_and_m3_memory_formats_are_not_mixed(self) -> None:
-        prompts.interaction_text(
+        m1_text = prompts.interaction_text(
             numbers=[1, 2, 3],
             private_clue="the number is odd",
             memory_lines=["12", "7"],
             m=1,
             prompt_social_susceptibility=False,
         )
+        self.assertIn("Transcript memory (oldest -> newest):\n12\n7", m1_text)
+        self.assertNotIn("- 12", m1_text)
         prompts.interaction_text(
             numbers=[1, 2, 3],
             private_clue="the number is odd",

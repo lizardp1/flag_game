@@ -46,7 +46,9 @@ answers to lie inside `1..100`.
 
 Pairwise memory matches the flag-game surface format. Within one run the
 format is determined by `m`: `m=1` memory is number-only, and `m=3` memory is
-number plus reason after a pipe.
+number plus reason after a pipe. Number-game prompts render each memory entry
+on its own line without a hyphen bullet, because `- 17` can be mistaken for a
+negative number.
 
 ```text
 17

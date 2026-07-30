@@ -71,7 +71,9 @@ python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(n
 ```
 
 The printed prompt should include `1 through 100` and should not include an
-`Allowed numbers` list.
+`Allowed numbers` list. Transcript memory entries should be bare lines, e.g.
+`12 | The number is even.`, not hyphen bullets like `- 12`, because numeric
+bullets can look like negative numbers.
 
 ## 3. Qwen Conflict Probe
 
@@ -429,3 +431,140 @@ Do not assume its raw sign is causal. Use `calibrated_alpha` in
 causal steering, where positive calibrated alpha means empirically more social.
 The alpha sweep now scores full-sequence number log probabilities, not just the
 first token after `{"number":`.
+
+### Follow-Up: Stronger Causal Checks
+
+The first full run showed a real behavioral shift, but social evidence did not
+fully win in logprob space. Use this broader layer/alpha run to check whether
+there is a better causal layer and whether stronger steering flips choices
+before side effects become unacceptable:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_memory_contrast_broad_alpha \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --direction-method memory_contrast \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 16 \
+  --layer 18 \
+  --layer 20 \
+  --layer 22 \
+  --layer 24 \
+  --layer 26 \
+  --layer 28 \
+  --alpha -30 \
+  --alpha -20 \
+  --alpha -15 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha 0 \
+  --alpha 5 \
+  --alpha 10 \
+  --alpha 15 \
+  --alpha 20 \
+  --alpha 30 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --qualitative-examples-per-alpha 3 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+Then test outcome-aligned and subspace alternatives. These are the checks for
+whether the original vector was mostly an evidence-source vector rather than a
+choice-control vector:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_logprob_quantile \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --direction-method logprob_quantile \
+  --direction-quantile 0.25 \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 20 \
+  --layer 22 \
+  --layer 24 \
+  --layer 26 \
+  --layer 28 \
+  --alpha -20 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha 0 \
+  --alpha 5 \
+  --alpha 10 \
+  --alpha 20 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --qualitative-examples-per-alpha 3 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_svd_subspace \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --direction-method svd_subspace \
+  --subspace-rank 3 \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 20 \
+  --layer 22 \
+  --layer 24 \
+  --layer 26 \
+  --layer 28 \
+  --alpha -20 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha 0 \
+  --alpha 5 \
+  --alpha 10 \
+  --alpha 20 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --qualitative-examples-per-alpha 3 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+For each run, inspect:
+
+```bash
+cat OUT_DIR/behavioral_steering_effect_summary.csv
+ls OUT_DIR/plots
+```

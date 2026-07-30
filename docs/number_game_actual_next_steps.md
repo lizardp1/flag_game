@@ -170,6 +170,8 @@ Current status:
 - [x] Empirical sign calibration, because the raw contrast-vector sign can flip under intervention.
 - [x] Sign-calibrated vector file where positive calibrated alpha means empirically more social.
 - [x] Full literature-style steering evaluation suite implemented in `scripts/run_number_game_steering_prep.py`.
+- [x] Behavioral steering summary: baseline-to-steered social-choice, private-clue, validity, and format-damage deltas.
+- [x] Alternative direction methods: memory contrast, logprob-quantile outcome direction, and SVD/subspace direction.
 - [ ] Full suite run on RunPod for Qwen3-8B and larger/Kimi models.
 
 ### Steering Figure and Evaluation Backlog
@@ -186,6 +188,7 @@ RunPod before treating the steering vector as a serious result:
 - [x] Vector stability: cosine similarity across random seeds and case subsets.
 - [x] Qualitative examples and `m=3` dialogues at representative alpha values.
 - [x] OOD/generalization: train on synthetic probes, test inside actual social-game prompts.
+- [x] Choice-composition plots showing whether steering changes actual generated choices, not only logprobs.
 
 Interpretation rule: the raw vector is a diagnostic contrast. Causal claims should
 use the empirically calibrated sign and should be backed by generation-time
@@ -241,15 +244,24 @@ Use held-out seeds, held-out clue cases, and held-out memory ratios.
 
 ### 4. Steering vectors
 
-Derive candidate vectors from:
+Derive and compare candidate vectors from:
 
-- mean activation contrast: private-wins minus social-wins
-- linear classifier normal vector
+- memory contrast: social-memory activations minus private/target-memory activations
+- outcome contrast: high social-minus-private logprob-margin activations minus low-margin activations
+- SVD/subspace contrast: top social/private contrast components aligned with the mean direction
+- later: linear classifier normal vector trained on actual choices
 
 Test both signs:
 
 - private-up steering
 - social-up steering
+
+Next RunPod priority:
+
+- broader layer sweep: `16,18,20,22,24,26,28`
+- broader alpha sweep: `-30,-20,-15,-10,-5,0,5,10,15,20,30`
+- compare `--direction-method memory_contrast`, `logprob_quantile`, and `svd_subspace`
+- rank by `behavioral_steering_effect_summary.csv`, not only logprob heatmaps
 
 ### 5. Causal steering evaluation
 

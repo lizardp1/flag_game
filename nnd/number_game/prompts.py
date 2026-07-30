@@ -13,7 +13,7 @@ def system_prompt() -> str:
 def _memory_block(memory_lines: list[str]) -> str:
     if not memory_lines:
         return "Transcript memory (oldest -> newest): []"
-    return "Transcript memory (oldest -> newest):\n" + "\n".join(f"- {line}" for line in memory_lines)
+    return "Transcript memory (oldest -> newest):\n" + "\n".join(memory_lines)
 
 
 def _validate_memory_lines(memory_lines: list[str], m: int) -> None:

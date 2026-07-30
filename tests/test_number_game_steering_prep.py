@@ -1,5 +1,7 @@
 import unittest
 
+import numpy as np
+
 from scripts import run_number_game_steering_prep as steering
 
 
@@ -51,6 +53,72 @@ class SteeringPrepTests(unittest.TestCase):
             steering.parse_list_cell("['12 | The number is even.', '7 | The number is prime.']"),
             ["12 | The number is even.", "7 | The number is prime."],
         )
+
+    def test_behavioral_summary_reports_social_choice_delta(self):
+        rows = [
+            {
+                "dataset": "synthetic",
+                "layer": 24,
+                "calibrated_alpha": -10.0,
+                "valid_rate": 1.0,
+                "format_damage_rate": 0.0,
+                "satisfies_private_clue_rate": 0.9,
+                "social_choice_rate": 0.1,
+                "private_target_choice_rate": 0.6,
+            },
+            {
+                "dataset": "synthetic",
+                "layer": 24,
+                "calibrated_alpha": 0.0,
+                "valid_rate": 1.0,
+                "format_damage_rate": 0.0,
+                "satisfies_private_clue_rate": 0.8,
+                "social_choice_rate": 0.2,
+                "private_target_choice_rate": 0.5,
+            },
+            {
+                "dataset": "synthetic",
+                "layer": 24,
+                "calibrated_alpha": 10.0,
+                "valid_rate": 1.0,
+                "format_damage_rate": 0.0,
+                "satisfies_private_clue_rate": 0.6,
+                "social_choice_rate": 0.45,
+                "private_target_choice_rate": 0.35,
+            },
+        ]
+        summary = steering.behavioral_steering_effect_summary(rows)
+        self.assertEqual(len(summary), 1)
+        self.assertAlmostEqual(summary[0]["positive_social_choice_delta"], 0.25)
+        self.assertAlmostEqual(summary[0]["positive_satisfies_private_clue_delta"], -0.2)
+
+    def test_logprob_quantile_direction_points_from_low_to_high_margin(self):
+        trials = []
+        vectors = {}
+        for index, margin in enumerate([-4.0, -3.0, 3.0, 4.0]):
+            trial_id = f"trial_{index}"
+            trials.append(
+                {
+                    "trial_id": trial_id,
+                    "pair_id": f"pair_{index}",
+                    "case_id": f"case_{index}",
+                    "variant": "social_memory",
+                    "split": "train",
+                    "social_minus_private_number_logprob_margin": margin,
+                }
+            )
+            vectors[trial_id] = {1: np.array([margin, 0.0])}
+        fit = steering.fit_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=1,
+            fit_split="train",
+            direction_method="logprob_quantile",
+            direction_quantile=0.25,
+            subspace_rank=1,
+        )
+        self.assertIsNotNone(fit)
+        self.assertGreater(fit["direction"][0], 0.0)
 
 
 if __name__ == "__main__":

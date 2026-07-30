@@ -75,6 +75,7 @@ python -c 'from pathlib import Path; from nnd.number_game.config import load_num
 ```
 
 - [x] Save or inspect one exact prompt sample and confirm it has the range sentence, no sampling assumption, and no allowed-number list.
+- [x] Confirm transcript memory entries are bare lines, not `- 12` hyphen bullets.
 
 ```bash
 python -c 'from nnd.number_game import prompts; print(prompts.interaction_text(numbers=list(range(1,101)), private_clue="the number is odd", memory_lines=["12 | The number is even.", "7 | The number is prime."], m=3, prompt_social_susceptibility=False, prompt_number_range=True))'

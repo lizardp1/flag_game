@@ -93,6 +93,18 @@ def main() -> None:
     parser.add_argument("--case-seed", default=0, type=int)
     parser.add_argument("--test-frac", default=0.25, type=float)
     parser.add_argument("--fit-split", choices=["all", "train"], default="all")
+    parser.add_argument(
+        "--direction-method",
+        choices=["memory_contrast", "logprob_quantile", "svd_subspace"],
+        default="memory_contrast",
+        help=(
+            "memory_contrast uses social-memory minus private/target-memory activations; "
+            "logprob_quantile uses high minus low social-private logprob-margin prompts; "
+            "svd_subspace uses the top contrast-diff components aligned to the mean direction."
+        ),
+    )
+    parser.add_argument("--direction-quantile", default=0.25, type=float)
+    parser.add_argument("--subspace-rank", default=3, type=int)
     parser.add_argument("--skip-alpha-sweep", action="store_true")
     parser.add_argument("--max-alpha-trials", default=None, type=int)
     parser.add_argument("--run-generation-steering", action="store_true")
@@ -168,7 +180,15 @@ def main() -> None:
         m_values=m_values,
         prompt_number_range=config.prompt_number_range,
     )
-    directions, direction_summary = compute_direction_summary(trials, vectors, layers, fit_split=args.fit_split)
+    directions, direction_summary = compute_direction_summary(
+        trials,
+        vectors,
+        layers,
+        fit_split=args.fit_split,
+        direction_method=args.direction_method,
+        direction_quantile=args.direction_quantile,
+        subspace_rank=args.subspace_rank,
+    )
     projection_rows = projection_distribution_rows(trials, layers)
     scaling_rows = data_scaling_curve(
         trials=trials,
@@ -177,6 +197,9 @@ def main() -> None:
         fit_split=args.fit_split,
         sizes=scaling_sizes,
         seed=args.case_seed,
+        direction_method=args.direction_method,
+        direction_quantile=args.direction_quantile,
+        subspace_rank=args.subspace_rank,
     )
     stability_rows = vector_stability_rows(
         trials=trials,
@@ -186,6 +209,9 @@ def main() -> None:
         sizes=scaling_sizes,
         subset_count=args.stability_subsets,
         seeds=stability_seeds,
+        direction_method=args.direction_method,
+        direction_quantile=args.direction_quantile,
+        subspace_rank=args.subspace_rank,
     )
     steering_rows: list[dict[str, Any]] = []
     if not args.skip_alpha_sweep:
@@ -213,6 +239,7 @@ def main() -> None:
             dataset_name="synthetic_contrast",
         )
     generation_summary_rows = generation_side_effect_summary(generation_rows)
+    behavioral_effect_rows = behavioral_steering_effect_summary(generation_summary_rows)
 
     ood_trials: list[dict[str, Any]] = []
     ood_vectors: dict[str, dict[int, np.ndarray]] = {}
@@ -256,6 +283,7 @@ def main() -> None:
                 dataset_name="ood_actual_social",
             )
             ood_generation_summary_rows = generation_side_effect_summary(ood_generation_rows)
+    ood_behavioral_effect_rows = behavioral_steering_effect_summary(ood_generation_summary_rows)
 
     write_csv(out_dir / "steering_prep_trials.csv", trials)
     write_csv(out_dir / "steering_direction_summary.csv", direction_summary)
@@ -267,6 +295,7 @@ def main() -> None:
     write_csv(out_dir / "generation_steering_outputs.csv", generation_rows)
     write_jsonl(out_dir / "generation_steering_outputs.jsonl", generation_rows)
     write_csv(out_dir / "generation_side_effect_summary.csv", generation_summary_rows)
+    write_csv(out_dir / "behavioral_steering_effect_summary.csv", behavioral_effect_rows)
     write_qualitative_examples(
         out_dir / "qualitative_alpha_examples.md",
         generation_rows,
@@ -278,6 +307,7 @@ def main() -> None:
     write_csv(out_dir / "ood_social_generation_outputs.csv", ood_generation_rows)
     write_jsonl(out_dir / "ood_social_generation_outputs.jsonl", ood_generation_rows)
     write_csv(out_dir / "ood_social_side_effect_summary.csv", ood_generation_summary_rows)
+    write_csv(out_dir / "ood_social_behavioral_steering_effect_summary.csv", ood_behavioral_effect_rows)
     write_qualitative_examples(
         out_dir / "ood_social_qualitative_alpha_examples.md",
         ood_generation_rows,
@@ -293,8 +323,10 @@ def main() -> None:
         scaling_rows,
         stability_rows,
         generation_summary_rows,
+        behavioral_effect_rows,
         ood_steering_rows,
         ood_generation_summary_rows,
+        ood_behavioral_effect_rows,
     )
     write_csv(out_dir / "steering_cases.csv", [case.__dict__ for case in active_cases])
     write_index(
@@ -306,6 +338,9 @@ def main() -> None:
         m_values,
         alphas,
         args.fit_split,
+        args.direction_method,
+        args.direction_quantile,
+        args.subspace_rank,
     )
 
     print(f"Steering prep complete. Output saved to {out_dir}")
@@ -729,40 +764,30 @@ def compute_direction_summary(
     vectors: dict[str, dict[int, np.ndarray]],
     layers: list[int],
     fit_split: str,
+    direction_method: str,
+    direction_quantile: float,
+    subspace_rank: int,
 ) -> tuple[dict[int, np.ndarray], list[dict[str, Any]]]:
-    by_pair_variant = {(row["pair_id"], row["variant"]): row for row in trials}
-    pair_ids = sorted({row["pair_id"] for row in trials})
-    if fit_split != "all":
-        pair_ids_for_fit = sorted(
-            {
-                row["pair_id"]
-                for row in trials
-                if row.get("split") == fit_split and row["variant"] in ("target_memory", "social_memory")
-            }
-        )
-    else:
-        pair_ids_for_fit = pair_ids
     directions: dict[int, np.ndarray] = {}
     summary: list[dict[str, Any]] = []
 
     for layer in layers:
-        diffs: list[np.ndarray] = []
-        pair_norms: list[float] = []
-        for pair_id in pair_ids_for_fit:
-            target = by_pair_variant.get((pair_id, "target_memory"))
-            social = by_pair_variant.get((pair_id, "social_memory"))
-            if target is None or social is None:
-                continue
-            target_vec = vectors[target["trial_id"]].get(layer)
-            social_vec = vectors[social["trial_id"]].get(layer)
-            if target_vec is None or social_vec is None:
-                continue
-            diff = social_vec - target_vec
-            diffs.append(diff)
-            pair_norms.append(float(np.linalg.norm(diff)))
-        if not diffs:
+        fit = fit_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=layer,
+            fit_split=fit_split,
+            direction_method=direction_method,
+            direction_quantile=direction_quantile,
+            subspace_rank=subspace_rank,
+        )
+        if fit is None:
             continue
-        direction = np.mean(np.stack(diffs, axis=0), axis=0)
+        direction = fit["direction"]
+        pair_norms = fit["pair_norms"]
+        fit_count = int(fit["fit_count"])
+        if float(np.linalg.norm(direction)) == 0.0:
+            continue
         directions[layer] = direction
         unit = normalize(direction)
 
@@ -792,11 +817,15 @@ def compute_direction_summary(
             target_proj = [p for p, _, variant in projection_rows if variant == "target_memory"]
             summary.append(
                 {
-                    "direction": "social_minus_private_memory",
+                    "direction": f"social_minus_private_{direction_method}",
+                    "direction_method": direction_method,
+                    "direction_quantile": direction_quantile,
+                    "subspace_rank": subspace_rank,
                     "layer": layer,
                     "fit_split": fit_split,
                     "eval_split": eval_split,
-                    "n_fit_pairs": len(diffs),
+                    "n_fit_pairs": fit_count,
+                    "n_fit_rows": fit.get("fit_row_count", fit_count),
                     "n_eval_rows": len(projection_rows),
                     "mean_pair_norm": mean(pair_norms),
                     "direction_norm": float(np.linalg.norm(direction)),
@@ -814,6 +843,186 @@ def compute_direction_summary(
                 }
             )
     return directions, summary
+
+
+def fit_direction(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layer: int,
+    fit_split: str,
+    direction_method: str,
+    direction_quantile: float,
+    subspace_rank: int,
+    pair_ids: list[str] | None = None,
+) -> dict[str, Any] | None:
+    if direction_method == "memory_contrast":
+        return fit_memory_contrast_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=layer,
+            fit_split=fit_split,
+            pair_ids=pair_ids,
+        )
+    if direction_method == "logprob_quantile":
+        return fit_logprob_quantile_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=layer,
+            fit_split=fit_split,
+            direction_quantile=direction_quantile,
+            pair_ids=pair_ids,
+        )
+    if direction_method == "svd_subspace":
+        return fit_svd_subspace_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=layer,
+            fit_split=fit_split,
+            subspace_rank=subspace_rank,
+            pair_ids=pair_ids,
+        )
+    raise ValueError(f"Unknown direction_method={direction_method!r}")
+
+
+def fit_memory_contrast_direction(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layer: int,
+    fit_split: str,
+    pair_ids: list[str] | None,
+) -> dict[str, Any] | None:
+    by_pair_variant = {(row["pair_id"], row["variant"]): row for row in trials}
+    active_pair_ids = pair_ids or fit_pair_ids(trials, fit_split)
+    diffs: list[np.ndarray] = []
+    pair_norms: list[float] = []
+    for pair_id in active_pair_ids:
+        target = by_pair_variant.get((pair_id, "target_memory"))
+        social = by_pair_variant.get((pair_id, "social_memory"))
+        if target is None or social is None:
+            continue
+        target_vec = vectors[target["trial_id"]].get(layer)
+        social_vec = vectors[social["trial_id"]].get(layer)
+        if target_vec is None or social_vec is None:
+            continue
+        diff = social_vec - target_vec
+        diffs.append(diff)
+        pair_norms.append(float(np.linalg.norm(diff)))
+    if not diffs:
+        return None
+    return {
+        "direction": np.mean(np.stack(diffs, axis=0), axis=0),
+        "pair_norms": pair_norms,
+        "fit_count": len(diffs),
+        "fit_row_count": len(diffs) * 2,
+    }
+
+
+def fit_logprob_quantile_direction(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layer: int,
+    fit_split: str,
+    direction_quantile: float,
+    pair_ids: list[str] | None,
+) -> dict[str, Any] | None:
+    allowed_pair_ids = set(pair_ids) if pair_ids is not None else None
+    rows = [
+        row
+        for row in trials
+        if row.get("variant") in ("target_memory", "social_memory")
+        and (fit_split == "all" or row.get("split") == fit_split)
+        and (allowed_pair_ids is None or row.get("pair_id") in allowed_pair_ids)
+        and row.get("social_minus_private_number_logprob_margin") not in (None, "")
+        and vectors.get(row["trial_id"], {}).get(layer) is not None
+    ]
+    if len(rows) < 4:
+        return None
+    rows = sorted(rows, key=lambda row: float(row["social_minus_private_number_logprob_margin"]))
+    q = min(max(direction_quantile, 0.05), 0.5)
+    bucket_size = max(1, int(round(len(rows) * q)))
+    low_rows = rows[:bucket_size]
+    high_rows = rows[-bucket_size:]
+    low_vectors = [vectors[row["trial_id"]][layer] for row in low_rows]
+    high_vectors = [vectors[row["trial_id"]][layer] for row in high_rows]
+    low_mean = np.mean(np.stack(low_vectors, axis=0), axis=0)
+    high_mean = np.mean(np.stack(high_vectors, axis=0), axis=0)
+    pair_norms = [
+        float(np.linalg.norm(high_vectors[index] - low_vectors[index]))
+        for index in range(min(len(high_vectors), len(low_vectors)))
+    ]
+    return {
+        "direction": high_mean - low_mean,
+        "pair_norms": pair_norms,
+        "fit_count": min(len(high_vectors), len(low_vectors)),
+        "fit_row_count": len(high_vectors) + len(low_vectors),
+    }
+
+
+def fit_svd_subspace_direction(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layer: int,
+    fit_split: str,
+    subspace_rank: int,
+    pair_ids: list[str] | None,
+) -> dict[str, Any] | None:
+    memory_fit = fit_memory_contrast_direction(
+        trials=trials,
+        vectors=vectors,
+        layer=layer,
+        fit_split=fit_split,
+        pair_ids=pair_ids,
+    )
+    if memory_fit is None:
+        return None
+    by_pair_variant = {(row["pair_id"], row["variant"]): row for row in trials}
+    active_pair_ids = pair_ids or fit_pair_ids(trials, fit_split)
+    diffs: list[np.ndarray] = []
+    for pair_id in active_pair_ids:
+        target = by_pair_variant.get((pair_id, "target_memory"))
+        social = by_pair_variant.get((pair_id, "social_memory"))
+        if target is None or social is None:
+            continue
+        target_vec = vectors[target["trial_id"]].get(layer)
+        social_vec = vectors[social["trial_id"]].get(layer)
+        if target_vec is not None and social_vec is not None:
+            diffs.append(social_vec - target_vec)
+    if len(diffs) < 2:
+        return memory_fit
+    matrix = np.stack(diffs, axis=0)
+    mean_direction = np.asarray(memory_fit["direction"])
+    try:
+        _u, singular_values, vt = np.linalg.svd(matrix, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return memory_fit
+    rank = max(1, min(subspace_rank, vt.shape[0]))
+    direction = np.zeros_like(mean_direction)
+    for index in range(rank):
+        component = vt[index]
+        if float(np.dot(component, mean_direction)) < 0.0:
+            component = -component
+        direction = direction + float(singular_values[index]) * component
+    return {
+        "direction": direction,
+        "pair_norms": list(memory_fit["pair_norms"]),
+        "fit_count": int(memory_fit["fit_count"]),
+        "fit_row_count": int(memory_fit["fit_row_count"]),
+    }
+
+
+def fit_pair_ids(trials: list[dict[str, Any]], fit_split: str) -> list[str]:
+    return sorted(
+        {
+            row["pair_id"]
+            for row in trials
+            if row.get("variant") in ("target_memory", "social_memory")
+            and (fit_split == "all" or row.get("split") == fit_split)
+        }
+    )
 
 
 def eval_splits(trials: list[dict[str, Any]]) -> list[str]:
@@ -875,6 +1084,9 @@ def data_scaling_curve(
     fit_split: str,
     sizes: list[int],
     seed: int,
+    direction_method: str,
+    direction_quantile: float,
+    subspace_rank: int,
 ) -> list[dict[str, Any]]:
     if not sizes:
         return []
@@ -899,7 +1111,6 @@ def data_scaling_curve(
     shuffled_cases = list(fit_case_ids)
     rng.shuffle(shuffled_cases)
     rows: list[dict[str, Any]] = []
-    by_pair_variant = {(row["pair_id"], row["variant"]): row for row in trials}
     pair_ids_by_case: dict[str, set[str]] = {}
     for row in trials:
         if row["variant"] in ("target_memory", "social_memory"):
@@ -918,23 +1129,20 @@ def data_scaling_curve(
             )
             continue
         for layer in layers:
-            diffs: list[np.ndarray] = []
-            pair_norms: list[float] = []
-            for pair_id in selected_pairs:
-                target = by_pair_variant.get((pair_id, "target_memory"))
-                social = by_pair_variant.get((pair_id, "social_memory"))
-                if target is None or social is None:
-                    continue
-                target_vec = vectors[target["trial_id"]].get(layer)
-                social_vec = vectors[social["trial_id"]].get(layer)
-                if target_vec is None or social_vec is None:
-                    continue
-                diff = social_vec - target_vec
-                diffs.append(diff)
-                pair_norms.append(float(np.linalg.norm(diff)))
-            if not diffs:
+            fit = fit_direction(
+                trials=trials,
+                vectors=vectors,
+                layer=layer,
+                fit_split=fit_split,
+                direction_method=direction_method,
+                direction_quantile=direction_quantile,
+                subspace_rank=subspace_rank,
+                pair_ids=selected_pairs,
+            )
+            if fit is None:
                 continue
-            direction = np.mean(np.stack(diffs, axis=0), axis=0)
+            direction = fit["direction"]
+            pair_norms = fit["pair_norms"]
             unit = normalize(direction)
             for eval_split, eval_rows in eval_rows_by_split.items():
                 projections: list[float] = []
@@ -958,11 +1166,15 @@ def data_scaling_curve(
                         "fit_case_count": len(selected_cases),
                         "fit_pair_count": len(diffs),
                         "status": "ok",
+                        "direction_method": direction_method,
+                        "direction_quantile": direction_quantile,
+                        "subspace_rank": subspace_rank,
                         "layer": layer,
                         "fit_split": fit_split,
                         "eval_split": eval_split,
                         "direction_norm": float(np.linalg.norm(direction)),
                         "mean_pair_norm": mean(pair_norms),
+                        "fit_row_count": fit.get("fit_row_count", fit.get("fit_count")),
                         "social_projection_gap": mean(social_proj) - mean(target_proj),
                         "projection_logprob_margin_pearson": pearson(projections, margins),
                     }
@@ -979,6 +1191,9 @@ def vector_stability_rows(
     sizes: list[int],
     subset_count: int,
     seeds: list[int],
+    direction_method: str,
+    direction_quantile: float,
+    subspace_rank: int,
 ) -> list[dict[str, Any]]:
     if subset_count <= 0:
         return []
@@ -994,7 +1209,6 @@ def vector_stability_rows(
         return []
     active_sizes = sorted(set(size for size in sizes if 1 < size <= len(fit_case_ids))) or [len(fit_case_ids)]
     active_seeds = seeds or [0, 1, 2]
-    by_pair_variant = {(row["pair_id"], row["variant"]): row for row in trials}
     pair_ids_by_case: dict[str, set[str]] = {}
     for row in trials:
         if row["variant"] in ("target_memory", "social_memory"):
@@ -1010,9 +1224,18 @@ def vector_stability_rows(
                 selected_cases = selected_cases[:requested_size]
                 selected_pairs = sorted({pair_id for case_id in selected_cases for pair_id in pair_ids_by_case.get(case_id, set())})
                 for layer in layers:
-                    direction = direction_for_pairs(selected_pairs, by_pair_variant, vectors, layer)
-                    if direction is not None:
-                        subset_vectors[layer].append((f"seed{seed}_subset{subset_index}", normalize(direction)))
+                    fit = fit_direction(
+                        trials=trials,
+                        vectors=vectors,
+                        layer=layer,
+                        fit_split=fit_split,
+                        direction_method=direction_method,
+                        direction_quantile=direction_quantile,
+                        subspace_rank=subspace_rank,
+                        pair_ids=selected_pairs,
+                    )
+                    if fit is not None:
+                        subset_vectors[layer].append((f"seed{seed}_subset{subset_index}", normalize(fit["direction"])))
         for layer, vectors_for_layer in subset_vectors.items():
             cosines: list[float] = []
             for left_index in range(len(vectors_for_layer)):
@@ -1022,6 +1245,9 @@ def vector_stability_rows(
                 {
                     "requested_case_count": requested_size,
                     "fit_split": fit_split,
+                    "direction_method": direction_method,
+                    "direction_quantile": direction_quantile,
+                    "subspace_rank": subspace_rank,
                     "layer": layer,
                     "subset_case_count": requested_size,
                     "subset_count": len(vectors_for_layer),
@@ -1617,6 +1843,86 @@ def generation_side_effect_summary(rows: list[dict[str, Any]]) -> list[dict[str,
     return summary
 
 
+def behavioral_steering_effect_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_dataset_layer: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+    for row in rows:
+        by_dataset_layer.setdefault((row.get("dataset"), row.get("layer")), []).append(row)
+    out: list[dict[str, Any]] = []
+    for (dataset, layer), group in sorted(by_dataset_layer.items(), key=lambda item: (str(item[0][0]), int(item[0][1]))):
+        sorted_rows = sorted(group, key=lambda row: float(row["calibrated_alpha"]))
+        baseline = nearest_alpha_row(sorted_rows, 0.0)
+        positive = max((row for row in sorted_rows if float(row["calibrated_alpha"]) > 0), key=lambda row: float(row["calibrated_alpha"]), default=None)
+        negative = min((row for row in sorted_rows if float(row["calibrated_alpha"]) < 0), key=lambda row: float(row["calibrated_alpha"]), default=None)
+        best_social = best_social_behavior_row(sorted_rows)
+        if baseline is None:
+            continue
+        out.append(
+            {
+                "dataset": dataset,
+                "layer": layer,
+                "baseline_alpha": baseline.get("calibrated_alpha"),
+                "positive_alpha": positive.get("calibrated_alpha") if positive is not None else None,
+                "negative_alpha": negative.get("calibrated_alpha") if negative is not None else None,
+                "best_social_alpha": best_social.get("calibrated_alpha") if best_social is not None else None,
+                "baseline_social_choice_rate": baseline.get("social_choice_rate"),
+                "positive_social_choice_rate": positive.get("social_choice_rate") if positive is not None else None,
+                "negative_social_choice_rate": negative.get("social_choice_rate") if negative is not None else None,
+                "best_social_choice_rate": best_social.get("social_choice_rate") if best_social is not None else None,
+                "positive_social_choice_delta": numeric_delta(positive, baseline, "social_choice_rate"),
+                "negative_social_choice_delta": numeric_delta(negative, baseline, "social_choice_rate"),
+                "best_social_choice_delta": numeric_delta(best_social, baseline, "social_choice_rate"),
+                "baseline_private_target_choice_rate": baseline.get("private_target_choice_rate"),
+                "positive_private_target_choice_delta": numeric_delta(positive, baseline, "private_target_choice_rate"),
+                "best_private_target_choice_delta": numeric_delta(best_social, baseline, "private_target_choice_rate"),
+                "baseline_satisfies_private_clue_rate": baseline.get("satisfies_private_clue_rate"),
+                "positive_satisfies_private_clue_delta": numeric_delta(positive, baseline, "satisfies_private_clue_rate"),
+                "best_satisfies_private_clue_delta": numeric_delta(best_social, baseline, "satisfies_private_clue_rate"),
+                "baseline_valid_rate": baseline.get("valid_rate"),
+                "positive_valid_rate_delta": numeric_delta(positive, baseline, "valid_rate"),
+                "best_valid_rate_delta": numeric_delta(best_social, baseline, "valid_rate"),
+                "baseline_format_damage_rate": baseline.get("format_damage_rate"),
+                "positive_format_damage_delta": numeric_delta(positive, baseline, "format_damage_rate"),
+                "best_format_damage_delta": numeric_delta(best_social, baseline, "format_damage_rate"),
+            }
+        )
+    return out
+
+
+def nearest_alpha_row(rows: list[dict[str, Any]], target_alpha: float) -> dict[str, Any] | None:
+    if not rows:
+        return None
+    return min(rows, key=lambda row: abs(float(row["calibrated_alpha"]) - target_alpha))
+
+
+def best_social_behavior_row(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    viable = [
+        row
+        for row in rows
+        if float(row.get("valid_rate", 0.0) or 0.0) >= 0.95
+        and float(row.get("format_damage_rate", 1.0) or 1.0) <= 0.05
+    ]
+    active = viable or rows
+    if not active:
+        return None
+    return max(
+        active,
+        key=lambda row: (
+            float(row.get("social_choice_rate", 0.0) or 0.0),
+            -float(row.get("format_damage_rate", 1.0) or 1.0),
+            float(row.get("valid_rate", 0.0) or 0.0),
+        ),
+    )
+
+
+def numeric_delta(row: dict[str, Any] | None, baseline: dict[str, Any], key: str) -> float | None:
+    if row is None or row.get(key) in (None, "") or baseline.get(key) in (None, ""):
+        return None
+    try:
+        return float(row[key]) - float(baseline[key])
+    except (TypeError, ValueError):
+        return None
+
+
 def is_strict_json_object(text: str) -> bool:
     try:
         return isinstance(json.loads(text), dict)
@@ -1763,8 +2069,10 @@ def write_plots(
     scaling_rows: list[dict[str, Any]],
     stability_rows: list[dict[str, Any]],
     generation_summary_rows: list[dict[str, Any]],
+    behavioral_effect_rows: list[dict[str, Any]],
     ood_steering_rows: list[dict[str, Any]],
     ood_generation_summary_rows: list[dict[str, Any]],
+    ood_behavioral_effect_rows: list[dict[str, Any]],
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -1831,6 +2139,12 @@ def write_plots(
     if stability_rows:
         write_vector_stability_plot(out_dir / "plots" / "vector_stability.svg", stability_rows)
     if generation_summary_rows:
+        write_choice_composition_plot(
+            out_dir / "plots" / "generation_choice_composition.svg",
+            generation_summary_rows,
+            behavioral_effect_rows,
+            title="Generation-time steering choice composition",
+        )
         write_side_effect_plot(
             out_dir / "plots" / "generation_side_effects.svg",
             generation_summary_rows,
@@ -1843,6 +2157,12 @@ def write_plots(
             title="OOD actual social prompts: layer x alpha",
         )
     if ood_generation_summary_rows:
+        write_choice_composition_plot(
+            out_dir / "plots" / "ood_social_choice_composition.svg",
+            ood_generation_summary_rows,
+            ood_behavioral_effect_rows,
+            title="OOD actual social choice composition",
+        )
         write_side_effect_plot(
             out_dir / "plots" / "ood_social_generation_side_effects.svg",
             ood_generation_summary_rows,
@@ -2035,6 +2355,77 @@ def write_vector_stability_plot(path: Path, rows: list[dict[str, Any]]) -> None:
     plt.close(fig)
 
 
+def write_choice_composition_plot(
+    path: Path,
+    rows: list[dict[str, Any]],
+    behavioral_effect_rows: list[dict[str, Any]],
+    *,
+    title: str,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        path.write_text("")
+        return
+    layer = choose_behavior_layer(rows, behavioral_effect_rows)
+    layer_rows = sorted(
+        [row for row in rows if int(row["layer"]) == layer],
+        key=lambda row: float(row["calibrated_alpha"]),
+    )
+    if not layer_rows:
+        path.write_text("")
+        return
+    alphas = [float(row["calibrated_alpha"]) for row in layer_rows]
+    series = [
+        ("social_choice_rate", "social number", "#E07A3F", "o"),
+        ("private_target_choice_rate", "private target", "#2E6FBB", "s"),
+        ("other_clue_compatible_rate", "other clue-compatible", "#16A34A", "^"),
+        ("incompatible_rate", "incompatible", "#C2410C", "d"),
+    ]
+    fig, ax = plt.subplots(figsize=(8.8, 4.8))
+    for key, label, color, marker in series:
+        ax.plot(
+            alphas,
+            [float(row.get(key, 0.0) or 0.0) for row in layer_rows],
+            marker=marker,
+            linewidth=1.7,
+            label=label,
+            color=color,
+        )
+    ax.set_ylim(-0.05, 1.05)
+    ax.axvline(0.0, color="#A6ACB8", linewidth=0.9)
+    ax.set_xlabel("Calibrated alpha (positive = more social)")
+    ax.set_ylabel("Choice rate among valid generations")
+    ax.set_title(f"{title} (layer {layer})", fontweight="bold")
+    ax.legend(frameon=False, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def choose_behavior_layer(rows: list[dict[str, Any]], behavioral_effect_rows: list[dict[str, Any]]) -> int:
+    scored = [
+        row
+        for row in behavioral_effect_rows
+        if row.get("best_social_choice_delta") not in (None, "")
+    ]
+    if scored:
+        return int(
+            max(
+                scored,
+                key=lambda row: (
+                    float(row.get("best_social_choice_delta", 0.0) or 0.0),
+                    -abs(float(row.get("best_format_damage_delta", 0.0) or 0.0)),
+                ),
+            )["layer"]
+        )
+    counts: dict[int, int] = {}
+    for row in rows:
+        counts[int(row["layer"])] = counts.get(int(row["layer"]), 0) + 1
+    return max(counts, key=counts.get)
+
+
 def write_side_effect_plot(path: Path, rows: list[dict[str, Any]], *, title: str) -> None:
     import matplotlib.pyplot as plt
 
@@ -2098,6 +2489,9 @@ def write_index(
     m_values: list[int],
     alphas: list[float],
     fit_split: str,
+    direction_method: str,
+    direction_quantile: float,
+    subspace_rank: int,
 ) -> None:
     split_counts: dict[str, int] = {}
     for case in cases:
@@ -2109,6 +2503,9 @@ def write_index(
         f"- case count: `{len(cases)}`",
         f"- split counts: `{split_counts}`",
         f"- fit split: `{fit_split}`",
+        f"- direction method: `{direction_method}`",
+        f"- direction quantile: `{direction_quantile}`",
+        f"- subspace rank: `{subspace_rank}`",
         f"- layers: `{layers}`",
         f"- memory strengths: `{memory_strengths}`",
         f"- m values: `{m_values}`",
@@ -2126,6 +2523,7 @@ def write_index(
         "- `steering_sign_summary.csv`: empirical sign calibration for each layer's raw contrast vector.",
         "- `generation_steering_outputs.jsonl`: actual generated JSON/text under steering, when `--run-generation-steering` is used.",
         "- `generation_side_effect_summary.csv`: validity, clue-satisfaction, format-damage, and perplexity side effects by alpha.",
+        "- `behavioral_steering_effect_summary.csv`: baseline-vs-steered social-choice deltas, private-clue deltas, and format/validity deltas.",
         "- `ood_social_*`: synthetic-train / actual-social-prompt generalization diagnostics when `--ood-social-dir` is supplied.",
         "- `steering_vectors_social_minus_private.npz`: compressed average direction vector by layer.",
         "- `steering_vectors_empirical_social.npz`: sign-calibrated vectors where positive alpha means more social when calibration exists.",
@@ -2135,6 +2533,7 @@ def write_index(
         "- `plots/layer_alpha_heatmap.svg`: layer x alpha effect-size heatmap.",
         "- `plots/data_scaling_curve.svg`: contrast-case sample-size curve.",
         "- `plots/vector_stability.svg`: vector cosine stability across random case subsets.",
+        "- `plots/generation_choice_composition.svg`: social/private/other/incompatible choice rates versus alpha.",
         "- `plots/generation_side_effects.svg`: generation validity/perplexity/format damage versus alpha.",
         "",
         "Interpretation: the raw contrast vector is diagnostic. Use `calibrated_alpha` and `steering_vectors_empirical_social.npz` for causal steering, because raw signs can flip under intervention.",
