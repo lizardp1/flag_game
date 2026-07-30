@@ -263,8 +263,10 @@ python scripts/run_number_game_steering_prep.py \
 ```
 
 This fits the social-minus-private direction on train cases and uses held-out
-test cases for the layer-summary plot when test rows exist. Then run a capped
-alpha check on the best late layers:
+test cases for the layer-summary plot when test rows exist. It also writes the
+cheap diagnostics that do not require generation: projection distributions,
+data-scaling rows, and vector-stability rows. Then run a capped alpha check on
+the best late layers:
 
 ```bash
 python scripts/run_number_game_steering_prep.py \
@@ -273,6 +275,92 @@ python scripts/run_number_game_steering_prep.py \
   --case-source auto \
   --max-cases 64 \
   --targets-per-clue 4 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 24 \
+  --layer 28 \
+  --data-scaling-size 8 \
+  --data-scaling-size 16 \
+  --data-scaling-size 32 \
+  --data-scaling-size 64 \
+  --data-scaling-size 128 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha -2 \
+  --alpha -1 \
+  --alpha 0 \
+  --alpha 1 \
+  --alpha 2 \
+  --alpha 5 \
+  --alpha 10 \
+  --max-alpha-trials 192 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+For the full steering-evaluation pass, include generation-time steering. This
+is the pass that writes actual JSON outputs, final choices, clue satisfaction,
+validity, format damage, and completion-perplexity side-effect charts:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_auto176_generation \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 24 \
+  --layer 28 \
+  --data-scaling-size 8 \
+  --data-scaling-size 16 \
+  --data-scaling-size 32 \
+  --data-scaling-size 64 \
+  --data-scaling-size 128 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha -2 \
+  --alpha -1 \
+  --alpha 0 \
+  --alpha 1 \
+  --alpha 2 \
+  --alpha 5 \
+  --alpha 10 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --qualitative-examples-per-alpha 3 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+After you have actual pairwise social-game outputs, run the OOD generalization
+check by pointing `--ood-social-dir` at the pairwise output root. This trains
+the vector on synthetic conflict probes and tests it inside reconstructed real
+pairwise prompts:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_auto176_ood \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
   --socials-per-target 2 \
   --case-seed 0 \
   --test-frac 0.25 \
@@ -293,7 +381,11 @@ python scripts/run_number_game_steering_prep.py \
   --alpha 2 \
   --alpha 5 \
   --alpha 10 \
-  --max-alpha-trials 192 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --ood-social-dir outputs/number_game_prompt100/qwen3_8b_pairwise_N8_H8_5seeds \
+  --max-ood-prompts 128 \
   --override model=Qwen/Qwen3-8B \
   --override trust_remote_code=false
 ```
@@ -320,9 +412,20 @@ python scripts/run_number_game_steering_prep.py \
 ```
 
 This writes `steering_vectors_social_minus_private.npz`,
-`steering_cases.csv`, `steering_direction_summary.csv`, and
-`steering_alpha_sweep.csv`. Positive alpha adds the social-memory direction;
-negative alpha pushes back toward private or target-memory evidence. After this
-pass, train/test linear probes by layer and token position, then test whether
-generation-time steering shifts final choices without damaging JSON validity or
-clue satisfaction.
+`steering_cases.csv`, `steering_direction_summary.csv`,
+`projection_distributions.csv`, `data_scaling_curve.csv`,
+`vector_stability.csv`, and `steering_alpha_sweep.csv`. If the alpha sweep
+runs, it also writes `steering_sign_summary.csv`,
+`steering_vectors_empirical_social.npz`, `layer_alpha_heatmap.svg`, and
+calibrated alpha columns. If generation steering runs, it writes
+`generation_steering_outputs.jsonl`, `generation_side_effect_summary.csv`,
+`qualitative_alpha_examples.md`, and the matching side-effect plots. If
+`--ood-social-dir` is supplied, it also writes `ood_social_*` generalization
+files.
+
+The raw vector is diagnostic: `social_memory_activation - private_memory_activation`.
+Do not assume its raw sign is causal. Use `calibrated_alpha` in
+`steering_alpha_sweep.csv` and `steering_vectors_empirical_social.npz` for
+causal steering, where positive calibrated alpha means empirically more social.
+The alpha sweep now scores full-sequence number log probabilities, not just the
+first token after `{"number":`.

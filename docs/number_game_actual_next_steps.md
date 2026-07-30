@@ -162,6 +162,51 @@ Keep exact prompts, seeds, memory ratios, and clue information bins fixed across
 
 ## Mechanistic Interpretability Sweep
 
+Current status:
+
+- [x] Auto-generated synthetic contrast cases with train/test split.
+- [x] Layerwise mean social-minus-private activation directions.
+- [x] Alpha sweep over full-sequence number log probabilities.
+- [x] Empirical sign calibration, because the raw contrast-vector sign can flip under intervention.
+- [x] Sign-calibrated vector file where positive calibrated alpha means empirically more social.
+- [x] Full literature-style steering evaluation suite implemented in `scripts/run_number_game_steering_prep.py`.
+- [ ] Full suite run on RunPod for Qwen3-8B and larger/Kimi models.
+
+### Steering Figure and Evaluation Backlog
+
+These are implemented outputs, but the expensive ones still need to be run on
+RunPod before treating the steering vector as a serious result:
+
+- [x] Projection distributions: social/private projection histograms and scatter plots, split by train/test.
+- [x] Layer x alpha heatmap: effect size over layers and steering strengths.
+- [x] Data-scaling curve: fit directions with 8, 16, 32, 64, and 128 cases to check sample-size effects and saturation.
+- [x] Full-sequence number log probability, replacing the old first-token number-logit approximation.
+- [x] Generation-time steering: actual JSON outputs, final choices, clue satisfaction, and parser validity under alpha.
+- [x] Side-effect charts: validity, perplexity, and format damage versus alpha.
+- [x] Vector stability: cosine similarity across random seeds and case subsets.
+- [x] Qualitative examples and `m=3` dialogues at representative alpha values.
+- [x] OOD/generalization: train on synthetic probes, test inside actual social-game prompts.
+
+Interpretation rule: the raw vector is a diagnostic contrast. Causal claims should
+use the empirically calibrated sign and should be backed by generation-time
+outputs, not just answer-token logits.
+
+### Literature Alignment
+
+The steering suite follows the current activation-steering pattern:
+
+- ActAdd-style contrast vectors: compute hidden-state differences between paired prompts and add the vector at inference time.
+- CAA-style evaluation: sweep layers and multipliers, test held-out prompts, inspect open-ended generations, check side effects, and compare vector similarities.
+- CAE practical checks: run data-scaling curves, because reported returns diminish around roughly 80 contrast examples; test OOD prompts separately from the synthetic vector-building distribution; track perplexity/format damage.
+- Geometry checks: use projection distributions and train/test separability, matching the broader representational-geometry practice of asking whether latent classes form stable, separated regions rather than trusting a single aggregate score.
+
+Useful references:
+
+- Activation Addition: https://arxiv.org/abs/2308.10248
+- Contrastive Activation Addition: https://arxiv.org/abs/2312.06681
+- Patterns and Mechanisms of Contrastive Activation Engineering: https://openreview.net/forum?id=FZk9oWvZm2
+- Latent Structure of Affective Representations in LLMs: https://arxiv.org/abs/2604.07382
+
 ### 1. Contrast-pair dataset
 
 Create paired prompts where only the evidence ownership/source changes:
@@ -210,7 +255,7 @@ Test both signs:
 
 Apply steering during generation and measure:
 
-- number-logit shifts
+- full-sequence number-logprob shifts
 - final answer flips
 - JSON validity
 - private clue satisfaction

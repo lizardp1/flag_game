@@ -269,7 +269,7 @@ Do not run large activation sweeps until the behavioral reruns look sane.
 - [ ] Train/test linear probes for private target, social target, final choice, and response category.
 - [ ] Derive private-vs-social steering vectors from contrast-pair means and/or probe normals.
 - [ ] Apply activation steering during generation.
-- [ ] Measure answer-logit shifts, final-choice shifts, JSON validity, clue satisfaction, and rationale coherence.
+- [ ] Measure full-sequence number-logprob shifts, final-choice shifts, JSON validity, clue satisfaction, and rationale coherence.
 - [ ] Localize layers into reading, integration, and answer-selection regions.
 
 ## Stale Outputs
