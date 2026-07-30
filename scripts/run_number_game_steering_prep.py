@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import csv
 from dataclasses import dataclass
+from dataclasses import replace
 import json
 import math
 from pathlib import Path
+import random
 import sys
 from typing import Any
 
@@ -18,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 from nnd.number_game import prompts
 from nnd.number_game.backend import build_backend
 from nnd.number_game.config import apply_overrides, load_number_game_config, save_resolved_config
+from nnd.number_game.domain import DEFAULT_CLUES, candidate_numbers, matching_clues
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,9 @@ class SteeringCase:
     private_reason: str
     social_number: int
     social_reason: str
+    relation: str = "contradictory"
+    source: str = "handwritten"
+    split: str = "train"
 
 
 CASES: tuple[SteeringCase, ...] = (
@@ -77,6 +83,13 @@ def main() -> None:
     parser.add_argument("--layer", action="append", type=int, default=[])
     parser.add_argument("--alpha", action="append", type=float, default=[])
     parser.add_argument("--case-id", action="append", default=[])
+    parser.add_argument("--case-source", choices=["handwritten", "auto", "both"], default="handwritten")
+    parser.add_argument("--max-cases", default=None, type=int)
+    parser.add_argument("--targets-per-clue", default=4, type=int)
+    parser.add_argument("--socials-per-target", default=2, type=int)
+    parser.add_argument("--case-seed", default=0, type=int)
+    parser.add_argument("--test-frac", default=0.25, type=float)
+    parser.add_argument("--fit-split", choices=["all", "train"], default="all")
     parser.add_argument("--skip-alpha-sweep", action="store_true")
     parser.add_argument("--max-alpha-trials", default=None, type=int)
     parser.add_argument("--override", action="append", default=[])
@@ -120,10 +133,18 @@ def main() -> None:
     memory_strengths = args.memory_strength or [1, 4, 8]
     m_values = args.m or [1, 3]
     alphas = args.alpha or [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0]
-    case_ids = set(args.case_id)
-    active_cases = [case for case in CASES if not case_ids or case.case_id in case_ids]
+    active_cases = build_active_cases(
+        numbers=candidate_numbers(config.min_number, config.max_number),
+        case_source=args.case_source,
+        case_ids=set(args.case_id),
+        targets_per_clue=args.targets_per_clue,
+        socials_per_target=args.socials_per_target,
+        max_cases=args.max_cases,
+        seed=args.case_seed,
+        test_frac=args.test_frac,
+    )
     if not active_cases:
-        raise ValueError(f"No steering cases matched --case-id values: {sorted(case_ids)}")
+        raise ValueError("No steering cases selected.")
 
     trials, vectors = collect_trials(
         backend=backend,
@@ -133,7 +154,7 @@ def main() -> None:
         m_values=m_values,
         prompt_number_range=config.prompt_number_range,
     )
-    directions, direction_summary = compute_direction_summary(trials, vectors, layers)
+    directions, direction_summary = compute_direction_summary(trials, vectors, layers, fit_split=args.fit_split)
     steering_rows: list[dict[str, Any]] = []
     if not args.skip_alpha_sweep:
         steering_rows = run_alpha_sweep(
@@ -151,7 +172,17 @@ def main() -> None:
     write_csv(out_dir / "steering_alpha_sweep.csv", steering_rows)
     save_vectors(out_dir / "steering_vectors_social_minus_private.npz", directions)
     write_plots(out_dir, direction_summary, steering_rows)
-    write_index(out_dir, config.model, [case.case_id for case in active_cases], layers, memory_strengths, m_values, alphas)
+    write_csv(out_dir / "steering_cases.csv", [case.__dict__ for case in active_cases])
+    write_index(
+        out_dir,
+        config.model,
+        active_cases,
+        layers,
+        memory_strengths,
+        m_values,
+        alphas,
+        args.fit_split,
+    )
 
     print(f"Steering prep complete. Output saved to {out_dir}")
     best = best_layer(direction_summary)
@@ -171,6 +202,93 @@ def default_layers(model_layer_count: int) -> list[int]:
     if model_layer_count not in layers:
         layers.append(model_layer_count)
     return sorted(set(layers))
+
+
+def build_active_cases(
+    *,
+    numbers: list[int],
+    case_source: str,
+    case_ids: set[str],
+    targets_per_clue: int,
+    socials_per_target: int,
+    max_cases: int | None,
+    seed: int,
+    test_frac: float,
+) -> list[SteeringCase]:
+    cases: list[SteeringCase] = []
+    if case_source in ("handwritten", "both"):
+        cases.extend(CASES)
+    if case_source in ("auto", "both"):
+        cases.extend(
+            auto_cases(
+                numbers=numbers,
+                targets_per_clue=targets_per_clue,
+                socials_per_target=socials_per_target,
+                max_cases=max_cases,
+                seed=seed,
+                test_frac=test_frac,
+            )
+        )
+    if case_ids:
+        cases = [case for case in cases if case.case_id in case_ids]
+    if max_cases is not None and case_source != "auto":
+        cases = cases[:max_cases]
+    return cases
+
+
+def auto_cases(
+    *,
+    numbers: list[int],
+    targets_per_clue: int,
+    socials_per_target: int,
+    max_cases: int | None,
+    seed: int,
+    test_frac: float,
+) -> list[SteeringCase]:
+    rng = random.Random(seed)
+    cases: list[SteeringCase] = []
+    for private_clue in DEFAULT_CLUES:
+        private_targets = [number for number in numbers if private_clue.predicate(number)]
+        social_pool = [number for number in numbers if not private_clue.predicate(number)]
+        rng.shuffle(private_targets)
+        for private_target in private_targets[: max(targets_per_clue, 0)]:
+            socials = [number for number in social_pool if number != private_target]
+            rng.shuffle(socials)
+            for social_number in socials[: max(socials_per_target, 0)]:
+                social_clue = social_reason_clue(social_number=social_number, private_target=private_target)
+                if social_clue is None:
+                    continue
+                cases.append(
+                    SteeringCase(
+                        case_id=f"auto_{private_clue.name}_{private_target}_vs_{social_number}_{social_clue.name}",
+                        private_clue=private_clue.text,
+                        private_target=private_target,
+                        private_reason=sentence_case(private_clue.text),
+                        social_number=social_number,
+                        social_reason=sentence_case(social_clue.text),
+                        source="auto",
+                    )
+                )
+    rng.shuffle(cases)
+    if max_cases is not None:
+        cases = cases[:max_cases]
+    if not cases:
+        return []
+    test_count = max(1, int(round(len(cases) * min(max(test_frac, 0.0), 1.0)))) if test_frac > 0 else 0
+    test_ids = {case.case_id for case in cases[:test_count]}
+    return [replace(case, split="test" if case.case_id in test_ids else "train") for case in cases]
+
+
+def social_reason_clue(*, social_number: int, private_target: int) -> Any | None:
+    clues = matching_clues(social_number)
+    if not clues:
+        return None
+    preferred = [clue for clue in clues if not clue.predicate(private_target)]
+    return (preferred or clues)[0]
+
+
+def sentence_case(text: str) -> str:
+    return text[:1].upper() + text[1:] + "."
 
 
 def memory_lines(case: SteeringCase, *, variant: str, m: int, strength: int) -> list[str]:
@@ -240,6 +358,9 @@ def collect_trials(
                             "private_clue": case.private_clue,
                             "private_target": case.private_target,
                             "social_number": case.social_number,
+                            "relation": case.relation,
+                            "case_source": case.source,
+                            "split": case.split,
                             "memory_lines": json.dumps(lines),
                             "private_number_token_count": len(private_ids),
                             "social_number_token_count": len(social_ids),
@@ -275,17 +396,27 @@ def compute_direction_summary(
     trials: list[dict[str, Any]],
     vectors: dict[str, dict[int, np.ndarray]],
     layers: list[int],
+    fit_split: str,
 ) -> tuple[dict[int, np.ndarray], list[dict[str, Any]]]:
     by_pair_variant = {(row["pair_id"], row["variant"]): row for row in trials}
     pair_ids = sorted({row["pair_id"] for row in trials})
+    if fit_split != "all":
+        pair_ids_for_fit = sorted(
+            {
+                row["pair_id"]
+                for row in trials
+                if row.get("split") == fit_split and row["variant"] in ("target_memory", "social_memory")
+            }
+        )
+    else:
+        pair_ids_for_fit = pair_ids
     directions: dict[int, np.ndarray] = {}
     summary: list[dict[str, Any]] = []
 
     for layer in layers:
         diffs: list[np.ndarray] = []
-        projection_rows: list[tuple[float, float, str]] = []
         pair_norms: list[float] = []
-        for pair_id in pair_ids:
+        for pair_id in pair_ids_for_fit:
             target = by_pair_variant.get((pair_id, "target_memory"))
             social = by_pair_variant.get((pair_id, "social_memory"))
             if target is None or social is None:
@@ -308,27 +439,50 @@ def compute_direction_summary(
             if vec is None:
                 continue
             projection = float(np.dot(vec, unit))
-            margin = float(row["social_minus_private_logit_margin"])
-            projection_rows.append((projection, margin, str(row["variant"])))
             row[f"projection_layer_{layer}"] = projection
 
-        social_proj = [p for p, _, variant in projection_rows if variant == "social_memory"]
-        target_proj = [p for p, _, variant in projection_rows if variant == "target_memory"]
-        corr = pearson([p for p, _, _ in projection_rows], [m for _, m, _ in projection_rows])
-        summary.append(
-            {
-                "direction": "social_minus_private_memory",
-                "layer": layer,
-                "n_pairs": len(diffs),
-                "mean_pair_norm": mean(pair_norms),
-                "direction_norm": float(np.linalg.norm(direction)),
-                "social_projection_mean": mean(social_proj),
-                "target_projection_mean": mean(target_proj),
-                "social_projection_gap": mean(social_proj) - mean(target_proj),
-                "projection_logit_margin_pearson": corr,
-            }
-        )
+        for eval_split in eval_splits(trials):
+            eval_rows = [
+                row
+                for row in trials
+                if eval_split == "all" or row.get("split") == eval_split
+            ]
+            projection_rows = [
+                (
+                    float(row[f"projection_layer_{layer}"]),
+                    float(row["social_minus_private_logit_margin"]),
+                    str(row["variant"]),
+                )
+                for row in eval_rows
+                if f"projection_layer_{layer}" in row
+            ]
+            social_proj = [p for p, _, variant in projection_rows if variant == "social_memory"]
+            target_proj = [p for p, _, variant in projection_rows if variant == "target_memory"]
+            summary.append(
+                {
+                    "direction": "social_minus_private_memory",
+                    "layer": layer,
+                    "fit_split": fit_split,
+                    "eval_split": eval_split,
+                    "n_fit_pairs": len(diffs),
+                    "n_eval_rows": len(projection_rows),
+                    "mean_pair_norm": mean(pair_norms),
+                    "direction_norm": float(np.linalg.norm(direction)),
+                    "social_projection_mean": mean(social_proj),
+                    "target_projection_mean": mean(target_proj),
+                    "social_projection_gap": mean(social_proj) - mean(target_proj),
+                    "projection_logit_margin_pearson": pearson(
+                        [p for p, _, _ in projection_rows],
+                        [m for _, m, _ in projection_rows],
+                    ),
+                }
+            )
     return directions, summary
+
+
+def eval_splits(trials: list[dict[str, Any]]) -> list[str]:
+    splits = sorted({str(row.get("split", "")) for row in trials if row.get("split")})
+    return ["all", *splits]
 
 
 def run_alpha_sweep(
@@ -341,7 +495,9 @@ def run_alpha_sweep(
     alphas: list[float],
     max_alpha_trials: int | None,
 ) -> list[dict[str, Any]]:
-    scale_by_layer = {int(row["layer"]): float(row["mean_pair_norm"]) for row in direction_summary}
+    scale_by_layer: dict[int, float] = {}
+    for row in direction_summary:
+        scale_by_layer.setdefault(int(row["layer"]), float(row["mean_pair_norm"]))
     rows: list[dict[str, Any]] = []
     eval_trials = [row for row in trials if row["variant"] in ("target_memory", "social_memory")]
     if max_alpha_trials is not None:
@@ -510,7 +666,8 @@ def write_plots(out_dir: Path, direction_summary: list[dict[str, Any]], steering
     import matplotlib.pyplot as plt
 
     if direction_summary:
-        rows = sorted(direction_summary, key=lambda row: int(row["layer"]))
+        rows = preferred_summary_rows(direction_summary)
+        rows = sorted(rows, key=lambda row: int(row["layer"]))
         layers = [int(row["layer"]) for row in rows]
         corr = [float(row["projection_logit_margin_pearson"]) for row in rows]
         gap = [float(row["social_projection_gap"]) for row in rows]
@@ -522,7 +679,9 @@ def write_plots(out_dir: Path, direction_summary: list[dict[str, Any]], steering
         ax2 = ax1.twinx()
         ax2.plot(layers, gap, marker="s", color="#E07A3F", label="social-private projection gap")
         ax2.set_ylabel("Projection gap")
-        fig.suptitle("Local social-vs-private direction by layer", fontweight="bold")
+        eval_split = str(rows[0].get("eval_split", "all")) if rows else "all"
+        fit_split = str(rows[0].get("fit_split", "all")) if rows else "all"
+        fig.suptitle(f"Social-vs-private direction by layer ({fit_split} fit, {eval_split} eval)", fontweight="bold")
         handles1, labels1 = ax1.get_legend_handles_labels()
         handles2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(handles1 + handles2, labels1 + labels2, frameon=False, loc="best")
@@ -560,17 +719,23 @@ def write_plots(out_dir: Path, direction_summary: list[dict[str, Any]], steering
 def write_index(
     out_dir: Path,
     model: str,
-    case_ids: list[str],
+    cases: list[SteeringCase],
     layers: list[int],
     memory_strengths: list[int],
     m_values: list[int],
     alphas: list[float],
+    fit_split: str,
 ) -> None:
+    split_counts: dict[str, int] = {}
+    for case in cases:
+        split_counts[case.split] = split_counts.get(case.split, 0) + 1
     lines = [
         "# Number Game Local Steering Prep",
         "",
         f"- model: `{model}`",
-        f"- cases: `{case_ids}`",
+        f"- case count: `{len(cases)}`",
+        f"- split counts: `{split_counts}`",
+        f"- fit split: `{fit_split}`",
         f"- layers: `{layers}`",
         f"- memory strengths: `{memory_strengths}`",
         f"- m values: `{m_values}`",
@@ -579,6 +744,7 @@ def write_index(
         "Files:",
         "",
         "- `steering_prep_trials.csv`: prompt metadata, memory variant, and unsteered private/social number logits.",
+        "- `steering_cases.csv`: generated private/social contrast cases and train/test split labels.",
         "- `steering_direction_summary.csv`: layerwise social-minus-private direction quality.",
         "- `steering_alpha_sweep.csv`: answer-logit response when adding/subtracting each layer direction.",
         "- `steering_vectors_social_minus_private.npz`: compressed average direction vector by layer.",
@@ -593,9 +759,10 @@ def write_index(
 def best_layer(direction_summary: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not direction_summary:
         return None
-    rows = [row for row in direction_summary if not math.isnan(float(row["projection_logit_margin_pearson"]))]
+    rows = preferred_summary_rows(direction_summary)
+    rows = [row for row in rows if not math.isnan(float(row["projection_logit_margin_pearson"]))]
     if not rows:
-        rows = direction_summary
+        rows = preferred_summary_rows(direction_summary) or direction_summary
     return max(
         rows,
         key=lambda row: (
@@ -603,6 +770,18 @@ def best_layer(direction_summary: list[dict[str, Any]]) -> dict[str, Any] | None
             float(row.get("social_projection_gap", 0.0)),
         ),
     )
+
+
+def preferred_summary_rows(direction_summary: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    test_rows = [
+        row
+        for row in direction_summary
+        if row.get("eval_split") == "test" and not math.isnan(float(row["projection_logit_margin_pearson"]))
+    ]
+    if test_rows:
+        return test_rows
+    all_rows = [row for row in direction_summary if row.get("eval_split", "all") == "all"]
+    return all_rows or direction_summary
 
 
 if __name__ == "__main__":

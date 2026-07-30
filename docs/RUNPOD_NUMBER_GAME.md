@@ -234,12 +234,20 @@ Expected files:
 ## 8. Mech-Interp Gate
 
 Do not start large activation sweeps until the behavioral outputs pass sanity
-checks. The first local/RunPod steering-prep pass is:
+checks. The four handwritten contrast cases are only a smoke test. First use the
+auto-generated train/test battery for actual layer selection:
 
 ```bash
 python scripts/run_number_game_steering_prep.py \
   --config configs/number_game/runpod_qwen3.yaml \
-  --out outputs/number_game_prompt100/qwen3_8b_steering_prep \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_prep_auto64_direction \
+  --case-source auto \
+  --max-cases 64 \
+  --targets-per-clue 4 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
   --memory-strength 1 \
   --memory-strength 4 \
   --memory-strength 8 \
@@ -249,13 +257,43 @@ python scripts/run_number_game_steering_prep.py \
   --layer 16 \
   --layer 24 \
   --layer 28 \
+  --skip-alpha-sweep \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+This fits the social-minus-private direction on train cases and uses held-out
+test cases for the layer-summary plot when test rows exist. Then run a capped
+alpha check on the best late layers:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_prep_auto64_alpha \
+  --case-source auto \
+  --max-cases 64 \
+  --targets-per-clue 4 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 24 \
+  --layer 28 \
+  --alpha -10 \
+  --alpha -5 \
   --alpha -2 \
   --alpha -1 \
-  --alpha -0.5 \
   --alpha 0 \
-  --alpha 0.5 \
   --alpha 1 \
   --alpha 2 \
+  --alpha 5 \
+  --alpha 10 \
+  --max-alpha-trials 192 \
   --override model=Qwen/Qwen3-8B \
   --override trust_remote_code=false
 ```
@@ -265,21 +303,26 @@ For a cheap local Qwen3-1.7B direction smoke, skip the alpha sweep:
 ```bash
 python scripts/run_number_game_steering_prep.py \
   --config configs/number_game/local_qwen3_1_7b.yaml \
-  --out outputs/number_game_steering_prep/qwen3_1_7b_local_all_cases_direction \
+  --out outputs/number_game_steering_prep/qwen3_1_7b_auto_cases_tiny \
+  --case-source auto \
+  --max-cases 4 \
+  --targets-per-clue 4 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
   --memory-strength 4 \
   --m 1 \
-  --m 3 \
-  --layer 8 \
   --layer 16 \
-  --layer 24 \
   --layer 28 \
   --skip-alpha-sweep \
   --override trust_remote_code=false
 ```
 
 This writes `steering_vectors_social_minus_private.npz`,
-`steering_direction_summary.csv`, and `steering_alpha_sweep.csv`. Positive alpha
-adds the social-memory direction; negative alpha pushes back toward private or
-target-memory evidence. After this pass, train/test linear probes by layer and
-token position, then test whether generation-time steering shifts final choices
-without damaging JSON validity or clue satisfaction.
+`steering_cases.csv`, `steering_direction_summary.csv`, and
+`steering_alpha_sweep.csv`. Positive alpha adds the social-memory direction;
+negative alpha pushes back toward private or target-memory evidence. After this
+pass, train/test linear probes by layer and token position, then test whether
+generation-time steering shifts final choices without damaging JSON validity or
+clue satisfaction.
