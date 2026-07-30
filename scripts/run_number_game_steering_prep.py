@@ -1164,7 +1164,7 @@ def data_scaling_curve(
                     {
                         "requested_case_count": requested_size,
                         "fit_case_count": len(selected_cases),
-                        "fit_pair_count": len(diffs),
+                        "fit_pair_count": fit.get("fit_count"),
                         "status": "ok",
                         "direction_method": direction_method,
                         "direction_quantile": direction_quantile,

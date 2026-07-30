@@ -120,6 +120,39 @@ class SteeringPrepTests(unittest.TestCase):
         self.assertIsNotNone(fit)
         self.assertGreater(fit["direction"][0], 0.0)
 
+    def test_data_scaling_curve_uses_fit_object_counts(self):
+        trials = []
+        vectors = {}
+        for case_index in range(2):
+            for variant, value in [("target_memory", 0.0), ("social_memory", 1.0)]:
+                trial_id = f"case_{case_index}_{variant}"
+                trials.append(
+                    {
+                        "trial_id": trial_id,
+                        "pair_id": f"case_{case_index}_m1_mem1",
+                        "case_id": f"case_{case_index}",
+                        "variant": variant,
+                        "split": "train",
+                        "social_minus_private_number_logprob_margin": value,
+                    }
+                )
+                vectors[trial_id] = {1: np.array([value + case_index, value])}
+
+        rows = steering.data_scaling_curve(
+            trials=trials,
+            vectors=vectors,
+            layers=[1],
+            fit_split="train",
+            sizes=[1, 2],
+            seed=0,
+            direction_method="memory_contrast",
+            direction_quantile=0.25,
+            subspace_rank=1,
+        )
+        ok_rows = [row for row in rows if row.get("status") == "ok"]
+        self.assertTrue(ok_rows)
+        self.assertTrue(all(row["fit_pair_count"] >= 1 for row in ok_rows))
+
 
 if __name__ == "__main__":
     unittest.main()
