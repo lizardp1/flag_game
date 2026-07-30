@@ -234,14 +234,52 @@ Expected files:
 ## 8. Mech-Interp Gate
 
 Do not start large activation sweeps until the behavioral outputs pass sanity
-checks. Then use the Transformers backend with:
+checks. The first local/RunPod steering-prep pass is:
 
 ```bash
---override capture_hidden_states=true
---override hidden_state_layers=[-1]
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_prep \
+  --memory-strength 1 \
+  --memory-strength 4 \
+  --memory-strength 8 \
+  --m 1 \
+  --m 3 \
+  --layer 8 \
+  --layer 16 \
+  --layer 24 \
+  --layer 28 \
+  --alpha -2 \
+  --alpha -1 \
+  --alpha -0.5 \
+  --alpha 0 \
+  --alpha 0.5 \
+  --alpha 1 \
+  --alpha 2 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
 ```
 
-The first mechanistic pass should build contrast pairs for private-target versus
-social-target evidence, train/test linear probes by layer and token position,
-derive steering vectors, and then test whether steering shifts number logits and
-final choices without damaging validity or clue satisfaction.
+For a cheap local Qwen3-1.7B direction smoke, skip the alpha sweep:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/local_qwen3_1_7b.yaml \
+  --out outputs/number_game_steering_prep/qwen3_1_7b_local_all_cases_direction \
+  --memory-strength 4 \
+  --m 1 \
+  --m 3 \
+  --layer 8 \
+  --layer 16 \
+  --layer 24 \
+  --layer 28 \
+  --skip-alpha-sweep \
+  --override trust_remote_code=false
+```
+
+This writes `steering_vectors_social_minus_private.npz`,
+`steering_direction_summary.csv`, and `steering_alpha_sweep.csv`. Positive alpha
+adds the social-memory direction; negative alpha pushes back toward private or
+target-memory evidence. After this pass, train/test linear probes by layer and
+token position, then test whether generation-time steering shifts final choices
+without damaging JSON validity or clue satisfaction.
