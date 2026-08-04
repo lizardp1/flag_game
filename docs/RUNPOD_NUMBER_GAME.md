@@ -38,11 +38,14 @@ git checkout number-game-open-models
 python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install torch transformers accelerate numpy matplotlib
+pip install --upgrade -r requirements.txt
 ```
 
 If the pod has CUDA-specific PyTorch requirements, install the matching PyTorch
-wheel first, then install the remaining packages.
+wheel first, then run `pip install --upgrade -r requirements.txt`. The
+requirements file keeps `torch` and `transformers` in a compatible range for the
+steering scripts; older Torch builds can trigger `DTensor` import errors with
+newer Transformers.
 
 ## 2. Preflight
 
