@@ -39,6 +39,14 @@ class SteeringCase:
     split: str = "train"
 
 
+ANSWER_CATEGORIES: tuple[str, ...] = (
+    "social",
+    "private_target",
+    "other_clue_compatible",
+    "incompatible",
+)
+
+
 CASES: tuple[SteeringCase, ...] = (
     SteeringCase(
         case_id="digit_sum7_vs_even12",
@@ -100,17 +108,41 @@ def main() -> None:
     parser.add_argument("--fit-split", choices=["all", "train"], default="all")
     parser.add_argument(
         "--direction-method",
-        choices=["memory_contrast", "logprob_quantile", "svd_subspace", "ratio_slope"],
+        choices=["memory_contrast", "logprob_quantile", "svd_subspace", "ratio_slope", "choice_contrast"],
         default="memory_contrast",
         help=(
             "memory_contrast uses social-memory minus private/target-memory activations; "
             "logprob_quantile uses high minus low social-private logprob-margin prompts; "
             "svd_subspace uses the top contrast-diff components aligned to the mean direction; "
-            "ratio_slope fits an activation slope over mixed private:social memory ratios."
+            "ratio_slope fits an activation slope over mixed private:social memory ratios; "
+            "choice_contrast uses prompts labeled by the model's scored final-answer category."
         ),
     )
     parser.add_argument("--direction-quantile", default=0.25, type=float)
     parser.add_argument("--subspace-rank", default=3, type=int)
+    parser.add_argument(
+        "--choice-positive-category",
+        choices=["social", "private_target", "other_clue_compatible", "incompatible"],
+        default="social",
+        help="Positive category for --direction-method choice_contrast.",
+    )
+    parser.add_argument(
+        "--choice-negative-category",
+        choices=["social", "private_target", "other_clue_compatible", "incompatible"],
+        default="private_target",
+        help="Negative category for --direction-method choice_contrast.",
+    )
+    parser.add_argument(
+        "--score-answer-categories",
+        action="store_true",
+        help="Score all candidate numbers and label each prompt by the model's preferred final-answer category.",
+    )
+    parser.add_argument(
+        "--candidate-score-batch-size",
+        default=50,
+        type=int,
+        help="Candidate-number batch size for answer-category scoring.",
+    )
     parser.add_argument("--skip-alpha-sweep", action="store_true")
     parser.add_argument("--max-alpha-trials", default=None, type=int)
     parser.add_argument("--run-generation-steering", action="store_true")
@@ -193,6 +225,9 @@ def main() -> None:
     scaling_sizes = args.data_scaling_size or [8, 16, 32, 64, 128]
     stability_seeds = args.stability_seed or [0, 1, 2]
     numbers = candidate_numbers(config.min_number, config.max_number)
+    score_answer_categories = args.score_answer_categories or args.direction_method == "choice_contrast"
+    if args.choice_positive_category == args.choice_negative_category:
+        parser.error("--choice-positive-category and --choice-negative-category must differ")
     active_cases = build_active_cases(
         numbers=numbers,
         case_source=args.case_source,
@@ -216,6 +251,9 @@ def main() -> None:
         ratio_total=args.ratio_total,
         ratio_social_counts=ratio_social_counts,
         ratio_only=args.ratio_only,
+        candidate_numbers=numbers,
+        score_answer_categories=score_answer_categories,
+        candidate_score_batch_size=args.candidate_score_batch_size,
     )
     directions, direction_summary = compute_direction_summary(
         trials,
@@ -225,6 +263,14 @@ def main() -> None:
         direction_method=args.direction_method,
         direction_quantile=args.direction_quantile,
         subspace_rank=args.subspace_rank,
+        choice_positive_category=args.choice_positive_category,
+        choice_negative_category=args.choice_negative_category,
+    )
+    answer_category_vector_rows, answer_category_vectors = answer_category_vector_summary(
+        trials=trials,
+        vectors=vectors,
+        layers=layers,
+        fit_split=args.fit_split,
     )
     projection_rows = projection_distribution_rows(trials, layers)
     scaling_rows = data_scaling_curve(
@@ -237,6 +283,8 @@ def main() -> None:
         direction_method=args.direction_method,
         direction_quantile=args.direction_quantile,
         subspace_rank=args.subspace_rank,
+        choice_positive_category=args.choice_positive_category,
+        choice_negative_category=args.choice_negative_category,
     )
     stability_rows = vector_stability_rows(
         trials=trials,
@@ -249,6 +297,8 @@ def main() -> None:
         direction_method=args.direction_method,
         direction_quantile=args.direction_quantile,
         subspace_rank=args.subspace_rank,
+        choice_positive_category=args.choice_positive_category,
+        choice_negative_category=args.choice_negative_category,
     )
     steering_rows: list[dict[str, Any]] = []
     steering_ratio_rows: list[dict[str, Any]] = []
@@ -357,6 +407,7 @@ def main() -> None:
 
     write_csv(out_dir / "steering_prep_trials.csv", trials)
     write_csv(out_dir / "steering_direction_summary.csv", direction_summary)
+    write_csv(out_dir / "answer_category_vector_summary.csv", answer_category_vector_rows)
     write_csv(out_dir / "projection_distributions.csv", projection_rows)
     write_csv(out_dir / "data_scaling_curve.csv", scaling_rows)
     write_csv(out_dir / "vector_stability.csv", stability_rows)
@@ -388,6 +439,7 @@ def main() -> None:
     )
     save_vectors(out_dir / "steering_vectors_social_minus_private.npz", directions)
     save_calibrated_vectors(out_dir / "steering_vectors_empirical_social.npz", directions, sign_rows)
+    save_named_vectors(out_dir / "answer_category_vectors.npz", answer_category_vectors)
     write_plots(
         out_dir,
         direction_summary,
@@ -416,6 +468,10 @@ def main() -> None:
         args.direction_method,
         args.direction_quantile,
         args.subspace_rank,
+        args.choice_positive_category,
+        args.choice_negative_category,
+        score_answer_categories,
+        args.candidate_score_batch_size,
         args.ratio_total,
         ratio_social_counts,
         args.ratio_only,
@@ -611,6 +667,9 @@ def collect_trials(
     ratio_total: int | None,
     ratio_social_counts: list[int],
     ratio_only: bool,
+    candidate_numbers: list[int],
+    score_answer_categories: bool,
+    candidate_score_batch_size: int,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[int, np.ndarray]]]:
     trials: list[dict[str, Any]] = []
     vectors: dict[str, dict[int, np.ndarray]] = {}
@@ -624,7 +683,7 @@ def collect_trials(
                     trial_id = f"{case.case_id}_m{m}_mem{strength}_{variant}"
                     lines = memory_lines(case, variant=variant, m=m, strength=strength)
                     prompt_text = prompts.interaction_text(
-                        numbers=list(range(1, 101)),
+                        numbers=candidate_numbers,
                         private_clue=case.private_clue,
                         memory_lines=lines,
                         m=m,
@@ -657,8 +716,7 @@ def collect_trials(
                         layer=None,
                         steer_vector=None,
                     )
-                    trials.append(
-                        {
+                    row = {
                             "trial_id": trial_id,
                             "pair_id": f"{case.case_id}_m{m}_mem{strength}",
                             "case_id": case.case_id,
@@ -701,7 +759,19 @@ def collect_trials(
                             "social_minus_private_number_logprob_margin": social_logprob - private_logprob,
                             "prompt": prompt_text,
                         }
-                    )
+                    if score_answer_categories:
+                        row.update(
+                            scored_choice_fields(
+                                backend=backend,
+                                prompt_text=prompt_text,
+                                candidate_numbers=candidate_numbers,
+                                private_target=case.private_target,
+                                social_number=case.social_number,
+                                private_clue=case.private_clue,
+                                batch_size=candidate_score_batch_size,
+                            )
+                        )
+                    trials.append(row)
             if ratio_total is not None:
                 for social_count in ratio_social_counts:
                     target_count = ratio_total - social_count
@@ -714,7 +784,7 @@ def collect_trials(
                         social_count=social_count,
                     )
                     prompt_text = prompts.interaction_text(
-                        numbers=list(range(1, 101)),
+                        numbers=candidate_numbers,
                         private_clue=case.private_clue,
                         memory_lines=lines,
                         m=m,
@@ -747,8 +817,7 @@ def collect_trials(
                         layer=None,
                         steer_vector=None,
                     )
-                    trials.append(
-                        {
+                    row = {
                             "trial_id": trial_id,
                             "pair_id": f"{case.case_id}_m{m}_ratio_total{ratio_total}",
                             "case_id": case.case_id,
@@ -781,7 +850,19 @@ def collect_trials(
                             "social_minus_private_number_logprob_margin": social_logprob - private_logprob,
                             "prompt": prompt_text,
                         }
-                    )
+                    if score_answer_categories:
+                        row.update(
+                            scored_choice_fields(
+                                backend=backend,
+                                prompt_text=prompt_text,
+                                candidate_numbers=candidate_numbers,
+                                private_target=case.private_target,
+                                social_number=case.social_number,
+                                private_clue=case.private_clue,
+                                batch_size=candidate_score_batch_size,
+                            )
+                        )
+                    trials.append(row)
     return trials, vectors
 
 
@@ -999,6 +1080,8 @@ def compute_direction_summary(
     direction_method: str,
     direction_quantile: float,
     subspace_rank: int,
+    choice_positive_category: str = "social",
+    choice_negative_category: str = "private_target",
 ) -> tuple[dict[int, np.ndarray], list[dict[str, Any]]]:
     directions: dict[int, np.ndarray] = {}
     summary: list[dict[str, Any]] = []
@@ -1012,6 +1095,8 @@ def compute_direction_summary(
             direction_method=direction_method,
             direction_quantile=direction_quantile,
             subspace_rank=subspace_rank,
+            choice_positive_category=choice_positive_category,
+            choice_negative_category=choice_negative_category,
         )
         if fit is None:
             continue
@@ -1053,6 +1138,9 @@ def compute_direction_summary(
                     "direction_method": direction_method,
                     "direction_quantile": direction_quantile,
                     "subspace_rank": subspace_rank,
+                    "choice_positive_category": fit.get("choice_positive_category", ""),
+                    "choice_negative_category": fit.get("choice_negative_category", ""),
+                    "choice_match_strategy": fit.get("choice_match_strategy", ""),
                     "layer": layer,
                     "fit_split": fit_split,
                     "eval_split": eval_split,
@@ -1119,6 +1207,8 @@ def fit_direction(
     direction_quantile: float,
     subspace_rank: int,
     pair_ids: list[str] | None = None,
+    choice_positive_category: str = "social",
+    choice_negative_category: str = "private_target",
 ) -> dict[str, Any] | None:
     if direction_method == "memory_contrast":
         return fit_memory_contrast_direction(
@@ -1153,6 +1243,16 @@ def fit_direction(
             layer=layer,
             fit_split=fit_split,
             pair_ids=pair_ids,
+        )
+    if direction_method == "choice_contrast":
+        return fit_choice_contrast_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=layer,
+            fit_split=fit_split,
+            pair_ids=pair_ids,
+            positive_category=choice_positive_category,
+            negative_category=choice_negative_category,
         )
     raise ValueError(f"Unknown direction_method={direction_method!r}")
 
@@ -1280,6 +1380,91 @@ def fit_ratio_slope_direction(
     }
 
 
+def fit_choice_contrast_direction(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layer: int,
+    fit_split: str,
+    pair_ids: list[str] | None,
+    positive_category: str,
+    negative_category: str,
+) -> dict[str, Any] | None:
+    allowed_pair_ids = set(pair_ids) if pair_ids is not None else None
+    rows = [
+        row
+        for row in trials
+        if row.get("variant") in steering_fit_variants()
+        and (fit_split == "all" or row.get("split") == fit_split)
+        and (allowed_pair_ids is None or row.get("pair_id") in allowed_pair_ids)
+        and row.get("scored_choice_category") in (positive_category, negative_category)
+        and vectors.get(row["trial_id"], {}).get(layer) is not None
+    ]
+    if not rows:
+        return None
+    diffs: list[np.ndarray] = []
+    pair_norms: list[float] = []
+    grouped: dict[tuple[Any, ...], dict[str, list[dict[str, Any]]]] = {}
+    for row in rows:
+        key = choice_match_key(row)
+        grouped.setdefault(key, {}).setdefault(str(row["scored_choice_category"]), []).append(row)
+    fit_row_count = 0
+    for group in grouped.values():
+        positive_rows = group.get(positive_category, [])
+        negative_rows = group.get(negative_category, [])
+        if not positive_rows or not negative_rows:
+            continue
+        positive_mean = np.mean(
+            np.stack([vectors[row["trial_id"]][layer] for row in positive_rows], axis=0),
+            axis=0,
+        )
+        negative_mean = np.mean(
+            np.stack([vectors[row["trial_id"]][layer] for row in negative_rows], axis=0),
+            axis=0,
+        )
+        diff = positive_mean - negative_mean
+        diffs.append(diff)
+        pair_norms.append(float(np.linalg.norm(diff)))
+        fit_row_count += len(positive_rows) + len(negative_rows)
+    match_strategy = "matched_m_ratio"
+    if not diffs:
+        positive_rows = [row for row in rows if row.get("scored_choice_category") == positive_category]
+        negative_rows = [row for row in rows if row.get("scored_choice_category") == negative_category]
+        if not positive_rows or not negative_rows:
+            return None
+        positive_mean = np.mean(
+            np.stack([vectors[row["trial_id"]][layer] for row in positive_rows], axis=0),
+            axis=0,
+        )
+        negative_mean = np.mean(
+            np.stack([vectors[row["trial_id"]][layer] for row in negative_rows], axis=0),
+            axis=0,
+        )
+        diff = positive_mean - negative_mean
+        diffs.append(diff)
+        pair_norms.append(float(np.linalg.norm(diff)))
+        fit_row_count = len(positive_rows) + len(negative_rows)
+        match_strategy = "pooled_category_centroids"
+    return {
+        "direction": np.mean(np.stack(diffs, axis=0), axis=0),
+        "pair_norms": pair_norms,
+        "fit_count": len(diffs),
+        "fit_row_count": fit_row_count,
+        "choice_positive_category": positive_category,
+        "choice_negative_category": negative_category,
+        "choice_match_strategy": match_strategy,
+    }
+
+
+def choice_match_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        row.get("m", ""),
+        row.get("memory_total", ""),
+        row.get("memory_ratio_label", ""),
+        row.get("private_clue", ""),
+    )
+
+
 def fit_svd_subspace_direction(
     *,
     trials: list[dict[str, Any]],
@@ -1392,6 +1577,11 @@ def projection_distribution_rows(trials: list[dict[str, Any]], layers: list[int]
                     "memory_ratio_label": trial.get("memory_ratio_label", ""),
                     "social_memory_fraction": trial.get("social_memory_fraction", ""),
                     "variant": trial.get("variant", ""),
+                    "scored_choice_number": trial.get("scored_choice_number", ""),
+                    "scored_choice_category": trial.get("scored_choice_category", ""),
+                    "scored_choice_logprob": trial.get("scored_choice_logprob", ""),
+                    "private_target_candidate_rank": trial.get("private_target_candidate_rank", ""),
+                    "social_number_candidate_rank": trial.get("social_number_candidate_rank", ""),
                     "projection": trial[key],
                     "private_target": trial.get("private_target", ""),
                     "social_number": trial.get("social_number", ""),
@@ -1402,6 +1592,74 @@ def projection_distribution_rows(trials: list[dict[str, Any]], layers: list[int]
                 }
             )
     return rows
+
+
+def answer_category_vector_summary(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layers: list[int],
+    fit_split: str,
+) -> tuple[list[dict[str, Any]], dict[str, np.ndarray]]:
+    rows: list[dict[str, Any]] = []
+    payload: dict[str, np.ndarray] = {}
+    eligible_trials = [
+        row
+        for row in trials
+        if row.get("scored_choice_category") in ANSWER_CATEGORIES
+        and row.get("variant") in steering_fit_variants()
+        and (fit_split == "all" or row.get("split") == fit_split)
+    ]
+    if not eligible_trials:
+        return rows, payload
+    for layer in layers:
+        centroids: dict[str, np.ndarray] = {}
+        counts: dict[str, int] = {}
+        for category in ANSWER_CATEGORIES:
+            category_vectors = [
+                vectors[row["trial_id"]][layer]
+                for row in eligible_trials
+                if row.get("scored_choice_category") == category
+                and vectors.get(row["trial_id"], {}).get(layer) is not None
+            ]
+            if not category_vectors:
+                continue
+            centroid = np.mean(np.stack(category_vectors, axis=0), axis=0)
+            centroids[category] = centroid
+            counts[category] = len(category_vectors)
+            payload[f"layer_{layer}_centroid_{category}"] = centroid
+            rows.append(
+                {
+                    "layer": layer,
+                    "kind": "centroid",
+                    "category": category,
+                    "n": len(category_vectors),
+                    "vector_key": f"layer_{layer}_centroid_{category}",
+                    "vector_norm": float(np.linalg.norm(centroid)),
+                    "fit_split": fit_split,
+                }
+            )
+        for positive in ANSWER_CATEGORIES:
+            for negative in ANSWER_CATEGORIES:
+                if positive == negative or positive not in centroids or negative not in centroids:
+                    continue
+                key = f"layer_{layer}_{positive}_minus_{negative}"
+                vector = centroids[positive] - centroids[negative]
+                payload[key] = vector
+                rows.append(
+                    {
+                        "layer": layer,
+                        "kind": "contrast",
+                        "positive_category": positive,
+                        "negative_category": negative,
+                        "n_positive": counts[positive],
+                        "n_negative": counts[negative],
+                        "vector_key": key,
+                        "vector_norm": float(np.linalg.norm(vector)),
+                        "fit_split": fit_split,
+                    }
+                )
+    return rows, payload
 
 
 def data_scaling_curve(
@@ -1415,6 +1673,8 @@ def data_scaling_curve(
     direction_method: str,
     direction_quantile: float,
     subspace_rank: int,
+    choice_positive_category: str = "social",
+    choice_negative_category: str = "private_target",
 ) -> list[dict[str, Any]]:
     if not sizes:
         return []
@@ -1466,6 +1726,8 @@ def data_scaling_curve(
                 direction_quantile=direction_quantile,
                 subspace_rank=subspace_rank,
                 pair_ids=selected_pairs,
+                choice_positive_category=choice_positive_category,
+                choice_negative_category=choice_negative_category,
             )
             if fit is None:
                 continue
@@ -1495,6 +1757,9 @@ def data_scaling_curve(
                         "direction_method": direction_method,
                         "direction_quantile": direction_quantile,
                         "subspace_rank": subspace_rank,
+                        "choice_positive_category": fit.get("choice_positive_category", ""),
+                        "choice_negative_category": fit.get("choice_negative_category", ""),
+                        "choice_match_strategy": fit.get("choice_match_strategy", ""),
                         "layer": layer,
                         "fit_split": fit_split,
                         "eval_split": eval_split,
@@ -1520,6 +1785,8 @@ def vector_stability_rows(
     direction_method: str,
     direction_quantile: float,
     subspace_rank: int,
+    choice_positive_category: str = "social",
+    choice_negative_category: str = "private_target",
 ) -> list[dict[str, Any]]:
     if subset_count <= 0:
         return []
@@ -1559,6 +1826,8 @@ def vector_stability_rows(
                         direction_quantile=direction_quantile,
                         subspace_rank=subspace_rank,
                         pair_ids=selected_pairs,
+                        choice_positive_category=choice_positive_category,
+                        choice_negative_category=choice_negative_category,
                     )
                     if fit is not None:
                         subset_vectors[layer].append((f"seed{seed}_subset{subset_index}", normalize(fit["direction"])))
@@ -1574,6 +1843,8 @@ def vector_stability_rows(
                     "direction_method": direction_method,
                     "direction_quantile": direction_quantile,
                     "subspace_rank": subspace_rank,
+                    "choice_positive_category": choice_positive_category if direction_method == "choice_contrast" else "",
+                    "choice_negative_category": choice_negative_category if direction_method == "choice_contrast" else "",
                     "layer": layer,
                     "subset_case_count": requested_size,
                     "subset_count": len(vectors_for_layer),
@@ -1801,6 +2072,121 @@ def number_sequence_logprob_after_prefix(
         layer=layer,
         steer_vector=steer_vector,
     )
+
+
+def scored_choice_fields(
+    *,
+    backend: Any,
+    prompt_text: str,
+    candidate_numbers: list[int],
+    private_target: int,
+    social_number: int,
+    private_clue: str,
+    batch_size: int,
+) -> dict[str, Any]:
+    scored = score_candidate_numbers_after_prefix(
+        backend,
+        prompt_text,
+        candidate_numbers,
+        batch_size=batch_size,
+    )
+    if not scored:
+        return {}
+    ranked = sorted(scored, key=lambda item: item["logprob"], reverse=True)
+    best = ranked[0]
+    fields: dict[str, Any] = {
+        "scored_choice_number": best["number"],
+        "scored_choice_logprob": best["logprob"],
+        "scored_choice_token_count": best["token_count"],
+        "scored_choice_category": choice_category(
+            int(best["number"]),
+            private_target=private_target,
+            social_number=social_number,
+            private_clue=private_clue,
+        ),
+    }
+    for rank, item in enumerate(ranked, start=1):
+        number = int(item["number"])
+        if number == private_target:
+            fields["private_target_candidate_rank"] = rank
+            fields["private_target_candidate_logprob"] = item["logprob"]
+        if number == social_number:
+            fields["social_number_candidate_rank"] = rank
+            fields["social_number_candidate_logprob"] = item["logprob"]
+    category_best: dict[str, dict[str, Any]] = {}
+    for item in ranked:
+        category = choice_category(
+            int(item["number"]),
+            private_target=private_target,
+            social_number=social_number,
+            private_clue=private_clue,
+        )
+        category_best.setdefault(category, item)
+    for category in ANSWER_CATEGORIES:
+        item = category_best.get(category)
+        if item is None:
+            continue
+        fields[f"best_{category}_number"] = item["number"]
+        fields[f"best_{category}_logprob"] = item["logprob"]
+    return fields
+
+
+def score_candidate_numbers_after_prefix(
+    backend: Any,
+    prompt_text: str,
+    candidate_numbers: list[int],
+    *,
+    batch_size: int,
+) -> list[dict[str, Any]]:
+    torch = backend.torch
+    prompt = backend._format_prompt(prompts.openai_messages(prompt_text))
+    prefix_text = prompt + '{"number":'
+    prefix_ids = backend.tokenizer(prefix_text, return_tensors="pt")["input_ids"][0].tolist()
+    prefix_len = len(prefix_ids)
+    pad_token_id = backend.tokenizer.pad_token_id
+    if pad_token_id is None:
+        pad_token_id = backend.tokenizer.eos_token_id
+    if pad_token_id is None:
+        pad_token_id = 0
+    active_batch_size = max(1, int(batch_size))
+    rows: list[dict[str, Any]] = []
+    for start in range(0, len(candidate_numbers), active_batch_size):
+        batch_numbers = candidate_numbers[start : start + active_batch_size]
+        continuations = [
+            [int(token_id) for token_id in backend.tokenizer(str(number), add_special_tokens=False)["input_ids"]]
+            for number in batch_numbers
+        ]
+        max_len = max(prefix_len + len(ids) for ids in continuations)
+        input_rows: list[list[int]] = []
+        attention_rows: list[list[int]] = []
+        for continuation_ids in continuations:
+            ids = prefix_ids + continuation_ids
+            pad_count = max_len - len(ids)
+            input_rows.append(ids + [int(pad_token_id)] * pad_count)
+            attention_rows.append([1] * len(ids) + [0] * pad_count)
+        input_ids = torch.tensor(input_rows, dtype=torch.long)
+        attention_mask = torch.tensor(attention_rows, dtype=torch.long)
+        model_inputs = move_inputs_to_model(
+            backend,
+            {"input_ids": input_ids, "attention_mask": attention_mask},
+        )
+        with torch.no_grad():
+            output = backend.model_obj(**model_inputs)
+        logits = output.logits.detach().float()
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+        for row_index, (number, continuation_ids) in enumerate(zip(batch_numbers, continuations)):
+            total = 0.0
+            for offset, token_id in enumerate(continuation_ids):
+                logit_position = prefix_len + offset - 1
+                total += float(log_probs[row_index, logit_position, token_id].cpu())
+            rows.append(
+                {
+                    "number": int(number),
+                    "logprob": total,
+                    "token_count": len(continuation_ids),
+                }
+            )
+    return rows
 
 
 def completion_logprob_after_prompt(
@@ -2454,6 +2840,14 @@ def save_calibrated_vectors(path: Path, directions: dict[int, np.ndarray], sign_
     np.savez_compressed(path, **payload)
 
 
+def save_named_vectors(path: Path, vectors: dict[str, np.ndarray]) -> None:
+    if not vectors:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(path)
+        return
+    np.savez_compressed(path, **vectors)
+
+
 def write_plots(
     out_dir: Path,
     direction_summary: list[dict[str, Any]],
@@ -3093,6 +3487,10 @@ def write_index(
     direction_method: str,
     direction_quantile: float,
     subspace_rank: int,
+    choice_positive_category: str,
+    choice_negative_category: str,
+    score_answer_categories: bool,
+    candidate_score_batch_size: int,
     ratio_total: int | None,
     ratio_social_counts: list[int],
     ratio_only: bool,
@@ -3110,6 +3508,10 @@ def write_index(
         f"- direction method: `{direction_method}`",
         f"- direction quantile: `{direction_quantile}`",
         f"- subspace rank: `{subspace_rank}`",
+        f"- choice positive category: `{choice_positive_category}`",
+        f"- choice negative category: `{choice_negative_category}`",
+        f"- score answer categories: `{score_answer_categories}`",
+        f"- candidate score batch size: `{candidate_score_batch_size}`",
         f"- layers: `{layers}`",
         f"- memory strengths: `{memory_strengths}`",
         f"- ratio total: `{ratio_total}`",
@@ -3123,6 +3525,8 @@ def write_index(
         "- `steering_prep_trials.csv`: prompt metadata, memory variant, and unsteered private/social number logprobs.",
         "- `steering_cases.csv`: generated private/social contrast cases and train/test split labels.",
         "- `steering_direction_summary.csv`: layerwise social-minus-private direction quality.",
+        "- `answer_category_vector_summary.csv`: pre-answer activation centroids and contrast vectors grouped by scored final-answer category.",
+        "- `answer_category_vectors.npz`: saved answer-category centroid and pairwise contrast vectors by layer.",
         "- `projection_distributions.csv`: social/private projection rows for train/test histograms and scatter plots.",
         "- `data_scaling_curve.csv`: 8/16/32/64/128 contrast-case scaling diagnostics when enough cases are collected.",
         "- `vector_stability.csv`: pairwise cosine stability across case subsets.",

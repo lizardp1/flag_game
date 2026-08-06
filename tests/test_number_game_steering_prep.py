@@ -230,6 +230,74 @@ class SteeringPrepTests(unittest.TestCase):
         self.assertEqual(fit["fit_count"], 1)
         self.assertGreater(fit["direction"][0], 0.0)
 
+    def test_choice_contrast_direction_tracks_scored_answer_category(self):
+        trials = []
+        vectors = {}
+        for index, (category, value) in enumerate(
+            [("private_target", 0.0), ("social", 2.0), ("other_clue_compatible", 1.0)]
+        ):
+            trial_id = f"choice_{index}"
+            trials.append(
+                {
+                    "trial_id": trial_id,
+                    "pair_id": f"pair_{index}",
+                    "case_id": f"case_{index}",
+                    "variant": "ratio_memory",
+                    "split": "train",
+                    "m": 1,
+                    "memory_total": 8,
+                    "memory_ratio_label": "4:4",
+                    "private_clue": "the number is prime",
+                    "scored_choice_category": category,
+                    "social_minus_private_number_logprob_margin": value,
+                }
+            )
+            vectors[trial_id] = {1: np.array([value, 0.0])}
+
+        fit = steering.fit_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=1,
+            fit_split="train",
+            direction_method="choice_contrast",
+            direction_quantile=0.25,
+            subspace_rank=1,
+        )
+
+        self.assertIsNotNone(fit)
+        self.assertEqual(fit["choice_match_strategy"], "matched_m_ratio")
+        self.assertGreater(fit["direction"][0], 0.0)
+
+    def test_answer_category_vector_summary_saves_centroids_and_contrasts(self):
+        trials = []
+        vectors = {}
+        for index, (category, value) in enumerate([("private_target", 0.0), ("social", 2.0)]):
+            trial_id = f"category_{index}"
+            trials.append(
+                {
+                    "trial_id": trial_id,
+                    "variant": "ratio_memory",
+                    "split": "train",
+                    "scored_choice_category": category,
+                }
+            )
+            vectors[trial_id] = {1: np.array([value, 0.0])}
+
+        rows, payload = steering.answer_category_vector_summary(
+            trials=trials,
+            vectors=vectors,
+            layers=[1],
+            fit_split="train",
+        )
+
+        self.assertIn("layer_1_centroid_social", payload)
+        self.assertIn("layer_1_social_minus_private_target", payload)
+        self.assertGreater(payload["layer_1_social_minus_private_target"][0], 0.0)
+        self.assertTrue(any(row.get("kind") == "contrast" for row in rows))
+
+    def test_ratio_social_counts_default_to_all_counts(self):
+        self.assertEqual(steering.normalize_ratio_social_counts(4, []), [0, 1, 2, 3, 4])
+
     def test_generation_side_effect_summary_can_group_by_memory_ratio(self):
         rows = [
             {

@@ -592,11 +592,51 @@ python scripts/run_number_game_steering_prep.py \
   --fit-split train \
   --direction-method ratio_slope \
   --ratio-total 8 \
-  --ratio-social-count 0 \
-  --ratio-social-count 2 \
-  --ratio-social-count 4 \
-  --ratio-social-count 6 \
-  --ratio-social-count 8 \
+  --ratio-only \
+  --m 1 \
+  --m 3 \
+  --layer 16 \
+  --layer 18 \
+  --layer 20 \
+  --layer 22 \
+  --layer 24 \
+  --layer 26 \
+  --layer 28 \
+  --layer 30 \
+  --layer 32 \
+  --alpha -20 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha 0 \
+  --alpha 5 \
+  --alpha 10 \
+  --alpha 20 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --qualitative-examples-per-alpha 3 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
+Then run the answer-conditioned choice vector. This uses the same full memory
+ratio grid, scores candidate final answers `1..100`, labels each pre-answer
+activation by the model's preferred answer category, and fits the default
+`social - private_target` contrast:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_choice_contrast \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --direction-method choice_contrast \
+  --ratio-total 8 \
   --ratio-only \
   --m 1 \
   --m 3 \
@@ -640,7 +680,15 @@ The ratio-slope run adds:
 - `plots/steering_logprob_margin_by_memory_ratio.svg`
 - `plots/generation_social_private_margin_by_memory_ratio.svg`
 
+The choice-contrast run also adds:
+
+- `answer_category_vector_summary.csv`
+- `answer_category_vectors.npz`
+
 Those ratio files are the first place to look when checking whether positive
 alpha specifically increases social answers while decreasing private-target
 answers at the contested ratios, rather than merely reducing other
 clue-compatible answers.
+
+Omitting `--ratio-social-count` is intentional here: the script then uses all
+counts `0..8`, i.e. `8:0, 7:1, 6:2, 5:3, 4:4, 3:5, 2:6, 1:7, 0:8`.
