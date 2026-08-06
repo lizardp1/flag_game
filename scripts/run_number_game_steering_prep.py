@@ -79,8 +79,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Steering-vector prep for the number game: contrast hidden states and steer full-number answers."
     )
-    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument(
+        "--refresh-plots-only",
+        action="store_true",
+        help="Regenerate plot SVGs from CSV summaries already present in --out, without loading a model.",
+    )
     parser.add_argument("--memory-strength", action="append", type=int, default=[])
     parser.add_argument("--m", action="append", type=int, default=[])
     parser.add_argument("--layer", action="append", type=int, default=[])
@@ -120,6 +125,13 @@ def main() -> None:
 
     out_dir = args.out
     (out_dir / "plots").mkdir(parents=True, exist_ok=True)
+
+    if args.refresh_plots_only:
+        refresh_plots_from_csv(out_dir)
+        print(f"Refreshed steering plots from existing CSVs in {out_dir}")
+        return
+    if args.config is None:
+        parser.error("--config is required unless --refresh-plots-only is set")
 
     config = load_number_game_config(args.config)
     if args.override:
@@ -2047,6 +2059,31 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def read_csv_rows(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    if path.stat().st_size == 0:
+        return []
+    with open(path, newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def refresh_plots_from_csv(out_dir: Path) -> None:
+    write_plots(
+        out_dir,
+        read_csv_rows(out_dir / "steering_direction_summary.csv"),
+        read_csv_rows(out_dir / "steering_alpha_sweep.csv"),
+        read_csv_rows(out_dir / "projection_distributions.csv"),
+        read_csv_rows(out_dir / "data_scaling_curve.csv"),
+        read_csv_rows(out_dir / "vector_stability.csv"),
+        read_csv_rows(out_dir / "generation_side_effect_summary.csv"),
+        read_csv_rows(out_dir / "behavioral_steering_effect_summary.csv"),
+        read_csv_rows(out_dir / "ood_social_alpha_sweep.csv"),
+        read_csv_rows(out_dir / "ood_social_side_effect_summary.csv"),
+        read_csv_rows(out_dir / "ood_social_behavioral_steering_effect_summary.csv"),
+    )
+
+
 def save_vectors(path: Path, directions: dict[int, np.ndarray]) -> None:
     payload = {f"layer_{layer}": vector for layer, vector in directions.items()}
     np.savez_compressed(path, **payload)
@@ -2139,17 +2176,41 @@ def write_plots(
     if stability_rows:
         write_vector_stability_plot(out_dir / "plots" / "vector_stability.svg", stability_rows)
     if generation_summary_rows:
+        behavior_layer = choose_behavior_layer(generation_summary_rows, behavioral_effect_rows)
         write_choice_composition_plot(
             out_dir / "plots" / "generation_choice_composition.svg",
             generation_summary_rows,
             behavioral_effect_rows,
             title="Generation-time steering choice composition",
+            layer=behavior_layer,
         )
         write_side_effect_plot(
             out_dir / "plots" / "generation_side_effects.svg",
             generation_summary_rows,
             title="Generation-time steering side effects",
+            layer=behavior_layer,
         )
+        for layer_id in sorted({int(row["layer"]) for row in generation_summary_rows}):
+            write_choice_composition_plot(
+                out_dir / "plots" / f"generation_choice_composition_layer_{layer_id}.svg",
+                generation_summary_rows,
+                behavioral_effect_rows,
+                title="Generation-time steering choice composition",
+                layer=layer_id,
+            )
+            write_choice_composition_plot(
+                out_dir / "plots" / f"behavior_choice_composition_layer_{layer_id}.svg",
+                generation_summary_rows,
+                behavioral_effect_rows,
+                title="Generation-time steering choice composition",
+                layer=layer_id,
+            )
+            write_side_effect_plot(
+                out_dir / "plots" / f"generation_side_effects_layer_{layer_id}.svg",
+                generation_summary_rows,
+                title="Generation-time steering side effects",
+                layer=layer_id,
+            )
     if ood_steering_rows:
         write_alpha_heatmap(
             out_dir / "plots" / "ood_generalization_layer_alpha_heatmap.svg",
@@ -2157,17 +2218,34 @@ def write_plots(
             title="OOD actual social prompts: layer x alpha",
         )
     if ood_generation_summary_rows:
+        ood_behavior_layer = choose_behavior_layer(ood_generation_summary_rows, ood_behavioral_effect_rows)
         write_choice_composition_plot(
             out_dir / "plots" / "ood_social_choice_composition.svg",
             ood_generation_summary_rows,
             ood_behavioral_effect_rows,
             title="OOD actual social choice composition",
+            layer=ood_behavior_layer,
         )
         write_side_effect_plot(
             out_dir / "plots" / "ood_social_generation_side_effects.svg",
             ood_generation_summary_rows,
             title="OOD actual social generation side effects",
+            layer=ood_behavior_layer,
         )
+        for layer_id in sorted({int(row["layer"]) for row in ood_generation_summary_rows}):
+            write_choice_composition_plot(
+                out_dir / "plots" / f"ood_social_choice_composition_layer_{layer_id}.svg",
+                ood_generation_summary_rows,
+                ood_behavioral_effect_rows,
+                title="OOD actual social choice composition",
+                layer=layer_id,
+            )
+            write_side_effect_plot(
+                out_dir / "plots" / f"ood_social_generation_side_effects_layer_{layer_id}.svg",
+                ood_generation_summary_rows,
+                title="OOD actual social generation side effects",
+                layer=layer_id,
+            )
 
 
 def write_projection_distribution_plot(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -2361,6 +2439,7 @@ def write_choice_composition_plot(
     behavioral_effect_rows: list[dict[str, Any]],
     *,
     title: str,
+    layer: int | None = None,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -2368,7 +2447,8 @@ def write_choice_composition_plot(
     if not rows:
         path.write_text("")
         return
-    layer = choose_behavior_layer(rows, behavioral_effect_rows)
+    if layer is None:
+        layer = choose_behavior_layer(rows, behavioral_effect_rows)
     layer_rows = sorted(
         [row for row in rows if int(row["layer"]) == layer],
         key=lambda row: float(row["calibrated_alpha"]),
@@ -2426,7 +2506,7 @@ def choose_behavior_layer(rows: list[dict[str, Any]], behavioral_effect_rows: li
     return max(counts, key=counts.get)
 
 
-def write_side_effect_plot(path: Path, rows: list[dict[str, Any]], *, title: str) -> None:
+def write_side_effect_plot(path: Path, rows: list[dict[str, Any]], *, title: str, layer: int | None = None) -> None:
     import matplotlib.pyplot as plt
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2436,7 +2516,11 @@ def write_side_effect_plot(path: Path, rows: list[dict[str, Any]], *, title: str
     by_layer: dict[int, list[dict[str, Any]]] = {}
     for row in rows:
         by_layer.setdefault(int(row["layer"]), []).append(row)
-    layer = max(by_layer, key=lambda layer_id: len(by_layer[layer_id]))
+    if layer is None:
+        layer = max(by_layer, key=lambda layer_id: len(by_layer[layer_id]))
+    if layer not in by_layer:
+        path.write_text("")
+        return
     layer_rows = sorted(by_layer[layer], key=lambda row: float(row["calibrated_alpha"]))
     alphas = [float(row["calibrated_alpha"]) for row in layer_rows]
     fig, ax1 = plt.subplots(figsize=(8.8, 4.8))
@@ -2533,8 +2617,11 @@ def write_index(
         "- `plots/layer_alpha_heatmap.svg`: layer x alpha effect-size heatmap.",
         "- `plots/data_scaling_curve.svg`: contrast-case sample-size curve.",
         "- `plots/vector_stability.svg`: vector cosine stability across random case subsets.",
-        "- `plots/generation_choice_composition.svg`: social/private/other/incompatible choice rates versus alpha.",
-        "- `plots/generation_side_effects.svg`: generation validity/perplexity/format damage versus alpha.",
+        "- `plots/generation_choice_composition.svg`: social/private/other/incompatible choice rates versus alpha for the best behavioral layer.",
+        "- `plots/generation_choice_composition_layer_<layer>.svg`: the same choice-composition plot for each evaluated layer.",
+        "- `plots/behavior_choice_composition_layer_<layer>.svg`: compatibility alias for the layer-specific generation choice-composition plot.",
+        "- `plots/generation_side_effects.svg`: generation validity/perplexity/format damage versus alpha for the best behavioral layer.",
+        "- `plots/generation_side_effects_layer_<layer>.svg`: the same side-effect plot for each evaluated layer.",
         "",
         "Interpretation: the raw contrast vector is diagnostic. Use `calibrated_alpha` and `steering_vectors_empirical_social.npz` for causal steering, because raw signs can flip under intervention.",
     ]

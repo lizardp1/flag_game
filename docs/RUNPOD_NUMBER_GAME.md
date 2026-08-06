@@ -81,17 +81,19 @@ bullets can look like negative numbers.
 ## 3. Qwen Conflict Probe
 
 Run the private-vs-social conflict probe first. This is the closest number-game
-analogue of the flag-game memory-conflict figure.
+analogue of the flag-game memory-conflict figure. For a fast first pass, use 2
+seeds. Scale to 5 seeds only after the plot shape looks sane.
 
 ```bash
 MODEL_ID=Qwen/Qwen3-1.7B
 MODEL_SLUG=qwen3_1_7b
+SEEDS=2
 
 python -m nnd.number_game.cli conflict-battery \
   --config configs/number_game/runpod_qwen3.yaml \
-  --out outputs/number_game_prompt100/${MODEL_SLUG}_conflict_ratio8_5seeds \
+  --out outputs/number_game_prompt100/${MODEL_SLUG}_conflict_ratio8_${SEEDS}seeds \
   --start-seed 0 \
-  --num-seeds 5 \
+  --num-seeds ${SEEDS} \
   --ratio-total 8 \
   --m 1 \
   --m 3 \
@@ -122,17 +124,18 @@ Sanity checks:
 
 ## 4. Qwen Actual Pairwise Social Runs
 
-Start with one model and `N=8`, `H=8`, 5 seeds:
+Start with one model and `N=8`, `H=8`, 2 seeds:
 
 ```bash
 MODEL_ID=Qwen/Qwen3-1.7B
 MODEL_SLUG=qwen3_1_7b
+SEEDS=2
 
 python -m nnd.number_game.cli compare-pairwise-m \
   --config configs/number_game/runpod_qwen3.yaml \
-  --out outputs/number_game_prompt100/${MODEL_SLUG}_pairwise_N8_H8_5seeds \
+  --out outputs/number_game_prompt100/${MODEL_SLUG}_pairwise_N8_H8_${SEEDS}seeds \
   --start-seed 0 \
-  --num-seeds 5 \
+  --num-seeds ${SEEDS} \
   --m 1 \
   --m 3 \
   --override model=${MODEL_ID} \
@@ -147,7 +150,7 @@ Then sweep:
 - `N = 4, 8, 16, 32`
 - `H = 1, 3, 5, 8`
 - `m = 1, 3`
-- 5 seeds
+- 2 seeds for the fast pass; 5 seeds for confirmation
 
 For each condition, set `probe_every` to about `N`.
 
@@ -194,9 +197,9 @@ Conflict probe:
 ```bash
 python -m nnd.number_game.cli conflict-battery \
   --config configs/number_game/runpod_kimi_k2_endpoint.yaml \
-  --out outputs/number_game_prompt100/kimi_k2_conflict_ratio8_5seeds \
+  --out outputs/number_game_prompt100/kimi_k2_conflict_ratio8_2seeds \
   --start-seed 0 \
-  --num-seeds 5 \
+  --num-seeds 2 \
   --ratio-total 8 \
   --m 1 \
   --m 3
@@ -207,9 +210,9 @@ Pairwise social interaction:
 ```bash
 python -m nnd.number_game.cli compare-pairwise-m \
   --config configs/number_game/runpod_kimi_k2_endpoint.yaml \
-  --out outputs/number_game_prompt100/kimi_k2_pairwise_N8_H8_5seeds \
+  --out outputs/number_game_prompt100/kimi_k2_pairwise_N8_H8_2seeds \
   --start-seed 0 \
-  --num-seeds 5 \
+  --num-seeds 2 \
   --m 1 \
   --m 3
 ```
@@ -223,16 +226,16 @@ After conflict and pairwise outputs exist:
 
 ```bash
 python scripts/make_number_game_showable_visuals.py \
-  --pairwise-dir outputs/number_game_prompt100/qwen3_1_7b_pairwise_N8_H8_5seeds \
-  --conflict-dir outputs/number_game_prompt100/qwen3_1_7b_conflict_ratio8_5seeds \
+  --pairwise-dir outputs/number_game_prompt100/qwen3_1_7b_pairwise_N8_H8_2seeds \
+  --conflict-dir outputs/number_game_prompt100/qwen3_1_7b_conflict_ratio8_2seeds \
   --out-dir outputs/number_game_prompt100/qwen3_1_7b_showable_visuals
 ```
 
 Expected files:
 
 - `00_clue_information_values.svg`
-- `01_actual_trajectories_pairwise_m1_5seeds.svg`
-- `02_actual_trajectories_pairwise_m3_5seeds.svg`
+- `01_actual_trajectories_pairwise_m1_2seeds.svg`
+- `02_actual_trajectories_pairwise_m3_2seeds.svg`
 - `03_private_vs_social_memory_ratio_flag_style.svg`
 - `04_conflict_probe_by_clue_information_phase.svg`
 
@@ -386,11 +389,11 @@ python scripts/run_number_game_steering_prep.py \
   --alpha 2 \
   --alpha 5 \
   --alpha 10 \
-  --max-alpha-trials 256 \
+  --max-alpha-trials 128 \
   --run-generation-steering \
-  --max-generation-trials 96 \
-  --ood-social-dir outputs/number_game_prompt100/qwen3_8b_pairwise_N8_H8_5seeds \
-  --max-ood-prompts 128 \
+  --max-generation-trials 48 \
+  --ood-social-dir outputs/number_game_prompt100/qwen3_8b_pairwise_N8_H8_2seeds \
+  --max-ood-prompts 64 \
   --override model=Qwen/Qwen3-8B \
   --override trust_remote_code=false
 ```

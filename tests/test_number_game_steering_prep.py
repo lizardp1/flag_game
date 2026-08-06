@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 
@@ -91,6 +93,58 @@ class SteeringPrepTests(unittest.TestCase):
         self.assertEqual(len(summary), 1)
         self.assertAlmostEqual(summary[0]["positive_social_choice_delta"], 0.25)
         self.assertAlmostEqual(summary[0]["positive_satisfies_private_clue_delta"], -0.2)
+
+    def test_choose_behavior_layer_prefers_social_delta_before_damage_tiebreak(self):
+        rows = [{"layer": 20}, {"layer": 22}]
+        behavioral_rows = [
+            {"layer": 20, "best_social_choice_delta": 0.05, "best_format_damage_delta": 0.0},
+            {"layer": 22, "best_social_choice_delta": 0.20, "best_format_damage_delta": 0.5},
+        ]
+        self.assertEqual(steering.choose_behavior_layer(rows, behavioral_rows), 22)
+
+    def test_choose_behavior_layer_tiebreaks_on_lower_format_damage(self):
+        rows = [{"layer": 20}, {"layer": 22}]
+        behavioral_rows = [
+            {"layer": 20, "best_social_choice_delta": 0.20, "best_format_damage_delta": 0.5},
+            {"layer": 22, "best_social_choice_delta": 0.20, "best_format_damage_delta": 0.0},
+        ]
+        self.assertEqual(steering.choose_behavior_layer(rows, behavioral_rows), 22)
+
+    def test_refresh_plots_from_csv_writes_layer_specific_generation_plots(self):
+        with TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            rows = []
+            for layer in [20, 22]:
+                for alpha in [0.0, 10.0]:
+                    rows.append(
+                        {
+                            "dataset": "synthetic",
+                            "layer": layer,
+                            "calibrated_alpha": alpha,
+                            "valid_rate": 1.0,
+                            "format_damage_rate": 0.0,
+                            "satisfies_private_clue_rate": 0.8,
+                            "mean_base_completion_perplexity": 1.2,
+                            "social_choice_rate": 0.1 + 0.01 * layer + 0.01 * alpha,
+                            "private_target_choice_rate": 0.5,
+                            "other_clue_compatible_rate": 0.3,
+                            "incompatible_rate": 0.1,
+                        }
+                    )
+            steering.write_csv(out_dir / "generation_side_effect_summary.csv", rows)
+            steering.write_csv(
+                out_dir / "behavioral_steering_effect_summary.csv",
+                [
+                    {"dataset": "synthetic", "layer": 20, "best_social_choice_delta": 0.01, "best_format_damage_delta": 0.0},
+                    {"dataset": "synthetic", "layer": 22, "best_social_choice_delta": 0.20, "best_format_damage_delta": 0.0},
+                ],
+            )
+
+            steering.refresh_plots_from_csv(out_dir)
+
+            self.assertTrue((out_dir / "plots" / "generation_side_effects_layer_22.svg").exists())
+            self.assertTrue((out_dir / "plots" / "generation_choice_composition_layer_22.svg").exists())
+            self.assertTrue((out_dir / "plots" / "behavior_choice_composition_layer_22.svg").exists())
 
     def test_logprob_quantile_direction_points_from_low_to_high_margin(self):
         trials = []

@@ -43,6 +43,7 @@ from nnd.number_game.domain import (
 PAIRWISE_DIR = Path("outputs/number_game_prompt100/local_qwen3_1_7b_pairwise_m_compare_5seeds")
 RATIO_DIR = Path("outputs/number_game_prompt100/local_qwen3_1_7b_conflict_ratio8_1seed")
 OUT_DIR = Path("outputs/number_game_prompt100/showable_visuals")
+TRAJECTORY_SEED_COUNTS: dict[int, int] = {}
 
 MECH_BLUE = "#1F77D0"
 MECH_ORANGE = "#F17C2E"
@@ -523,9 +524,16 @@ def mean(values: Any) -> float:
 
 
 def write_actual_trajectory_grid(*, m: int) -> None:
-    fig, axes = plt.subplots(1, 5, figsize=(12.6, 3.55), sharey=True)
-    for seed, ax in enumerate(axes):
-        run_dir = PAIRWISE_DIR / f"m{m}" / f"seed_{seed:04d}"
+    seed_dirs = sorted((PAIRWISE_DIR / f"m{m}").glob("seed_*"))
+    seed_dirs = [path for path in seed_dirs if (path / "summary.json").exists() and (path / "probes.csv").exists()]
+    if not seed_dirs:
+        return
+    TRAJECTORY_SEED_COUNTS[m] = len(seed_dirs)
+    fig_width = max(5.2, 2.55 * len(seed_dirs))
+    fig, axes_raw = plt.subplots(1, len(seed_dirs), figsize=(fig_width, 3.55), sharey=True)
+    axes = np.atleast_1d(axes_raw)
+    for run_dir, ax in zip(seed_dirs, axes):
+        seed = int(run_dir.name.removeprefix("seed_"))
         summary = json.loads((run_dir / "summary.json").read_text())
         rows = read_csv(run_dir / "probes.csv")
         valid = [row for row in rows if row["valid"] == "True" and row["number"]]
@@ -605,7 +613,7 @@ def write_actual_trajectory_grid(*, m: int) -> None:
     fig.text(0.018, 0.52, "Share of agents choosing number", va="center", rotation=90, fontsize=10.8)
     fig.subplots_adjust(left=0.067, right=0.99, top=0.76, bottom=0.21, wspace=0.30)
     prefix = "01" if m == 1 else "02"
-    save_figure(fig, OUT_DIR / f"{prefix}_actual_trajectories_pairwise_m{m}_5seeds")
+    save_figure(fig, OUT_DIR / f"{prefix}_actual_trajectories_pairwise_m{m}_{len(seed_dirs)}seeds")
 
 
 def save_figure(fig: plt.Figure, stem: Path) -> None:
@@ -616,6 +624,8 @@ def save_figure(fig: plt.Figure, stem: Path) -> None:
 
 
 def write_index() -> None:
+    m1_seeds = TRAJECTORY_SEED_COUNTS.get(1, 0)
+    m3_seeds = TRAJECTORY_SEED_COUNTS.get(3, 0)
     (OUT_DIR / "README.md").write_text(
         "\n".join(
             [
@@ -623,8 +633,8 @@ def write_index() -> None:
                 "",
                 "These are the showable figures that match the flag-game chart grammar more closely. In trajectory plots, blue is reserved for the true hidden number.",
                 "",
-                "- `01_actual_trajectories_pairwise_m1_5seeds.svg`: actual social-interaction trajectories for every local pairwise m=1 seed.",
-                "- `02_actual_trajectories_pairwise_m3_5seeds.svg`: actual social-interaction trajectories for every local pairwise m=3 seed.",
+                f"- `01_actual_trajectories_pairwise_m1_{m1_seeds}seeds.svg`: actual social-interaction trajectories for every pairwise m=1 seed.",
+                f"- `02_actual_trajectories_pairwise_m3_{m3_seeds}seeds.svg`: actual social-interaction trajectories for every pairwise m=3 seed.",
                 "- `03_private_vs_social_memory_ratio_flag_style.svg`: flag-style stacked response composition over private-target versus social-evidence memory ratios.",
                 "- `04_conflict_probe_by_clue_information_phase.svg`: the same conflict probe split into weak/medium/strong private-clue information phases.",
                 "- `00_clue_information_values.svg`: information value for every clue under the configured candidate range.",
