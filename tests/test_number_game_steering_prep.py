@@ -174,6 +174,127 @@ class SteeringPrepTests(unittest.TestCase):
         self.assertIsNotNone(fit)
         self.assertGreater(fit["direction"][0], 0.0)
 
+    def test_mixed_ratio_memory_lines_use_private_and_social_counts(self):
+        case = steering.SteeringCase(
+            case_id="ratio_case",
+            private_clue="the number is prime",
+            private_target=7,
+            private_reason="The number is prime.",
+            social_number=12,
+            social_reason="The number is even.",
+        )
+        m1_lines = steering.mixed_ratio_memory_lines(case, m=1, target_count=2, social_count=3)
+        self.assertEqual(m1_lines.count("7"), 2)
+        self.assertEqual(m1_lines.count("12"), 3)
+
+        m3_lines = steering.mixed_ratio_memory_lines(case, m=3, target_count=1, social_count=1)
+        self.assertEqual(len(m3_lines), 2)
+        self.assertTrue(all(" | " in line for line in m3_lines))
+
+    def test_interleaved_memory_sequence_does_not_block_all_one_kind_first(self):
+        sequence = steering.interleaved_memory_sequence(target_count=4, social_count=4)
+        self.assertEqual(sequence.count("target"), 4)
+        self.assertEqual(sequence.count("social"), 4)
+        self.assertIn("target", sequence[:3])
+        self.assertIn("social", sequence[:3])
+
+    def test_ratio_slope_direction_tracks_social_memory_fraction(self):
+        trials = []
+        vectors = {}
+        for index, fraction in enumerate([0.0, 0.5, 1.0]):
+            trial_id = f"ratio_{index}"
+            trials.append(
+                {
+                    "trial_id": trial_id,
+                    "pair_id": "case_m1_ratio_total8",
+                    "case_id": "case",
+                    "variant": "ratio_memory",
+                    "split": "train",
+                    "social_memory_fraction": fraction,
+                    "social_minus_private_number_logprob_margin": fraction,
+                }
+            )
+            vectors[trial_id] = {1: np.array([fraction, 0.0])}
+
+        fit = steering.fit_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=1,
+            fit_split="train",
+            direction_method="ratio_slope",
+            direction_quantile=0.25,
+            subspace_rank=1,
+        )
+
+        self.assertIsNotNone(fit)
+        self.assertEqual(fit["fit_count"], 1)
+        self.assertGreater(fit["direction"][0], 0.0)
+
+    def test_generation_side_effect_summary_can_group_by_memory_ratio(self):
+        rows = [
+            {
+                "dataset": "synthetic",
+                "layer": 24,
+                "calibrated_alpha": 0.0,
+                "variant": "ratio_memory",
+                "memory_ratio_label": ratio,
+                "target_memory_count": ratio.split(":")[0],
+                "social_memory_count": ratio.split(":")[1],
+                "social_memory_fraction": social_fraction,
+                "valid": True,
+                "strict_json": True,
+                "format_damage": False,
+                "satisfies_private_clue": True,
+                "choice_category": choice,
+                "base_completion_perplexity": 1.0,
+                "steered_completion_perplexity": 1.0,
+            }
+            for ratio, social_fraction, choice in [
+                ("8:0", 0.0, "private_target"),
+                ("0:8", 1.0, "social"),
+            ]
+        ]
+
+        summary = steering.generation_side_effect_summary(
+            rows,
+            extra_group_fields=(
+                "variant",
+                "memory_ratio_label",
+                "target_memory_count",
+                "social_memory_count",
+                "social_memory_fraction",
+            ),
+        )
+
+        self.assertEqual(len(summary), 2)
+        by_ratio = {row["memory_ratio_label"]: row for row in summary}
+        self.assertEqual(by_ratio["8:0"]["private_target_choice_rate"], 1.0)
+        self.assertEqual(by_ratio["0:8"]["social_choice_rate"], 1.0)
+
+    def test_behavioral_summary_can_group_by_ratio(self):
+        rows = [
+            {
+                "dataset": "synthetic",
+                "layer": 24,
+                "variant": "ratio_memory",
+                "memory_ratio_label": "4:4",
+                "calibrated_alpha": alpha,
+                "valid_rate": 1.0,
+                "format_damage_rate": 0.0,
+                "satisfies_private_clue_rate": 0.8,
+                "social_choice_rate": social_rate,
+                "private_target_choice_rate": 0.5 - social_rate,
+            }
+            for alpha, social_rate in [(0.0, 0.1), (10.0, 0.3)]
+        ]
+        summary = steering.behavioral_steering_effect_summary(
+            rows,
+            extra_group_fields=("variant", "memory_ratio_label"),
+        )
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(summary[0]["memory_ratio_label"], "4:4")
+        self.assertAlmostEqual(summary[0]["positive_social_choice_delta"], 0.2)
+
     def test_data_scaling_curve_uses_fit_object_counts(self):
         trials = []
         vectors = {}

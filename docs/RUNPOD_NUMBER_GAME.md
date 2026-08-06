@@ -428,8 +428,12 @@ runs, it also writes `steering_sign_summary.csv`,
 calibrated alpha columns. If generation steering runs, it writes
 `generation_steering_outputs.jsonl`, `generation_side_effect_summary.csv`,
 `qualitative_alpha_examples.md`, and the matching side-effect plots. If
-`--ood-social-dir` is supplied, it also writes `ood_social_*` generalization
-files.
+`--ratio-total` is supplied, it also writes
+`steering_alpha_sweep_by_memory_ratio.csv`,
+`generation_side_effect_summary_by_memory_ratio.csv`,
+`behavioral_steering_effect_summary_by_memory_ratio.csv`, and ratio heatmaps
+under `plots/`. If `--ood-social-dir` is supplied, it also writes `ood_social_*`
+generalization files.
 
 The raw vector is diagnostic: `social_memory_activation - private_memory_activation`.
 Do not assume its raw sign is causal. Use `calibrated_alpha` in
@@ -469,6 +473,8 @@ python scripts/run_number_game_steering_prep.py \
   --layer 24 \
   --layer 26 \
   --layer 28 \
+  --layer 30 \
+  --layer 32 \
   --alpha -30 \
   --alpha -20 \
   --alpha -15 \
@@ -568,9 +574,73 @@ python scripts/run_number_game_steering_prep.py \
   --override trust_remote_code=false
 ```
 
+Then run the mixed-ratio slope vector. This is the most direct steering fit for
+the private-vs-social tradeoff, because every prompt has the same total memory
+length but varies the ratio of private-target entries to contradictory social
+entries:
+
+```bash
+python scripts/run_number_game_steering_prep.py \
+  --config configs/number_game/runpod_qwen3.yaml \
+  --out outputs/number_game_prompt100/qwen3_8b_steering_eval_ratio_slope \
+  --case-source auto \
+  --max-cases 176 \
+  --targets-per-clue 8 \
+  --socials-per-target 2 \
+  --case-seed 0 \
+  --test-frac 0.25 \
+  --fit-split train \
+  --direction-method ratio_slope \
+  --ratio-total 8 \
+  --ratio-social-count 0 \
+  --ratio-social-count 2 \
+  --ratio-social-count 4 \
+  --ratio-social-count 6 \
+  --ratio-social-count 8 \
+  --ratio-only \
+  --m 1 \
+  --m 3 \
+  --layer 16 \
+  --layer 18 \
+  --layer 20 \
+  --layer 22 \
+  --layer 24 \
+  --layer 26 \
+  --layer 28 \
+  --layer 30 \
+  --layer 32 \
+  --alpha -20 \
+  --alpha -10 \
+  --alpha -5 \
+  --alpha 0 \
+  --alpha 5 \
+  --alpha 10 \
+  --alpha 20 \
+  --max-alpha-trials 256 \
+  --run-generation-steering \
+  --max-generation-trials 96 \
+  --qualitative-examples-per-alpha 3 \
+  --override model=Qwen/Qwen3-8B \
+  --override trust_remote_code=false
+```
+
 For each run, inspect:
 
 ```bash
 cat OUT_DIR/behavioral_steering_effect_summary.csv
+cat OUT_DIR/behavioral_steering_effect_summary_by_memory_ratio.csv
 ls OUT_DIR/plots
 ```
+
+The ratio-slope run adds:
+
+- `steering_alpha_sweep_by_memory_ratio.csv`
+- `generation_side_effect_summary_by_memory_ratio.csv`
+- `behavioral_steering_effect_summary_by_memory_ratio.csv`
+- `plots/steering_logprob_margin_by_memory_ratio.svg`
+- `plots/generation_social_private_margin_by_memory_ratio.svg`
+
+Those ratio files are the first place to look when checking whether positive
+alpha specifically increases social answers while decreasing private-target
+answers at the contested ratios, rather than merely reducing other
+clue-compatible answers.

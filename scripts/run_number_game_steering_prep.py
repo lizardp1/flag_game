@@ -100,12 +100,13 @@ def main() -> None:
     parser.add_argument("--fit-split", choices=["all", "train"], default="all")
     parser.add_argument(
         "--direction-method",
-        choices=["memory_contrast", "logprob_quantile", "svd_subspace"],
+        choices=["memory_contrast", "logprob_quantile", "svd_subspace", "ratio_slope"],
         default="memory_contrast",
         help=(
             "memory_contrast uses social-memory minus private/target-memory activations; "
             "logprob_quantile uses high minus low social-private logprob-margin prompts; "
-            "svd_subspace uses the top contrast-diff components aligned to the mean direction."
+            "svd_subspace uses the top contrast-diff components aligned to the mean direction; "
+            "ratio_slope fits an activation slope over mixed private:social memory ratios."
         ),
     )
     parser.add_argument("--direction-quantile", default=0.25, type=float)
@@ -118,6 +119,24 @@ def main() -> None:
     parser.add_argument("--data-scaling-size", action="append", type=int, default=[])
     parser.add_argument("--stability-subsets", default=12, type=int)
     parser.add_argument("--stability-seed", action="append", type=int, default=[])
+    parser.add_argument(
+        "--ratio-total",
+        default=None,
+        type=int,
+        help="Include mixed-ratio memory prompts with this fixed total number of memory entries.",
+    )
+    parser.add_argument(
+        "--ratio-social-count",
+        action="append",
+        type=int,
+        default=[],
+        help="Social-memory counts to include when --ratio-total is set. Defaults to every count from 0..ratio_total.",
+    )
+    parser.add_argument(
+        "--ratio-only",
+        action="store_true",
+        help="When --ratio-total is set, collect only mixed-ratio prompts and skip old empty/target/social endpoint variants.",
+    )
     parser.add_argument("--ood-social-dir", action="append", type=Path, default=[])
     parser.add_argument("--max-ood-prompts", default=128, type=int)
     parser.add_argument("--override", action="append", default=[])
@@ -166,6 +185,9 @@ def main() -> None:
     model_layer_count = len(get_transformer_layers(backend.model_obj))
     layers = args.layer or default_layers(model_layer_count)
     memory_strengths = args.memory_strength or [1, 4, 8]
+    if args.ratio_only and args.ratio_total is None:
+        parser.error("--ratio-only requires --ratio-total")
+    ratio_social_counts = normalize_ratio_social_counts(args.ratio_total, args.ratio_social_count)
     m_values = args.m or [1, 3]
     alphas = args.alpha or [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0]
     scaling_sizes = args.data_scaling_size or [8, 16, 32, 64, 128]
@@ -191,6 +213,9 @@ def main() -> None:
         memory_strengths=memory_strengths,
         m_values=m_values,
         prompt_number_range=config.prompt_number_range,
+        ratio_total=args.ratio_total,
+        ratio_social_counts=ratio_social_counts,
+        ratio_only=args.ratio_only,
     )
     directions, direction_summary = compute_direction_summary(
         trials,
@@ -226,6 +251,7 @@ def main() -> None:
         subspace_rank=args.subspace_rank,
     )
     steering_rows: list[dict[str, Any]] = []
+    steering_ratio_rows: list[dict[str, Any]] = []
     if not args.skip_alpha_sweep:
         steering_rows = run_alpha_sweep(
             backend=backend,
@@ -237,6 +263,24 @@ def main() -> None:
             max_alpha_trials=args.max_alpha_trials,
         )
     sign_rows = calibrate_steering_signs(steering_rows)
+    if not args.skip_alpha_sweep and args.ratio_total is not None:
+        steering_ratio_rows = run_alpha_sweep(
+            backend=backend,
+            trials=trials,
+            directions=directions,
+            direction_summary=direction_summary,
+            layers=layers,
+            alphas=alphas,
+            max_alpha_trials=args.max_alpha_trials,
+            eval_variants={"ratio_memory"},
+            extra_group_fields=(
+                "memory_ratio_label",
+                "target_memory_count",
+                "social_memory_count",
+                "social_memory_fraction",
+            ),
+        )
+        apply_existing_sign_calibration(steering_ratio_rows, sign_rows)
     generation_rows: list[dict[str, Any]] = []
     if args.run_generation_steering:
         generation_rows = run_generation_steering(
@@ -251,7 +295,21 @@ def main() -> None:
             dataset_name="synthetic_contrast",
         )
     generation_summary_rows = generation_side_effect_summary(generation_rows)
+    generation_ratio_summary_rows = generation_side_effect_summary(
+        generation_rows,
+        extra_group_fields=(
+            "variant",
+            "memory_ratio_label",
+            "target_memory_count",
+            "social_memory_count",
+            "social_memory_fraction",
+        ),
+    )
     behavioral_effect_rows = behavioral_steering_effect_summary(generation_summary_rows)
+    behavioral_ratio_effect_rows = behavioral_steering_effect_summary(
+        generation_ratio_summary_rows,
+        extra_group_fields=("variant", "memory_ratio_label"),
+    )
 
     ood_trials: list[dict[str, Any]] = []
     ood_vectors: dict[str, dict[int, np.ndarray]] = {}
@@ -303,11 +361,14 @@ def main() -> None:
     write_csv(out_dir / "data_scaling_curve.csv", scaling_rows)
     write_csv(out_dir / "vector_stability.csv", stability_rows)
     write_csv(out_dir / "steering_alpha_sweep.csv", steering_rows)
+    write_csv(out_dir / "steering_alpha_sweep_by_memory_ratio.csv", steering_ratio_rows)
     write_csv(out_dir / "steering_sign_summary.csv", sign_rows)
     write_csv(out_dir / "generation_steering_outputs.csv", generation_rows)
     write_jsonl(out_dir / "generation_steering_outputs.jsonl", generation_rows)
     write_csv(out_dir / "generation_side_effect_summary.csv", generation_summary_rows)
+    write_csv(out_dir / "generation_side_effect_summary_by_memory_ratio.csv", generation_ratio_summary_rows)
     write_csv(out_dir / "behavioral_steering_effect_summary.csv", behavioral_effect_rows)
+    write_csv(out_dir / "behavioral_steering_effect_summary_by_memory_ratio.csv", behavioral_ratio_effect_rows)
     write_qualitative_examples(
         out_dir / "qualitative_alpha_examples.md",
         generation_rows,
@@ -331,10 +392,12 @@ def main() -> None:
         out_dir,
         direction_summary,
         steering_rows,
+        steering_ratio_rows,
         projection_rows,
         scaling_rows,
         stability_rows,
         generation_summary_rows,
+        generation_ratio_summary_rows,
         behavioral_effect_rows,
         ood_steering_rows,
         ood_generation_summary_rows,
@@ -353,6 +416,9 @@ def main() -> None:
         args.direction_method,
         args.direction_quantile,
         args.subspace_rank,
+        args.ratio_total,
+        ratio_social_counts,
+        args.ratio_only,
     )
 
     print(f"Steering prep complete. Output saved to {out_dir}")
@@ -478,6 +544,62 @@ def memory_lines(case: SteeringCase, *, variant: str, m: int, strength: int) -> 
     return [f"{number} | {reason}" for _ in range(strength)]
 
 
+def mixed_ratio_memory_lines(
+    case: SteeringCase,
+    *,
+    m: int,
+    target_count: int,
+    social_count: int,
+) -> list[str]:
+    sequence = interleaved_memory_sequence(target_count=target_count, social_count=social_count)
+    lines: list[str] = []
+    for kind in sequence:
+        if kind == "social":
+            number = case.social_number
+            reason = case.social_reason
+        else:
+            number = case.private_target
+            reason = case.private_reason
+        lines.append(str(number) if m == 1 else f"{number} | {reason}")
+    return lines
+
+
+def interleaved_memory_sequence(*, target_count: int, social_count: int) -> list[str]:
+    total = target_count + social_count
+    if total <= 0:
+        return []
+    sequence: list[str] = []
+    target_used = 0
+    social_used = 0
+    for index in range(total):
+        expected_social_so_far = round(((index + 1) * social_count) / total)
+        if social_used < expected_social_so_far:
+            sequence.append("social")
+            social_used += 1
+        else:
+            sequence.append("target")
+            target_used += 1
+    while target_used < target_count:
+        sequence.append("target")
+        target_used += 1
+    while social_used < social_count:
+        sequence.append("social")
+        social_used += 1
+    return sequence
+
+
+def normalize_ratio_social_counts(ratio_total: int | None, social_counts: list[int]) -> list[int]:
+    if ratio_total is None:
+        return []
+    if ratio_total < 1:
+        raise ValueError("--ratio-total must be >= 1")
+    counts = social_counts or list(range(ratio_total + 1))
+    bad = [count for count in counts if count < 0 or count > ratio_total]
+    if bad:
+        raise ValueError(f"--ratio-social-count values must be inside 0..{ratio_total}; got {bad}")
+    return sorted(set(counts))
+
+
 def collect_trials(
     *,
     backend: Any,
@@ -486,10 +608,13 @@ def collect_trials(
     memory_strengths: list[int],
     m_values: list[int],
     prompt_number_range: bool,
+    ratio_total: int | None,
+    ratio_social_counts: list[int],
+    ratio_only: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[int, np.ndarray]]]:
     trials: list[dict[str, Any]] = []
     vectors: dict[str, dict[int, np.ndarray]] = {}
-    variants = ["empty_memory", "target_memory", "social_memory"]
+    variants = [] if ratio_only else ["empty_memory", "target_memory", "social_memory"]
     for case in cases:
         for m in m_values:
             for strength in memory_strengths:
@@ -539,7 +664,102 @@ def collect_trials(
                             "case_id": case.case_id,
                             "m": m,
                             "memory_strength": strength,
+                            "target_memory_count": strength if variant == "target_memory" else 0,
+                            "social_memory_count": strength if variant == "social_memory" else 0,
+                            "memory_total": strength if variant in ("target_memory", "social_memory") else 0,
+                            "memory_ratio_label": (
+                                f"{strength}:0"
+                                if variant == "target_memory"
+                                else f"0:{strength}"
+                                if variant == "social_memory"
+                                else "0:0"
+                            ),
+                            "social_memory_fraction": (
+                                1.0
+                                if variant == "social_memory" and strength > 0
+                                else 0.0
+                            ),
                             "variant": variant,
+                            "private_clue": case.private_clue,
+                            "private_target": case.private_target,
+                            "social_number": case.social_number,
+                            "relation": case.relation,
+                            "case_source": case.source,
+                            "split": case.split,
+                            "memory_lines": json.dumps(lines),
+                            "private_number_token_count": len(private_ids),
+                            "social_number_token_count": len(social_ids),
+                            "private_number_first_token_id": private_ids[0],
+                            "social_number_first_token_id": social_ids[0],
+                            "private_number_logit": private_logit,
+                            "social_number_logit": social_logit,
+                            "social_minus_private_logit_margin": social_logit - private_logit,
+                            "private_number_sequence_logprob": private_logprob,
+                            "social_number_sequence_logprob": social_logprob,
+                            "private_number_sequence_token_count": private_logprob_tokens,
+                            "social_number_sequence_token_count": social_logprob_tokens,
+                            "social_minus_private_number_logprob_margin": social_logprob - private_logprob,
+                            "prompt": prompt_text,
+                        }
+                    )
+            if ratio_total is not None:
+                for social_count in ratio_social_counts:
+                    target_count = ratio_total - social_count
+                    ratio_label = f"{target_count}:{social_count}"
+                    trial_id = f"{case.case_id}_m{m}_ratio{target_count}_{social_count}"
+                    lines = mixed_ratio_memory_lines(
+                        case,
+                        m=m,
+                        target_count=target_count,
+                        social_count=social_count,
+                    )
+                    prompt_text = prompts.interaction_text(
+                        numbers=list(range(1, 101)),
+                        private_clue=case.private_clue,
+                        memory_lines=lines,
+                        m=m,
+                        prompt_social_susceptibility=False,
+                        prompt_number_range=prompt_number_range,
+                    )
+                    hidden = prompt_hidden_vectors(backend, prompt_text, layers)
+                    vectors[trial_id] = hidden
+                    private_ids = number_token_ids(backend, case.private_target)
+                    social_ids = number_token_ids(backend, case.social_number)
+                    private_logit, social_logit = number_logits_after_prefix(
+                        backend,
+                        prompt_text,
+                        private_ids[0],
+                        social_ids[0],
+                        layer=None,
+                        steer_vector=None,
+                    )
+                    private_logprob, private_logprob_tokens = number_sequence_logprob_after_prefix(
+                        backend,
+                        prompt_text,
+                        case.private_target,
+                        layer=None,
+                        steer_vector=None,
+                    )
+                    social_logprob, social_logprob_tokens = number_sequence_logprob_after_prefix(
+                        backend,
+                        prompt_text,
+                        case.social_number,
+                        layer=None,
+                        steer_vector=None,
+                    )
+                    trials.append(
+                        {
+                            "trial_id": trial_id,
+                            "pair_id": f"{case.case_id}_m{m}_ratio_total{ratio_total}",
+                            "case_id": case.case_id,
+                            "m": m,
+                            "memory_strength": ratio_total,
+                            "target_memory_count": target_count,
+                            "social_memory_count": social_count,
+                            "memory_total": ratio_total,
+                            "memory_ratio_label": ratio_label,
+                            "social_memory_fraction": social_count / float(ratio_total),
+                            "variant": "ratio_memory",
                             "private_clue": case.private_clue,
                             "private_target": case.private_target,
                             "social_number": case.social_number,
@@ -818,6 +1038,7 @@ def compute_direction_summary(
             ]
             projection_rows = [
                 (
+                    row,
                     float(row[f"projection_layer_{layer}"]),
                     float(row["social_minus_private_number_logprob_margin"]),
                     str(row["variant"]),
@@ -825,8 +1046,7 @@ def compute_direction_summary(
                 for row in eval_rows
                 if f"projection_layer_{layer}" in row
             ]
-            social_proj = [p for p, _, variant in projection_rows if variant == "social_memory"]
-            target_proj = [p for p, _, variant in projection_rows if variant == "target_memory"]
+            target_proj, social_proj = projection_gap_groups(projection_rows)
             summary.append(
                 {
                     "direction": f"social_minus_private_{direction_method}",
@@ -845,16 +1065,48 @@ def compute_direction_summary(
                     "target_projection_mean": mean(target_proj),
                     "social_projection_gap": mean(social_proj) - mean(target_proj),
                     "projection_logprob_margin_pearson": pearson(
-                        [p for p, _, _ in projection_rows],
-                        [m for _, m, _ in projection_rows],
+                        [p for _, p, _, _ in projection_rows],
+                        [m for _, _, m, _ in projection_rows],
                     ),
                     "projection_logit_margin_pearson": pearson(
-                        [p for p, _, _ in projection_rows],
-                        [m for _, m, _ in projection_rows],
+                        [p for _, p, _, _ in projection_rows],
+                        [m for _, _, m, _ in projection_rows],
                     ),
                 }
             )
     return directions, summary
+
+
+def projection_gap_groups(
+    projection_rows: list[tuple[dict[str, Any], float, float, str]],
+) -> tuple[list[float], list[float]]:
+    target_proj = [projection for _row, projection, _margin, variant in projection_rows if variant == "target_memory"]
+    social_proj = [projection for _row, projection, _margin, variant in projection_rows if variant == "social_memory"]
+    if target_proj and social_proj:
+        return target_proj, social_proj
+    ratio_rows = [
+        (row, projection)
+        for row, projection, _margin, variant in projection_rows
+        if variant == "ratio_memory" and row.get("social_memory_fraction") not in (None, "")
+    ]
+    if not ratio_rows:
+        return target_proj, social_proj
+    fractions = [float(row.get("social_memory_fraction", 0.0) or 0.0) for row, _projection in ratio_rows]
+    low_fraction = min(fractions)
+    high_fraction = max(fractions)
+    if low_fraction == high_fraction:
+        return target_proj, social_proj
+    target_proj = [
+        projection
+        for row, projection in ratio_rows
+        if float(row.get("social_memory_fraction", 0.0) or 0.0) == low_fraction
+    ]
+    social_proj = [
+        projection
+        for row, projection in ratio_rows
+        if float(row.get("social_memory_fraction", 0.0) or 0.0) == high_fraction
+    ]
+    return target_proj, social_proj
 
 
 def fit_direction(
@@ -892,6 +1144,14 @@ def fit_direction(
             layer=layer,
             fit_split=fit_split,
             subspace_rank=subspace_rank,
+            pair_ids=pair_ids,
+        )
+    if direction_method == "ratio_slope":
+        return fit_ratio_slope_direction(
+            trials=trials,
+            vectors=vectors,
+            layer=layer,
+            fit_split=fit_split,
             pair_ids=pair_ids,
         )
     raise ValueError(f"Unknown direction_method={direction_method!r}")
@@ -944,7 +1204,7 @@ def fit_logprob_quantile_direction(
     rows = [
         row
         for row in trials
-        if row.get("variant") in ("target_memory", "social_memory")
+        if row.get("variant") in steering_fit_variants()
         and (fit_split == "all" or row.get("split") == fit_split)
         and (allowed_pair_ids is None or row.get("pair_id") in allowed_pair_ids)
         and row.get("social_minus_private_number_logprob_margin") not in (None, "")
@@ -970,6 +1230,53 @@ def fit_logprob_quantile_direction(
         "pair_norms": pair_norms,
         "fit_count": min(len(high_vectors), len(low_vectors)),
         "fit_row_count": len(high_vectors) + len(low_vectors),
+    }
+
+
+def fit_ratio_slope_direction(
+    *,
+    trials: list[dict[str, Any]],
+    vectors: dict[str, dict[int, np.ndarray]],
+    layer: int,
+    fit_split: str,
+    pair_ids: list[str] | None,
+) -> dict[str, Any] | None:
+    allowed_pair_ids = set(pair_ids) if pair_ids is not None else None
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in trials:
+        if row.get("variant") != "ratio_memory":
+            continue
+        if fit_split != "all" and row.get("split") != fit_split:
+            continue
+        if allowed_pair_ids is not None and row.get("pair_id") not in allowed_pair_ids:
+            continue
+        if vectors.get(row["trial_id"], {}).get(layer) is None:
+            continue
+        grouped.setdefault(str(row["pair_id"]), []).append(row)
+    slopes: list[np.ndarray] = []
+    pair_norms: list[float] = []
+    fit_row_count = 0
+    for rows in grouped.values():
+        rows = sorted(rows, key=lambda row: float(row.get("social_memory_fraction", 0.0) or 0.0))
+        xs = np.asarray([float(row.get("social_memory_fraction", 0.0) or 0.0) for row in rows], dtype=float)
+        if len(xs) < 2 or float(np.std(xs)) == 0.0:
+            continue
+        matrix = np.stack([vectors[row["trial_id"]][layer] for row in rows], axis=0)
+        centered_x = xs - float(np.mean(xs))
+        denom = float(np.sum(centered_x ** 2))
+        if denom == 0.0:
+            continue
+        slope = np.sum(matrix * centered_x[:, None], axis=0) / denom
+        slopes.append(slope)
+        pair_norms.append(float(np.linalg.norm(slope)))
+        fit_row_count += len(rows)
+    if not slopes:
+        return None
+    return {
+        "direction": np.mean(np.stack(slopes, axis=0), axis=0),
+        "pair_norms": pair_norms,
+        "fit_count": len(slopes),
+        "fit_row_count": fit_row_count,
     }
 
 
@@ -1031,10 +1338,14 @@ def fit_pair_ids(trials: list[dict[str, Any]], fit_split: str) -> list[str]:
         {
             row["pair_id"]
             for row in trials
-            if row.get("variant") in ("target_memory", "social_memory")
+            if row.get("variant") in steering_fit_variants()
             and (fit_split == "all" or row.get("split") == fit_split)
         }
     )
+
+
+def steering_fit_variants() -> set[str]:
+    return {"target_memory", "social_memory", "ratio_memory"}
 
 
 def eval_splits(trials: list[dict[str, Any]]) -> list[str]:
@@ -1075,6 +1386,11 @@ def projection_distribution_rows(trials: list[dict[str, Any]], layers: list[int]
                     "pair_id": trial.get("pair_id", ""),
                     "m": trial.get("m", ""),
                     "memory_strength": trial.get("memory_strength", ""),
+                    "target_memory_count": trial.get("target_memory_count", ""),
+                    "social_memory_count": trial.get("social_memory_count", ""),
+                    "memory_total": trial.get("memory_total", ""),
+                    "memory_ratio_label": trial.get("memory_ratio_label", ""),
+                    "social_memory_fraction": trial.get("social_memory_fraction", ""),
                     "variant": trial.get("variant", ""),
                     "projection": trial[key],
                     "private_target": trial.get("private_target", ""),
@@ -1106,7 +1422,7 @@ def data_scaling_curve(
         {
             row["case_id"]
             for row in trials
-            if row["variant"] in ("target_memory", "social_memory")
+            if row["variant"] in steering_fit_variants()
             and (fit_split == "all" or row.get("split") == fit_split)
         }
     )
@@ -1114,7 +1430,7 @@ def data_scaling_curve(
         split: [
             row
             for row in trials
-            if row["variant"] in ("target_memory", "social_memory")
+            if row["variant"] in steering_fit_variants()
             and (split == "all" or row.get("split") == split)
         ]
         for split in eval_splits(trials)
@@ -1125,7 +1441,7 @@ def data_scaling_curve(
     rows: list[dict[str, Any]] = []
     pair_ids_by_case: dict[str, set[str]] = {}
     for row in trials:
-        if row["variant"] in ("target_memory", "social_memory"):
+        if row["variant"] in steering_fit_variants():
             pair_ids_by_case.setdefault(str(row["case_id"]), set()).add(str(row["pair_id"]))
     for requested_size in sorted(set(size for size in sizes if size > 0)):
         selected_cases = shuffled_cases[: min(requested_size, len(shuffled_cases))]
@@ -1159,19 +1475,17 @@ def data_scaling_curve(
             for eval_split, eval_rows in eval_rows_by_split.items():
                 projections: list[float] = []
                 margins: list[float] = []
-                social_proj: list[float] = []
-                target_proj: list[float] = []
+                projection_tuples: list[tuple[dict[str, Any], float, float, str]] = []
                 for row in eval_rows:
                     vec = vectors[row["trial_id"]].get(layer)
                     if vec is None:
                         continue
                     projection = float(np.dot(vec, unit))
+                    margin = float(row["social_minus_private_number_logprob_margin"])
                     projections.append(projection)
-                    margins.append(float(row["social_minus_private_number_logprob_margin"]))
-                    if row["variant"] == "social_memory":
-                        social_proj.append(projection)
-                    elif row["variant"] == "target_memory":
-                        target_proj.append(projection)
+                    margins.append(margin)
+                    projection_tuples.append((row, projection, margin, str(row["variant"])))
+                target_proj, social_proj = projection_gap_groups(projection_tuples)
                 rows.append(
                     {
                         "requested_case_count": requested_size,
@@ -1213,7 +1527,7 @@ def vector_stability_rows(
         {
             row["case_id"]
             for row in trials
-            if row["variant"] in ("target_memory", "social_memory")
+            if row["variant"] in steering_fit_variants()
             and (fit_split == "all" or row.get("split") == fit_split)
         }
     )
@@ -1223,7 +1537,7 @@ def vector_stability_rows(
     active_seeds = seeds or [0, 1, 2]
     pair_ids_by_case: dict[str, set[str]] = {}
     for row in trials:
-        if row["variant"] in ("target_memory", "social_memory"):
+        if row["variant"] in steering_fit_variants():
             pair_ids_by_case.setdefault(str(row["case_id"]), set()).add(str(row["pair_id"]))
     rows: list[dict[str, Any]] = []
     for requested_size in active_sizes:
@@ -1303,12 +1617,13 @@ def run_alpha_sweep(
     alphas: list[float],
     max_alpha_trials: int | None,
     eval_variants: set[str] | None = None,
+    extra_group_fields: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     scale_by_layer: dict[int, float] = {}
     for row in direction_summary:
         scale_by_layer.setdefault(int(row["layer"]), float(row["mean_pair_norm"]))
     rows: list[dict[str, Any]] = []
-    active_variants = eval_variants or {"target_memory", "social_memory"}
+    active_variants = eval_variants or {"target_memory", "social_memory", "ratio_memory"}
     eval_trials = [
         row
         for row in trials
@@ -1318,39 +1633,46 @@ def run_alpha_sweep(
     ]
     if max_alpha_trials is not None:
         eval_trials = eval_trials[:max_alpha_trials]
+    grouped_trials: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    if extra_group_fields:
+        for row in eval_trials:
+            key = tuple(row.get(field, "") for field in extra_group_fields)
+            grouped_trials.setdefault(key, []).append(row)
+    else:
+        grouped_trials[()] = eval_trials
     for layer in layers:
         direction = directions.get(layer)
         if direction is None:
             continue
         unit = normalize(direction)
         scale = scale_by_layer.get(layer, float(np.linalg.norm(direction)))
-        for alpha in alphas:
-            margins: list[float] = []
-            private_logprobs: list[float] = []
-            social_logprobs: list[float] = []
-            token_counts: list[int] = []
-            for row in eval_trials:
-                prompt_text = str(row["prompt"])
-                private_logprob, private_token_count = number_sequence_logprob_after_prefix(
-                    backend,
-                    prompt_text,
-                    int(row["private_target"]),
-                    layer=layer,
-                    steer_vector=unit * scale * alpha,
-                )
-                social_logprob, social_token_count = number_sequence_logprob_after_prefix(
-                    backend,
-                    prompt_text,
-                    int(row["social_number"]),
-                    layer=layer,
-                    steer_vector=unit * scale * alpha,
-                )
-                private_logprobs.append(private_logprob)
-                social_logprobs.append(social_logprob)
-                margins.append(social_logprob - private_logprob)
-                token_counts.append(private_token_count + social_token_count)
-            rows.append(
-                {
+        for group_key, group_trials in sorted(grouped_trials.items(), key=lambda item: tuple(str(value) for value in item[0])):
+            for alpha in alphas:
+                margins: list[float] = []
+                private_logprobs: list[float] = []
+                social_logprobs: list[float] = []
+                token_counts: list[int] = []
+                for row in group_trials:
+                    prompt_text = str(row["prompt"])
+                    private_logprob, private_token_count = number_sequence_logprob_after_prefix(
+                        backend,
+                        prompt_text,
+                        int(row["private_target"]),
+                        layer=layer,
+                        steer_vector=unit * scale * alpha,
+                    )
+                    social_logprob, social_token_count = number_sequence_logprob_after_prefix(
+                        backend,
+                        prompt_text,
+                        int(row["social_number"]),
+                        layer=layer,
+                        steer_vector=unit * scale * alpha,
+                    )
+                    private_logprobs.append(private_logprob)
+                    social_logprobs.append(social_logprob)
+                    margins.append(social_logprob - private_logprob)
+                    token_counts.append(private_token_count + social_token_count)
+                row_out: dict[str, Any] = {
                     "direction": "social_minus_private_memory",
                     "layer": layer,
                     "alpha": alpha,
@@ -1362,7 +1684,9 @@ def run_alpha_sweep(
                     "mean_scored_number_token_count": mean([float(value) for value in token_counts]),
                     "mean_social_number_probability": mean_logistic(margins),
                 }
-            )
+                for field, value in zip(extra_group_fields, group_key):
+                    row_out[field] = value
+                rows.append(row_out)
     return rows
 
 
@@ -1672,7 +1996,7 @@ def run_generation_steering(
     eval_trials = [
         row
         for row in trials
-        if row.get("variant") in ("target_memory", "social_memory", "ood_actual_social")
+        if row.get("variant") in ("target_memory", "social_memory", "ratio_memory", "ood_actual_social")
         and row.get("prompt")
         and row.get("private_target") is not None
         and row.get("social_number") is not None
@@ -1734,6 +2058,11 @@ def run_generation_steering(
                         "variant": trial.get("variant"),
                         "m": trial.get("m"),
                         "memory_strength": trial.get("memory_strength"),
+                        "target_memory_count": trial.get("target_memory_count"),
+                        "social_memory_count": trial.get("social_memory_count"),
+                        "memory_total": trial.get("memory_total"),
+                        "memory_ratio_label": trial.get("memory_ratio_label"),
+                        "social_memory_fraction": trial.get("social_memory_fraction"),
                         "layer": layer,
                         "calibrated_alpha": alpha,
                         "private_clue": trial.get("private_clue"),
@@ -1812,55 +2141,79 @@ def generate_text_with_steering(
     return text, int(completion_ids.shape[-1])
 
 
-def generation_side_effect_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def generation_side_effect_summary(
+    rows: list[dict[str, Any]],
+    *,
+    extra_group_fields: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for row in rows:
-        key = (row.get("dataset"), row.get("layer"), row.get("calibrated_alpha"))
+        key = (
+            row.get("dataset"),
+            row.get("layer"),
+            row.get("calibrated_alpha"),
+            *(row.get(field, "") for field in extra_group_fields),
+        )
         groups.setdefault(key, []).append(row)
     summary: list[dict[str, Any]] = []
-    for (dataset, layer, alpha), group in sorted(groups.items(), key=lambda item: (str(item[0][0]), int(item[0][1]), float(item[0][2]))):
+    for key, group in sorted(groups.items(), key=lambda item: (str(item[0][0]), int(item[0][1]), float(item[0][2]), *[str(value) for value in item[0][3:]])):
+        dataset, layer, alpha, *extra_values = key
         valid = [row for row in group if bool(row.get("valid"))]
-        summary.append(
-            {
-                "dataset": dataset,
-                "layer": layer,
-                "calibrated_alpha": alpha,
-                "n": len(group),
-                "valid_rate": sum(bool(row.get("valid")) for row in group) / max(len(group), 1),
-                "strict_json_rate": sum(bool(row.get("strict_json")) for row in group) / max(len(group), 1),
-                "format_damage_rate": sum(bool(row.get("format_damage")) for row in group) / max(len(group), 1),
-                "satisfies_private_clue_rate": mean(
-                    [1.0 if row.get("satisfies_private_clue") else 0.0 for row in valid if row.get("satisfies_private_clue") is not None]
-                ),
-                "social_choice_rate": sum(row.get("choice_category") == "social" for row in valid) / max(len(valid), 1),
-                "private_target_choice_rate": sum(row.get("choice_category") == "private_target" for row in valid) / max(len(valid), 1),
-                "other_clue_compatible_rate": sum(row.get("choice_category") == "other_clue_compatible" for row in valid) / max(len(valid), 1),
-                "incompatible_rate": sum(row.get("choice_category") == "incompatible" for row in valid) / max(len(valid), 1),
-                "mean_base_completion_perplexity": mean(
-                    [
-                        float(row["base_completion_perplexity"])
-                        for row in group
-                        if row.get("base_completion_perplexity") not in (None, "") and not math.isnan(float(row["base_completion_perplexity"]))
-                    ]
-                ),
-                "mean_steered_completion_perplexity": mean(
-                    [
-                        float(row["steered_completion_perplexity"])
-                        for row in group
-                        if row.get("steered_completion_perplexity") not in (None, "") and not math.isnan(float(row["steered_completion_perplexity"]))
-                    ]
-                ),
-            }
-        )
+        row_out = {
+            "dataset": dataset,
+            "layer": layer,
+            "calibrated_alpha": alpha,
+            "n": len(group),
+            "valid_rate": sum(bool(row.get("valid")) for row in group) / max(len(group), 1),
+            "strict_json_rate": sum(bool(row.get("strict_json")) for row in group) / max(len(group), 1),
+            "format_damage_rate": sum(bool(row.get("format_damage")) for row in group) / max(len(group), 1),
+            "satisfies_private_clue_rate": mean(
+                [1.0 if row.get("satisfies_private_clue") else 0.0 for row in valid if row.get("satisfies_private_clue") is not None]
+            ),
+            "social_choice_rate": sum(row.get("choice_category") == "social" for row in valid) / max(len(valid), 1),
+            "private_target_choice_rate": sum(row.get("choice_category") == "private_target" for row in valid) / max(len(valid), 1),
+            "other_clue_compatible_rate": sum(row.get("choice_category") == "other_clue_compatible" for row in valid) / max(len(valid), 1),
+            "incompatible_rate": sum(row.get("choice_category") == "incompatible" for row in valid) / max(len(valid), 1),
+            "mean_base_completion_perplexity": mean(
+                [
+                    float(row["base_completion_perplexity"])
+                    for row in group
+                    if row.get("base_completion_perplexity") not in (None, "") and not math.isnan(float(row["base_completion_perplexity"]))
+                ]
+            ),
+            "mean_steered_completion_perplexity": mean(
+                [
+                    float(row["steered_completion_perplexity"])
+                    for row in group
+                    if row.get("steered_completion_perplexity") not in (None, "") and not math.isnan(float(row["steered_completion_perplexity"]))
+                ]
+            ),
+        }
+        for field, value in zip(extra_group_fields, extra_values):
+            row_out[field] = value
+        summary.append(row_out)
     return summary
 
 
-def behavioral_steering_effect_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_dataset_layer: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+def behavioral_steering_effect_summary(
+    rows: list[dict[str, Any]],
+    *,
+    extra_group_fields: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    by_dataset_layer: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for row in rows:
-        by_dataset_layer.setdefault((row.get("dataset"), row.get("layer")), []).append(row)
+        key = (
+            row.get("dataset"),
+            row.get("layer"),
+            *(row.get(field, "") for field in extra_group_fields),
+        )
+        by_dataset_layer.setdefault(key, []).append(row)
     out: list[dict[str, Any]] = []
-    for (dataset, layer), group in sorted(by_dataset_layer.items(), key=lambda item: (str(item[0][0]), int(item[0][1]))):
+    for key, group in sorted(
+        by_dataset_layer.items(),
+        key=lambda item: (str(item[0][0]), int(item[0][1]), *[str(value) for value in item[0][2:]]),
+    ):
+        dataset, layer, *extra_values = key
         sorted_rows = sorted(group, key=lambda row: float(row["calibrated_alpha"]))
         baseline = nearest_alpha_row(sorted_rows, 0.0)
         positive = max((row for row in sorted_rows if float(row["calibrated_alpha"]) > 0), key=lambda row: float(row["calibrated_alpha"]), default=None)
@@ -1868,35 +2221,36 @@ def behavioral_steering_effect_summary(rows: list[dict[str, Any]]) -> list[dict[
         best_social = best_social_behavior_row(sorted_rows)
         if baseline is None:
             continue
-        out.append(
-            {
-                "dataset": dataset,
-                "layer": layer,
-                "baseline_alpha": baseline.get("calibrated_alpha"),
-                "positive_alpha": positive.get("calibrated_alpha") if positive is not None else None,
-                "negative_alpha": negative.get("calibrated_alpha") if negative is not None else None,
-                "best_social_alpha": best_social.get("calibrated_alpha") if best_social is not None else None,
-                "baseline_social_choice_rate": baseline.get("social_choice_rate"),
-                "positive_social_choice_rate": positive.get("social_choice_rate") if positive is not None else None,
-                "negative_social_choice_rate": negative.get("social_choice_rate") if negative is not None else None,
-                "best_social_choice_rate": best_social.get("social_choice_rate") if best_social is not None else None,
-                "positive_social_choice_delta": numeric_delta(positive, baseline, "social_choice_rate"),
-                "negative_social_choice_delta": numeric_delta(negative, baseline, "social_choice_rate"),
-                "best_social_choice_delta": numeric_delta(best_social, baseline, "social_choice_rate"),
-                "baseline_private_target_choice_rate": baseline.get("private_target_choice_rate"),
-                "positive_private_target_choice_delta": numeric_delta(positive, baseline, "private_target_choice_rate"),
-                "best_private_target_choice_delta": numeric_delta(best_social, baseline, "private_target_choice_rate"),
-                "baseline_satisfies_private_clue_rate": baseline.get("satisfies_private_clue_rate"),
-                "positive_satisfies_private_clue_delta": numeric_delta(positive, baseline, "satisfies_private_clue_rate"),
-                "best_satisfies_private_clue_delta": numeric_delta(best_social, baseline, "satisfies_private_clue_rate"),
-                "baseline_valid_rate": baseline.get("valid_rate"),
-                "positive_valid_rate_delta": numeric_delta(positive, baseline, "valid_rate"),
-                "best_valid_rate_delta": numeric_delta(best_social, baseline, "valid_rate"),
-                "baseline_format_damage_rate": baseline.get("format_damage_rate"),
-                "positive_format_damage_delta": numeric_delta(positive, baseline, "format_damage_rate"),
-                "best_format_damage_delta": numeric_delta(best_social, baseline, "format_damage_rate"),
-            }
-        )
+        row_out = {
+            "dataset": dataset,
+            "layer": layer,
+            "baseline_alpha": baseline.get("calibrated_alpha"),
+            "positive_alpha": positive.get("calibrated_alpha") if positive is not None else None,
+            "negative_alpha": negative.get("calibrated_alpha") if negative is not None else None,
+            "best_social_alpha": best_social.get("calibrated_alpha") if best_social is not None else None,
+            "baseline_social_choice_rate": baseline.get("social_choice_rate"),
+            "positive_social_choice_rate": positive.get("social_choice_rate") if positive is not None else None,
+            "negative_social_choice_rate": negative.get("social_choice_rate") if negative is not None else None,
+            "best_social_choice_rate": best_social.get("social_choice_rate") if best_social is not None else None,
+            "positive_social_choice_delta": numeric_delta(positive, baseline, "social_choice_rate"),
+            "negative_social_choice_delta": numeric_delta(negative, baseline, "social_choice_rate"),
+            "best_social_choice_delta": numeric_delta(best_social, baseline, "social_choice_rate"),
+            "baseline_private_target_choice_rate": baseline.get("private_target_choice_rate"),
+            "positive_private_target_choice_delta": numeric_delta(positive, baseline, "private_target_choice_rate"),
+            "best_private_target_choice_delta": numeric_delta(best_social, baseline, "private_target_choice_rate"),
+            "baseline_satisfies_private_clue_rate": baseline.get("satisfies_private_clue_rate"),
+            "positive_satisfies_private_clue_delta": numeric_delta(positive, baseline, "satisfies_private_clue_rate"),
+            "best_satisfies_private_clue_delta": numeric_delta(best_social, baseline, "satisfies_private_clue_rate"),
+            "baseline_valid_rate": baseline.get("valid_rate"),
+            "positive_valid_rate_delta": numeric_delta(positive, baseline, "valid_rate"),
+            "best_valid_rate_delta": numeric_delta(best_social, baseline, "valid_rate"),
+            "baseline_format_damage_rate": baseline.get("format_damage_rate"),
+            "positive_format_damage_delta": numeric_delta(positive, baseline, "format_damage_rate"),
+            "best_format_damage_delta": numeric_delta(best_social, baseline, "format_damage_rate"),
+        }
+        for field, value in zip(extra_group_fields, extra_values):
+            row_out[field] = value
+        out.append(row_out)
     return out
 
 
@@ -2073,10 +2427,12 @@ def refresh_plots_from_csv(out_dir: Path) -> None:
         out_dir,
         read_csv_rows(out_dir / "steering_direction_summary.csv"),
         read_csv_rows(out_dir / "steering_alpha_sweep.csv"),
+        read_csv_rows(out_dir / "steering_alpha_sweep_by_memory_ratio.csv"),
         read_csv_rows(out_dir / "projection_distributions.csv"),
         read_csv_rows(out_dir / "data_scaling_curve.csv"),
         read_csv_rows(out_dir / "vector_stability.csv"),
         read_csv_rows(out_dir / "generation_side_effect_summary.csv"),
+        read_csv_rows(out_dir / "generation_side_effect_summary_by_memory_ratio.csv"),
         read_csv_rows(out_dir / "behavioral_steering_effect_summary.csv"),
         read_csv_rows(out_dir / "ood_social_alpha_sweep.csv"),
         read_csv_rows(out_dir / "ood_social_side_effect_summary.csv"),
@@ -2102,10 +2458,12 @@ def write_plots(
     out_dir: Path,
     direction_summary: list[dict[str, Any]],
     steering_rows: list[dict[str, Any]],
+    steering_ratio_rows: list[dict[str, Any]],
     projection_rows: list[dict[str, Any]],
     scaling_rows: list[dict[str, Any]],
     stability_rows: list[dict[str, Any]],
     generation_summary_rows: list[dict[str, Any]],
+    generation_ratio_summary_rows: list[dict[str, Any]],
     behavioral_effect_rows: list[dict[str, Any]],
     ood_steering_rows: list[dict[str, Any]],
     ood_generation_summary_rows: list[dict[str, Any]],
@@ -2169,6 +2527,20 @@ def write_plots(
             steering_rows,
             title="Layer x alpha steering effect",
         )
+    if steering_ratio_rows:
+        ratio_layer = None
+        best_direction_row = best_layer(direction_summary)
+        if best_direction_row is not None:
+            ratio_layer = int(best_direction_row["layer"])
+        write_ratio_heatmap_plots(
+            out_dir,
+            steering_ratio_rows,
+            value_key="mean_social_minus_private_number_logprob_margin",
+            filename_stem="steering_logprob_margin_by_memory_ratio",
+            title="Full-number logprob margin by memory ratio",
+            colorbar_label="Mean social - private number logprob",
+            preferred_layer=ratio_layer,
+        )
     if projection_rows:
         write_projection_distribution_plot(out_dir / "plots" / "projection_distributions.svg", projection_rows)
     if scaling_rows:
@@ -2211,6 +2583,17 @@ def write_plots(
                 title="Generation-time steering side effects",
                 layer=layer_id,
             )
+    if generation_ratio_summary_rows:
+        behavior_layer = choose_behavior_layer(generation_summary_rows, behavioral_effect_rows)
+        write_ratio_heatmap_plots(
+            out_dir,
+            generation_ratio_summary_rows,
+            value_key="social_private_choice_margin",
+            filename_stem="generation_social_private_margin_by_memory_ratio",
+            title="Generated-choice social-private margin by memory ratio",
+            colorbar_label="Social choice rate - private target choice rate",
+            preferred_layer=behavior_layer,
+        )
     if ood_steering_rows:
         write_alpha_heatmap(
             out_dir / "plots" / "ood_generalization_layer_alpha_heatmap.svg",
@@ -2248,6 +2631,130 @@ def write_plots(
             )
 
 
+def write_ratio_heatmap_plots(
+    out_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    value_key: str,
+    filename_stem: str,
+    title: str,
+    colorbar_label: str,
+    preferred_layer: int | None,
+) -> None:
+    ratio_rows = [
+        row
+        for row in rows
+        if row.get("memory_ratio_label") not in (None, "")
+        and row.get("variant", "ratio_memory") == "ratio_memory"
+    ]
+    if not ratio_rows:
+        return
+    layers = sorted({int(row["layer"]) for row in ratio_rows})
+    for layer in layers:
+        write_ratio_heatmap(
+            out_dir / "plots" / f"{filename_stem}_layer_{layer}.svg",
+            [row for row in ratio_rows if int(row["layer"]) == layer],
+            value_key=value_key,
+            title=f"{title} (layer {layer})",
+            colorbar_label=colorbar_label,
+        )
+    if preferred_layer in layers:
+        write_ratio_heatmap(
+            out_dir / "plots" / f"{filename_stem}.svg",
+            [row for row in ratio_rows if int(row["layer"]) == preferred_layer],
+            value_key=value_key,
+            title=f"{title} (layer {preferred_layer})",
+            colorbar_label=colorbar_label,
+        )
+
+
+def write_ratio_heatmap(
+    path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    value_key: str,
+    title: str,
+    colorbar_label: str,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        path.write_text("")
+        return
+    alphas = sorted(
+        {
+            float(row.get("calibrated_alpha", row.get("alpha")))
+            for row in rows
+            if row.get("calibrated_alpha", row.get("alpha")) not in (None, "")
+        }
+    )
+    ratio_labels = sorted(
+        {str(row["memory_ratio_label"]) for row in rows if row.get("memory_ratio_label") not in (None, "")},
+        key=lambda label: ratio_sort_key(label, rows),
+    )
+    if not alphas or not ratio_labels:
+        path.write_text("")
+        return
+    matrix = np.full((len(ratio_labels), len(alphas)), np.nan)
+    for row in rows:
+        ratio_label = str(row.get("memory_ratio_label", ""))
+        if ratio_label not in ratio_labels:
+            continue
+        alpha_value = row.get("calibrated_alpha", row.get("alpha"))
+        if alpha_value in (None, ""):
+            continue
+        value = ratio_heatmap_value(row, value_key)
+        if value is None or math.isnan(value):
+            continue
+        ratio_index = ratio_labels.index(ratio_label)
+        alpha_index = alphas.index(float(alpha_value))
+        matrix[ratio_index, alpha_index] = value
+    fig, ax = plt.subplots(figsize=(9.4, max(3.6, 0.42 * len(ratio_labels))))
+    vmax = np.nanmax(np.abs(matrix)) if np.any(~np.isnan(matrix)) else 1.0
+    if vmax == 0.0 or math.isnan(float(vmax)):
+        vmax = 1.0
+    image = ax.imshow(matrix, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+    ax.set_xticks(range(len(alphas)))
+    ax.set_xticklabels([f"{alpha:g}" for alpha in alphas], rotation=45, ha="right")
+    ax.set_yticks(range(len(ratio_labels)))
+    ax.set_yticklabels(ratio_labels)
+    ax.set_xlabel("Calibrated alpha (positive = more social)")
+    ax.set_ylabel("Memory entries (private target : social evidence)")
+    ax.set_title(title, fontweight="bold")
+    fig.colorbar(image, ax=ax, label=colorbar_label)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def ratio_heatmap_value(row: dict[str, Any], value_key: str) -> float | None:
+    if value_key == "social_private_choice_margin":
+        social = row.get("social_choice_rate")
+        private = row.get("private_target_choice_rate")
+        if social in (None, "") or private in (None, ""):
+            return None
+        return float(social) - float(private)
+    value = row.get(value_key)
+    if value in (None, ""):
+        return None
+    return float(value)
+
+
+def ratio_sort_key(label: str, rows: list[dict[str, Any]]) -> tuple[float, str]:
+    for row in rows:
+        if str(row.get("memory_ratio_label")) != label:
+            continue
+        fraction = row.get("social_memory_fraction")
+        if fraction not in (None, ""):
+            return (float(fraction), label)
+    try:
+        _private_text, social_text = label.split(":", 1)
+        return (float(social_text), label)
+    except ValueError:
+        return (0.0, label)
+
+
 def write_projection_distribution_plot(path: Path, rows: list[dict[str, Any]]) -> None:
     import matplotlib.pyplot as plt
 
@@ -2260,14 +2767,24 @@ def write_projection_distribution_plot(path: Path, rows: list[dict[str, Any]]) -
     if not splits:
         splits = sorted({str(row.get("split", "all")) for row in best_layer_rows})[:3] or ["all"]
     fig, axes = plt.subplots(len(splits), 2, figsize=(10.0, max(3.2, 3.0 * len(splits))), squeeze=False)
-    colors = {"target_memory": "#2E6FBB", "social_memory": "#E07A3F", "ood_actual_social": "#16A34A"}
-    labels = {"target_memory": "private/target memory", "social_memory": "social memory", "ood_actual_social": "actual social prompt"}
+    colors = {
+        "target_memory": "#2E6FBB",
+        "social_memory": "#E07A3F",
+        "ratio_memory": "#7C3AED",
+        "ood_actual_social": "#16A34A",
+    }
+    labels = {
+        "target_memory": "private/target memory",
+        "social_memory": "social memory",
+        "ratio_memory": "mixed-ratio memory",
+        "ood_actual_social": "actual social prompt",
+    }
     layer = best_layer_rows[0].get("layer")
     for row_index, split in enumerate(splits):
         split_rows = [row for row in best_layer_rows if row.get("split") == split or split == "all"]
         ax_hist = axes[row_index][0]
         ax_scatter = axes[row_index][1]
-        for variant in ("target_memory", "social_memory", "ood_actual_social"):
+        for variant in ("target_memory", "social_memory", "ratio_memory", "ood_actual_social"):
             variant_rows = [row for row in split_rows if row.get("variant") == variant]
             values = [float(row["projection"]) for row in variant_rows if row.get("projection") not in (None, "")]
             if values:
@@ -2576,6 +3093,9 @@ def write_index(
     direction_method: str,
     direction_quantile: float,
     subspace_rank: int,
+    ratio_total: int | None,
+    ratio_social_counts: list[int],
+    ratio_only: bool,
 ) -> None:
     split_counts: dict[str, int] = {}
     for case in cases:
@@ -2592,6 +3112,9 @@ def write_index(
         f"- subspace rank: `{subspace_rank}`",
         f"- layers: `{layers}`",
         f"- memory strengths: `{memory_strengths}`",
+        f"- ratio total: `{ratio_total}`",
+        f"- ratio social counts: `{ratio_social_counts}`",
+        f"- ratio only: `{ratio_only}`",
         f"- m values: `{m_values}`",
         f"- steering alphas: `{alphas}`",
         "",
@@ -2604,10 +3127,13 @@ def write_index(
         "- `data_scaling_curve.csv`: 8/16/32/64/128 contrast-case scaling diagnostics when enough cases are collected.",
         "- `vector_stability.csv`: pairwise cosine stability across case subsets.",
         "- `steering_alpha_sweep.csv`: full-sequence number-logprob response when adding/subtracting each layer direction.",
+        "- `steering_alpha_sweep_by_memory_ratio.csv`: the same logprob response split by private:social memory ratio.",
         "- `steering_sign_summary.csv`: empirical sign calibration for each layer's raw contrast vector.",
         "- `generation_steering_outputs.jsonl`: actual generated JSON/text under steering, when `--run-generation-steering` is used.",
         "- `generation_side_effect_summary.csv`: validity, clue-satisfaction, format-damage, and perplexity side effects by alpha.",
+        "- `generation_side_effect_summary_by_memory_ratio.csv`: generation choice and side-effect rates split by private:social memory ratio.",
         "- `behavioral_steering_effect_summary.csv`: baseline-vs-steered social-choice deltas, private-clue deltas, and format/validity deltas.",
+        "- `behavioral_steering_effect_summary_by_memory_ratio.csv`: the same behavioral deltas split by memory ratio.",
         "- `ood_social_*`: synthetic-train / actual-social-prompt generalization diagnostics when `--ood-social-dir` is supplied.",
         "- `steering_vectors_social_minus_private.npz`: compressed average direction vector by layer.",
         "- `steering_vectors_empirical_social.npz`: sign-calibrated vectors where positive alpha means more social when calibration exists.",
@@ -2615,9 +3141,13 @@ def write_index(
         "- `plots/steering_alpha_sweep.svg`: first activation-steering sanity check.",
         "- `plots/projection_distributions.svg`: train/test projection distributions and projection-vs-logprob scatter.",
         "- `plots/layer_alpha_heatmap.svg`: layer x alpha effect-size heatmap.",
+        "- `plots/steering_logprob_margin_by_memory_ratio.svg`: full-number social-private logprob margin by memory ratio for the preferred layer.",
+        "- `plots/steering_logprob_margin_by_memory_ratio_layer_<layer>.svg`: the same ratio heatmap for each evaluated layer.",
         "- `plots/data_scaling_curve.svg`: contrast-case sample-size curve.",
         "- `plots/vector_stability.svg`: vector cosine stability across random case subsets.",
         "- `plots/generation_choice_composition.svg`: social/private/other/incompatible choice rates versus alpha for the best behavioral layer.",
+        "- `plots/generation_social_private_margin_by_memory_ratio.svg`: generated social-choice minus private-choice margin by memory ratio for the best behavioral layer.",
+        "- `plots/generation_social_private_margin_by_memory_ratio_layer_<layer>.svg`: the same generated-choice ratio heatmap for each evaluated layer.",
         "- `plots/generation_choice_composition_layer_<layer>.svg`: the same choice-composition plot for each evaluated layer.",
         "- `plots/behavior_choice_composition_layer_<layer>.svg`: compatibility alias for the layer-specific generation choice-composition plot.",
         "- `plots/generation_side_effects.svg`: generation validity/perplexity/format damage versus alpha for the best behavioral layer.",
