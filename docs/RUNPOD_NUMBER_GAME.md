@@ -625,6 +625,8 @@ activation by the model's preferred answer category, and fits the default
 `social - private_target` contrast:
 
 ```bash
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 python scripts/run_number_game_steering_prep.py \
   --config configs/number_game/runpod_qwen3.yaml \
   --out outputs/number_game_prompt100/qwen3_8b_steering_eval_choice_contrast \
@@ -660,6 +662,7 @@ python scripts/run_number_game_steering_prep.py \
   --run-generation-steering \
   --max-generation-trials 96 \
   --qualitative-examples-per-alpha 3 \
+  --candidate-score-batch-size 1 \
   --override model=Qwen/Qwen3-8B \
   --override trust_remote_code=false
 ```

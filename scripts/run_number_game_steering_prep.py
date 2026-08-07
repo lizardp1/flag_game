@@ -139,9 +139,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--candidate-score-batch-size",
-        default=50,
+        default=1,
         type=int,
-        help="Candidate-number batch size for answer-category scoring.",
+        help="Candidate-number batch size for answer-category scoring. Use 1 on 40-48GB GPUs.",
     )
     parser.add_argument("--skip-alpha-sweep", action="store_true")
     parser.add_argument("--max-alpha-trials", default=None, type=int)
@@ -2172,13 +2172,14 @@ def score_candidate_numbers_after_prefix(
         )
         with torch.no_grad():
             output = backend.model_obj(**model_inputs)
-        logits = output.logits.detach().float()
-        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+        logits = output.logits.detach()
         for row_index, (number, continuation_ids) in enumerate(zip(batch_numbers, continuations)):
             total = 0.0
             for offset, token_id in enumerate(continuation_ids):
                 logit_position = prefix_len + offset - 1
-                total += float(log_probs[row_index, logit_position, token_id].cpu())
+                position_logits = logits[row_index, logit_position].float()
+                token_log_probs = torch.nn.functional.log_softmax(position_logits, dim=-1)
+                total += float(token_log_probs[token_id].cpu())
             rows.append(
                 {
                     "number": int(number),
@@ -2186,6 +2187,9 @@ def score_candidate_numbers_after_prefix(
                     "token_count": len(continuation_ids),
                 }
             )
+        del output, logits, model_inputs, input_ids, attention_mask
+        if getattr(torch, "cuda", None) is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return rows
 
 
