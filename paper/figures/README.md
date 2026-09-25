@@ -1,17 +1,11 @@
-# Paper figures
+# Figures
 
-All eight complete main-paper figures are in [`final/`](final/README.md), named
-`fig1` through `fig8` using the manuscript numbering.
+Run from the repository root:
 
-- `final/`: complete numbered figures for reading and paper inclusion.
-- `generated/`: individual data-driven panels; descriptive filenames identify their contents.
-- `code/`, `data/`, `assets/`: plotting code, compact inputs, and illustration assets.
-- `manifest.json`: maps final figures and panels to inputs and builders. Preserved exports have integrity hashes.
+```sh
+bash paper/figures/build.sh
+```
 
-Run `bash paper/figures/build.sh` from the repository root. It rebuilds the ten
-empirical components and complete Figures 6 and 8 without model calls. Figures
-with manual layouts remain preserved exports; rebuilding panels does not
-reassemble those layouts.
-
-Theory source code stays in `../../theory/`; its builders write Figures 6 and 8
-directly into `final/`.
+Complete figures: `paper/figures/final/fig1`–`fig8`.
+Chart components: `paper/figures/generated/`.
+The build regenerates chart components and Figures 6 and 8.
