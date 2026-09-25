@@ -1,0 +1,44 @@
+\subsection[Statistical mechanics of bounded agents]{Statistical mechanics of bounded agents}
+\label{sec:stat-mech}
+
+\edit{Here we present a simple phenomenological theory of how population size changes the balance between collective belief collapse, correct consensus, and polarization. With a small set of assumptions, we aim to provide an intuitive physical picture of these phenomena. We start by adding private evidence from the external world to Quantized Simplex Gossip \citep{tanaka2026lottery}.}
+
+\textbf{Private evidence.} We simplify the multi-country experiment to two beliefs, the truth country \(T\) and one rival country \(R\). The same framework we describe below can extend to accommodate additional labels. A crop can favor either belief or leave the agent uncertain, as in Fig.~\ref{fig:theory-four-panel}a's Yemen--Austria example, black distinguishes Yemen from Austria, a red-and-white crop can be read as Austria, and an ambiguous crop leaves many possibilities open. We describe crops as three types: truth-deciding, rival-deciding, and ambiguous. Each agent independently draws a type with probabilities \(a_T\), \(a_R\), and \(a_0=1-a_T-a_R\). These are probabilities under crop sampling, rather than literal fractions of the flag's area. To compare this with our multi-country experiments, we probe each initial crop used in our population sweep 50 times restricting country answers to \(T\) and \(R\). The fraction of valid responses choosing \(R\), pooled across crops, sets the rival evidence share \(a_R/(a_T+a_R)\).
+
+\textbf{Social updating.} Agents with truth- or rival-deciding evidence keep their initial belief. They are evidence-induced \emph{zealots}: an idealization of agents whose private evidence resists social pressure. Ambiguous agents instead copy a randomly chosen speaker, adopting a heard \(T\) with probability \(q_T\) and a heard \(R\) with probability \(q_R=1-q_T\); otherwise they retain their current belief. We write \(q_T/q_R=e^{h_0}\). When \(h_0=0\), this is neutral copying, with an equal probability of accepting either label. When \(h_0<0\), ambiguous agents lean toward the rival at each update. This bias represents an interpretation tendency under uncertain evidence; here it is a modeling assumption. The model extends the neutral copying limit of QSG \citep{tanaka2026lottery} with evidence-induced zealots \citep{mobilia2003zealot,mobilia2007zealotry} and biased adoption. With no zealots and \(h_0=0\), accepted updates between distinct agents follow the binary \(\alpha=m=1\) copying limit of QSG.
+
+\claude{\textbf{Microscopic dynamics.} In a population of \(N\) agents, let \(z_T\) count truth zealots, \(z_R\) count rival zealots, and \(z_0=N-z_T-z_R\) count ambiguous agents. Their population fractions are \(f_X=z_X/N\), for \(X\in\{T,R,0\}\). Thus \(a_X\) is a sampling probability, while \(f_X\) is the fraction actually sampled in one population. Let \(n\) count ambiguous agents currently identifying the flag as \(T\). Each interaction step independently selects a speaker and listener uniformly at random; selecting the same agent twice leaves the state unchanged. The probabilities that \(n\) increases or decreases by one are
+\begin{equation}
+W_+(n)=q_T\frac{(z_0-n)(z_T+n)}{N^2},\qquad
+W_-(n)=q_R\frac{n(z_R+z_0-n)}{N^2}.
+\label{eq:rates}
+\end{equation}
+For example, \(W_+\) combines selecting an ambiguous listener identifying the flag as \(R\), selecting a speaker reporting \(T\), and accepting the message. The remaining probability gives no change. When \(z_0>0\), \(x=n/z_0\) is the truth fraction among ambiguous agents, and \(s=f_T+f_0x\) is the truth fraction in the whole population. When \(z_0=0\), the population is fixed at \(s=f_T\).}
+
+\claude{\textbf{Drift and fluctuations.} Writing \(\tau=t/N\) for the normalized time introduced above, Eq.~\eqref{eq:rates} gives the mean-field evolution
+\begin{equation}
+\frac{dx}{d\tau}=A(x)
+=q_Tf_T(1-x)-q_Rf_Rx+(q_T-q_R)f_0x(1-x).
+\label{eq:meanfield}
+\end{equation}
+The first term increases \(x\) when ambiguous agents switch from \(R\) to \(T\) by copying truth zealots. The second decreases \(x\) through the reverse switch when copying rival zealots. The third describes copying between ambiguous agents: it vanishes under neutral copying and favors truth when \(h_0>0\) or the rival when \(h_0<0\). We retain finite-population fluctuations by evaluating the exact binary copying process (Appendix~\ref{app:minimal-theory}). Over a fixed interval of \(\tau\), copying fluctuations scale as \(N^{-1/2}\) at fixed type fractions with \(f_0>0\). Larger populations therefore follow the mean-field dynamics more closely, but finite populations can continue changing even when \(A(x)=0\).}
+
+\input{figure_caption.tex}
+
+\claude{\textbf{Evidence coverage.} At fixed \(a_T,a_R\), increasing \(N\) samples more evidence without changing its underlying distribution. The probabilities of missing each zealot type are
+\begin{equation}
+    \Pr(z_T=0)=(1-a_T)^N,\qquad
+    \Pr(z_R=0)=(1-a_R)^N.
+    \label{eq:evidence-absence}
+\end{equation}
+The characteristic population sizes for encountering these types are therefore \(Na_T\sim1\) and \(Na_R\sim1\). One can picture \(1/N\) as a waterline covering the sampling probabilities \(a_T\) and \(a_R\). As \(N\) increases, the water recedes, illustrating how commonly sampled evidence tends to appear before rarer evidence. When \(a_T>a_R\), truth evidence therefore tends to appear first. These scales organize three overlapping population phases, whose boundaries are finite-population crossovers rather than thermodynamic transitions.
+
+Figure~\ref{fig:theory-four-panel}b--c shows exact endpoint probabilities for this binary process and regions identifying the most probable collective outcome. We use \(a_T+a_R=0.45\) and \(h_0=0.3\), chosen for qualitative agreement with the empirical population trends; the positive bias favors truth adoption. The binary probes described above set the relative evidence share.}
+
+\claude{\textbf{Memetic-drift phase.} Small populations can contain no zealots. With \(f_T=f_R=0\) and neutral copying, Eq.~\eqref{eq:meanfield} gives \(A(x)=0\): neither label has a deterministic advantage. Copying fluctuations nevertheless lead each finite population to consensus by chance, the memetic-drift mechanism of neutral QSG. Truth-biased copying reduces, but does not eliminate, the chance of wrong consensus. Small populations containing rival zealots but no truth zealots instead eventually reach wrong consensus through persistent rival evidence. Both routes can produce collective belief collapse.}
+
+\claude{\textbf{Wisdom-of-crowds phase.} When truth zealots are sufficiently more likely than rival zealots, intermediate populations can contain truth evidence while persistent opposition remains scarce. Without rival zealots, a finite population containing truth zealots eventually reaches correct consensus: communication spreads the evidence of a few agents to the rest. Strong rival-biased adoption can delay this process (Appendix~\ref{app:minimal-theory}). A window with truth zealots but few rival zealots does not by itself guarantee a peak in correct-consensus probability.}
+
+\claude{\textbf{Polarization phase.} Larger populations are more likely to contain both zealot types when \(a_T,a_R>0\). When both are present and \(f_0>0\), \(A(0)>0\) and \(A(1)<0\), giving a stable interior fixed point. Under neutral copying, \(x^\ast=f_T/(f_T+f_R)\); truth-biased adoption shifts it upward and rival-biased adoption shifts it downward. Neither zealot type can convert the other, and both repeatedly transmit their beliefs to ambiguous agents. As \(N\) grows at fixed type fractions, the fluctuations shrink and the camp shares become steadier. A sufficiently unequal split can still meet the consensus threshold, so correct consensus can remain common at large \(N\).}
+
+\claude{\textbf{Accuracy peak.} In this binary model, with unbiased initial beliefs and fixed \(a_T>a_R\), neutral copying increases mean truth share monotonically with \(N\), so evidence coverage alone does not explain an accuracy peak. Using the figure's parameters and averaging the model at each run's measured evidence share gives a maximum at \(N=32\), as in the same empirical cohort (Appendix~\ref{app:minimal-theory}). This comparison depends on the evidence distributions varying across population sizes and on retrospectively selected rivals; it does not establish a peak at a fixed evidence distribution. Mean truth share also differs from the probability of exceeding the correct-consensus threshold.}

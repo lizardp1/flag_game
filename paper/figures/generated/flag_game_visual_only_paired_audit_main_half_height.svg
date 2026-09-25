@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="244.152pt" height="146.994675pt" viewBox="0 0 244.152 146.994675" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ 
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 146.994675 
+L 244.152 146.994675 
+L 244.152 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 1.44 114.613643 
+L 242.712 114.613643 
+L 242.712 14.355703 
+L 1.44 14.355703 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 26.5725 114.613643 
+L 96.9435 114.613643 
+L 96.9435 89.988886 
+L 26.5725 89.988886 
+z
+" clip-path="url(#p48172f6668)" style="fill: #5f998e; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 147.2085 114.613643 
+L 217.5795 114.613643 
+L 217.5795 91.747797 
+L 147.2085 91.747797 
+z
+" clip-path="url(#p48172f6668)" style="fill: #5f998e; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 26.5725 89.988886 
+L 96.9435 89.988886 
+L 96.9435 31.06536 
+L 26.5725 31.06536 
+z
+" clip-path="url(#p48172f6668)" style="fill: #c5dbc8; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 147.2085 91.747797 
+L 217.5795 91.747797 
+L 217.5795 42.498283 
+L 147.2085 42.498283 
+z
+" clip-path="url(#p48172f6668)" style="fill: #c5dbc8; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 26.5725 31.06536 
+L 96.9435 31.06536 
+L 96.9435 26.668082 
+L 26.5725 26.668082 
+z
+" clip-path="url(#p48172f6668)" style="fill: #467ebb; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 147.2085 42.498283 
+L 217.5795 42.498283 
+L 217.5795 26.668082 
+L 147.2085 26.668082 
+z
+" clip-path="url(#p48172f6668)" style="fill: #467ebb; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <defs>
+       <path id="m65c307e6e4" d="M 0 0 
+L 0 4 
+" style="stroke: #000000"/>
+      </defs>
+      <g>
+       <use xlink:href="#m65c307e6e4" x="61.758" y="114.613643" style="stroke: #000000"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle" x="61.758" y="127.839893" transform="rotate(-0 61.758 127.839893)">GPT-4o</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2">
+      <g>
+       <use xlink:href="#m65c307e6e4" x="182.394" y="114.613643" style="stroke: #000000"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle" x="182.394" y="127.839893" transform="rotate(-0 182.394 127.839893)">GPT-5.4</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2"/>
+   <g id="patch_9">
+    <path d="M 1.44 114.613643 
+L 242.712 114.613643 
+" style="fill: none; stroke: #000000; stroke-width: 1.2; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #ffffff" transform="translate(57.30925 100.579358)">28</text>
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #ffffff" transform="translate(48.196125 108.170671)">correct</text>
+   </g>
+   <g id="text_4">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #ffffff" transform="translate(177.94525 101.458814)">26</text>
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #ffffff" transform="translate(168.832125 109.050126)">correct</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(57.30925 58.793967)">67</text>
+    <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(42.4155 66.396529)">compatible</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(177.94525 65.389884)">56</text>
+    <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(163.0515 72.992446)">compatible</text>
+   </g>
+   <g id="text_7">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #1b1b1e" x="61.758" y="23.049529" transform="rotate(-0 61.758 23.049529)">5 wrong</text>
+   </g>
+   <g id="text_8">
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #ffffff" transform="translate(177.94525 32.808776)">18</text>
+    <text style="font-weight: 700; font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #ffffff" transform="translate(170.3965 40.400088)">wrong</text>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 9.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: middle" x="122.076" y="8.355703" transform="rotate(-0 122.076 8.355703)">Individual agent flag crop test (n=100)</text>
+   </g>
+   <g id="legend_1">
+    <g id="patch_10">
+     <path d="M 27.421625 140.670925 
+L 43.421625 140.670925 
+L 43.421625 135.070925 
+L 27.421625 135.070925 
+z
+" style="fill: #5f998e; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_10">
+     <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: start" x="49.821625" y="140.670925" transform="rotate(-0 49.821625 140.670925)">Correct</text>
+    </g>
+    <g id="patch_11">
+     <path d="M 92.046625 140.670925 
+L 108.046625 140.670925 
+L 108.046625 135.070925 
+L 92.046625 135.070925 
+z
+" style="fill: #c5dbc8; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_11">
+     <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: start" x="114.446625" y="140.670925" transform="rotate(-0 114.446625 140.670925)">Compatible</text>
+    </g>
+    <g id="patch_12">
+     <path d="M 170.909125 140.670925 
+L 186.909125 140.670925 
+L 186.909125 135.070925 
+L 170.909125 135.070925 
+z
+" style="fill: #467ebb; stroke: #1b1b1e; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_12">
+     <text style="font-size: 8px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; text-anchor: start" x="193.309125" y="140.670925" transform="rotate(-0 193.309125 140.670925)">Wrong</text>
+    </g>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p48172f6668">
+   <rect x="1.44" y="14.355703" width="241.272" height="100.25794"/>
+  </clipPath>
+ </defs>
+</svg>

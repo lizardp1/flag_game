@@ -1,0 +1,1479 @@
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import threading
+import time
+from typing import Any, Callable
+
+import anthropic
+import httpx
+import numpy as np
+import openai
+
+from nnd.backends.parsing import ParseError
+from nnd.flag_game import open_prompts, prompts
+from nnd.flag_game.catalog import COLOR_MAP, FlagSpec, StripeFlag, get_flag
+from nnd.flag_game.parsing import (
+    InteractionMessage,
+    parse_open_country_interaction_response,
+    parse_open_country_probe_response,
+    parse_interaction_response,
+    parse_probe_response,
+)
+from nnd.flag_game.pricing import MODEL_PRICING_USD_PER_1M_TOKENS
+from nnd.flag_game.render import image_to_data_uri, image_to_png_bytes
+from nnd.net import force_ipv4
+
+
+def _clean_base_url(name: str) -> str | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    cleaned = raw.strip()
+    return cleaned or None
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+@dataclass
+class FlagGameOpenAIBackend:
+    model: str
+    temperature: float
+    top_p: float
+    max_tokens: int
+    debug_dir: Path
+    image_detail: str = "original"
+    social_susceptibility: float = 0.5
+    prompt_social_susceptibility: bool = True
+    prompt_style: str = "closed_country_list"
+
+    def __post_init__(self) -> None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        force_ipv4()
+        base_url = _clean_base_url("OPENAI_BASE_URL")
+        trust_env = _env_flag("NND_HTTP_TRUST_ENV", False)
+        http_client = httpx.Client(trust_env=trust_env)
+        self.client = openai.OpenAI(api_key=api_key, base_url=base_url, http_client=http_client)
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+        self.usage_rows: list[dict[str, Any]] = []
+        import threading
+        self._audit_lock = threading.Lock()
+
+    def prepare_crop(self, crop_image: np.ndarray) -> str:
+        return image_to_data_uri(crop_image)
+
+    def interaction(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: str,
+        memory_lines: list[str],
+        m: int,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        messages = prompt_module.openai_multimodal_messages(
+            text=prompt_module.interaction_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_data_uri=prepared_crop,
+            image_detail=self.image_detail,
+        )
+        return self._call_with_retries(
+            messages,
+            lambda text: self._parse_interaction_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.interaction_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+        )
+
+    def probe(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: str,
+        memory_lines: list[str],
+        m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        messages = prompt_module.openai_multimodal_messages(
+            text=prompt_module.probe_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_data_uri=prepared_crop,
+            image_detail=self.image_detail,
+        )
+        return self._call_with_retries(
+            messages,
+            lambda text: self._parse_probe_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.probe_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+        )
+
+    def _prompt_module(self) -> Any:
+        if self.prompt_style == "closed_country_list":
+            return prompts
+        if self.prompt_style == "open_country":
+            return open_prompts
+        raise ValueError(f"Unsupported prompt_style: {self.prompt_style}")
+
+    def _parse_interaction_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_interaction_response(text, countries, m)
+        return parse_interaction_response(text, countries, m)
+
+    def _parse_probe_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_probe_response(text, countries, m)
+        return parse_probe_response(text, countries, m)
+
+    def _call(self, messages: list[dict[str, Any]]) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            max_completion_tokens=self.max_tokens,
+            response_format={"type": "json_object"},
+        )
+        self._record_usage(response)
+        content = response.choices[0].message.content
+        with self._audit_lock:
+            with (self.debug_dir / "calls.jsonl").open("a") as audit:
+                audit.write(json.dumps({"messages": messages, "response": content, "requested_model": self.model, "provider_model": getattr(response, "model", None)}, ensure_ascii=True) + "\n")
+        return content or ""
+
+    def _record_usage(self, response: Any) -> None:
+        usage = getattr(response, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0)
+        pricing = MODEL_PRICING_USD_PER_1M_TOKENS.get(self.model)
+        estimated_cost_usd = None
+        if pricing is not None:
+            estimated_cost_usd = (
+                (prompt_tokens / 1_000_000.0) * pricing["input"]
+                + (completion_tokens / 1_000_000.0) * pricing["output"]
+            )
+        self.usage_rows.append(
+            {
+                "model": self.model,
+                "provider_model": getattr(response, "model", None),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "estimated_cost_usd": estimated_cost_usd,
+            }
+        )
+
+    def usage_summary(self) -> dict[str, Any]:
+        prompt_tokens = sum(int(row.get("prompt_tokens", 0)) for row in self.usage_rows)
+        completion_tokens = sum(int(row.get("completion_tokens", 0)) for row in self.usage_rows)
+        total_tokens = sum(int(row.get("total_tokens", 0)) for row in self.usage_rows)
+        estimated_values = [
+            float(row["estimated_cost_usd"])
+            for row in self.usage_rows
+            if row.get("estimated_cost_usd") is not None
+        ]
+        return {
+            "model": self.model,
+            "api_call_count": len(self.usage_rows),
+            "provider_model_ids": sorted({r["provider_model"] for r in self.usage_rows if r.get("provider_model")}),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": sum(estimated_values) if estimated_values else None,
+            "pricing_known": self.model in MODEL_PRICING_USD_PER_1M_TOKENS,
+        }
+
+    def _call_with_retries(
+        self,
+        messages: list[dict[str, Any]],
+        parser: Callable[[str], Any],
+        retry_builder: Callable[[ParseError], str] | None = None,
+        max_retries: int = 2,
+    ) -> Any:
+        attempts: list[dict[str, Any]] = []
+        current_messages = list(messages)
+        for attempt in range(max_retries + 1):
+            response_text = self._call_with_backoff(current_messages)
+            attempts.append({"messages": current_messages, "response": response_text})
+            try:
+                return parser(response_text)
+            except ParseError as exc:
+                if attempt >= max_retries:
+                    self._write_debug(attempts)
+                    raise
+                retry_text = (
+                    retry_builder(exc)
+                    if retry_builder is not None
+                    else "Format error. Respond with STRICT JSON only matching the required schema. No extra text."
+                )
+                current_messages = list(current_messages) + [
+                    {
+                        "role": "user",
+                        "content": retry_text,
+                    }
+                ]
+        self._write_debug(attempts)
+        raise ParseError("Exceeded retry limit")
+
+    def _call_with_backoff(
+        self,
+        messages: list[dict[str, Any]],
+        max_retries: int = 8,
+        base_delay: float = 5.0,
+        max_delay: float = 60.0,
+    ) -> str:
+        delay = base_delay
+        for attempt in range(max_retries + 1):
+            try:
+                return self._call(messages)
+            except Exception as exc:
+                if attempt >= max_retries:
+                    raise exc
+                time.sleep(delay)
+                delay = min(delay * 2.0, max_delay)
+        raise RuntimeError("Unreachable backoff state")
+
+    def _write_debug(self, attempts: list[dict[str, Any]]) -> None:
+        timestamp = int(time.time() * 1000)
+        path = self.debug_dir / f"parse_failure_{timestamp}.json"
+        with open(path, "w") as handle:
+            json.dump({"attempts": attempts}, handle, indent=2, default=str)
+
+
+@dataclass
+class FlagGameAnthropicBackend:
+    model: str
+    temperature: float
+    top_p: float
+    max_tokens: int
+    debug_dir: Path
+    image_detail: str = "original"
+    social_susceptibility: float = 0.5
+    prompt_social_susceptibility: bool = True
+    prompt_style: str = "closed_country_list"
+
+    def __post_init__(self) -> None:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        force_ipv4()
+        base_url = _clean_base_url("ANTHROPIC_BASE_URL") or _clean_base_url("ANTHROPIC_API_URL")
+        trust_env = _env_flag("NND_HTTP_TRUST_ENV", False)
+        http_client = httpx.Client(trust_env=trust_env)
+        self.client = anthropic.Anthropic(api_key=api_key, base_url=base_url, http_client=http_client)
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+        self.usage_rows: list[dict[str, Any]] = []
+
+    def prepare_crop(self, crop_image: np.ndarray) -> str:
+        return image_to_data_uri(crop_image)
+
+    def interaction(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: str,
+        memory_lines: list[str],
+        m: int,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        request_parts = self._anthropic_multimodal_messages(
+            text=prompt_module.interaction_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_data_uri=prepared_crop,
+        )
+        return self._call_with_retries(
+            request_parts,
+            lambda text: self._parse_interaction_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.interaction_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+        )
+
+    def probe(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: str,
+        memory_lines: list[str],
+        m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        request_parts = self._anthropic_multimodal_messages(
+            text=prompt_module.probe_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_data_uri=prepared_crop,
+        )
+        return self._call_with_retries(
+            request_parts,
+            lambda text: self._parse_probe_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.probe_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+        )
+
+    def _prompt_module(self) -> Any:
+        if self.prompt_style == "closed_country_list":
+            return prompts
+        if self.prompt_style == "open_country":
+            return open_prompts
+        raise ValueError(f"Unsupported prompt_style: {self.prompt_style}")
+
+    def _parse_interaction_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_interaction_response(text, countries, m)
+        return parse_interaction_response(text, countries, m)
+
+    def _parse_probe_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_probe_response(text, countries, m)
+        return parse_probe_response(text, countries, m)
+
+    def _anthropic_multimodal_messages(
+        self,
+        *,
+        text: str,
+        crop_data_uri: str,
+    ) -> dict[str, Any]:
+        media_type, payload = _split_data_uri(crop_data_uri)
+        return {
+            "system": self._prompt_module().system_prompt(),
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": text},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": payload,
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+
+    def _call(self, request_parts: dict[str, Any]) -> str:
+        request = {
+            "model": self.model,
+            "system": request_parts["system"],
+            "messages": request_parts["messages"],
+            "max_tokens": self.max_tokens,
+        }
+        if self.top_p is not None and self.top_p != 1.0:
+            request["top_p"] = self.top_p
+        else:
+            request["temperature"] = self.temperature
+        response = self.client.messages.create(**request)
+        self._record_usage(response)
+        parts: list[str] = []
+        for block in response.content:
+            text = getattr(block, "text", "")
+            if text:
+                parts.append(text)
+        return "".join(parts)
+
+    def _record_usage(self, response: Any) -> None:
+        usage = getattr(response, "usage", None)
+        prompt_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+        total_tokens = prompt_tokens + completion_tokens
+        pricing = MODEL_PRICING_USD_PER_1M_TOKENS.get(self.model)
+        estimated_cost_usd = None
+        if pricing is not None:
+            estimated_cost_usd = (
+                (prompt_tokens / 1_000_000.0) * pricing["input"]
+                + (completion_tokens / 1_000_000.0) * pricing["output"]
+            )
+        self.usage_rows.append(
+            {
+                "model": self.model,
+                "provider_model": getattr(response, "model", None),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "estimated_cost_usd": estimated_cost_usd,
+            }
+        )
+
+    def usage_summary(self) -> dict[str, Any]:
+        prompt_tokens = sum(int(row.get("prompt_tokens", 0)) for row in self.usage_rows)
+        completion_tokens = sum(int(row.get("completion_tokens", 0)) for row in self.usage_rows)
+        total_tokens = sum(int(row.get("total_tokens", 0)) for row in self.usage_rows)
+        estimated_values = [
+            float(row["estimated_cost_usd"])
+            for row in self.usage_rows
+            if row.get("estimated_cost_usd") is not None
+        ]
+        return {
+            "model": self.model,
+            "api_call_count": len(self.usage_rows),
+            "provider_model_ids": sorted({r["provider_model"] for r in self.usage_rows if r.get("provider_model")}),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": sum(estimated_values) if estimated_values else None,
+            "pricing_known": self.model in MODEL_PRICING_USD_PER_1M_TOKENS,
+        }
+
+    def _call_with_retries(
+        self,
+        request_parts: dict[str, Any],
+        parser: Callable[[str], Any],
+        retry_builder: Callable[[ParseError], str] | None = None,
+        max_retries: int = 2,
+    ) -> Any:
+        attempts: list[dict[str, Any]] = []
+        current_messages = list(request_parts["messages"])
+        for attempt in range(max_retries + 1):
+            current_request = {**request_parts, "messages": current_messages}
+            response_text = self._call_with_backoff(current_request)
+            attempts.append({"messages": current_messages, "response": response_text})
+            try:
+                return parser(response_text)
+            except ParseError as exc:
+                if attempt >= max_retries:
+                    self._write_debug(attempts)
+                    raise
+                retry_text = (
+                    retry_builder(exc)
+                    if retry_builder is not None
+                    else "Format error. Respond with STRICT JSON only matching the required schema. No extra text."
+                )
+                current_messages = current_messages + [
+                    {
+                        "role": "user",
+                        "content": retry_text,
+                    }
+                ]
+        self._write_debug(attempts)
+        raise ParseError("Exceeded retry limit")
+
+    def _call_with_backoff(
+        self,
+        request_parts: dict[str, Any],
+        max_retries: int = 8,
+        base_delay: float = 5.0,
+        max_delay: float = 60.0,
+    ) -> str:
+        delay = base_delay
+        for attempt in range(max_retries + 1):
+            try:
+                return self._call(request_parts)
+            except Exception as exc:
+                if attempt >= max_retries:
+                    raise exc
+                time.sleep(delay)
+                delay = min(delay * 2.0, max_delay)
+        raise RuntimeError("Unreachable backoff state")
+
+    def _write_debug(self, attempts: list[dict[str, Any]]) -> None:
+        timestamp = int(time.time() * 1000)
+        path = self.debug_dir / f"parse_failure_{timestamp}.json"
+        with open(path, "w") as handle:
+            json.dump({"attempts": attempts}, handle, indent=2, default=str)
+
+
+@dataclass
+class FlagGameTransformersVLMBackend:
+    model: str
+    temperature: float
+    top_p: float
+    max_tokens: int
+    debug_dir: Path
+    image_detail: str = "original"
+    social_susceptibility: float = 0.5
+    prompt_social_susceptibility: bool = True
+    prompt_style: str = "closed_country_list"
+    activation_dir: Path | None = None
+    activation_config: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            import torch
+            import torchvision  # noqa: F401
+            from transformers import AutoProcessor
+        except ImportError as exc:
+            raise RuntimeError(
+                "Missing local VLM dependencies. Run: "
+                "python -m pip install -r requirements-open-models.txt"
+            ) from exc
+
+        self.torch = torch
+        self.vlm_family = self._infer_vlm_family(self.model)
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+        self.usage_rows: list[dict[str, Any]] = []
+        self._generate_lock = threading.Lock()
+        self._activation_rows: list[dict[str, Any]] = []
+        self._activation_config = self._normalize_activation_config(self.activation_config)
+        if self.activation_dir is not None:
+            self.activation_dir.mkdir(parents=True, exist_ok=True)
+
+        dtype = self._resolve_torch_dtype(os.environ.get("NND_TRANSFORMERS_DTYPE", "bfloat16"))
+        device_map = os.environ.get("NND_TRANSFORMERS_DEVICE_MAP", "auto").strip() or "auto"
+        attn_implementation = (
+            os.environ.get("NND_TRANSFORMERS_ATTN_IMPLEMENTATION", "auto").strip() or "auto"
+        )
+        trust_remote_code = _env_flag("NND_TRANSFORMERS_TRUST_REMOTE_CODE", False)
+        low_cpu_mem_usage = _env_flag("NND_TRANSFORMERS_LOW_CPU_MEM_USAGE", True)
+
+        model_kwargs: dict[str, Any] = {
+            "torch_dtype": dtype,
+            "device_map": device_map,
+            "trust_remote_code": trust_remote_code,
+            "low_cpu_mem_usage": low_cpu_mem_usage,
+        }
+        if attn_implementation != "auto":
+            model_kwargs["attn_implementation"] = attn_implementation
+
+        if self.vlm_family == "qwen2_5":
+            try:
+                from qwen_vl_utils import process_vision_info
+                from transformers import Qwen2_5_VLForConditionalGeneration
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Missing Qwen VLM dependencies. Run: "
+                    "python -m pip install -r requirements-open-models.txt"
+                ) from exc
+            self.process_vision_info = process_vision_info
+            self.model_obj = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                self.model,
+                **model_kwargs,
+            )
+        elif self.vlm_family == "llava_next":
+            try:
+                from transformers import LlavaNextForConditionalGeneration
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Missing LLaVA dependencies. Run: "
+                    "python -m pip install -r requirements-open-models.txt"
+                ) from exc
+            self.process_vision_info = None
+            self.model_obj = LlavaNextForConditionalGeneration.from_pretrained(
+                self.model,
+                **model_kwargs,
+            )
+        else:
+            raise ValueError(f"Unsupported local VLM family: {self.vlm_family!r}")
+        self.processor = AutoProcessor.from_pretrained(
+            self.model,
+            trust_remote_code=trust_remote_code,
+        )
+        self.model_obj.eval()
+
+    def prepare_crop(self, crop_image: np.ndarray) -> Path:
+        png_bytes = image_to_png_bytes(crop_image)
+        digest = hashlib.sha256(png_bytes).hexdigest()[:16]
+        path = self.debug_dir / "prepared_crops" / f"crop_{digest}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_bytes(png_bytes)
+        return path.resolve()
+
+    def interaction(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: Path,
+        memory_lines: list[str],
+        m: int,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        messages = self._multimodal_messages(
+            text=prompt_module.interaction_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_path=prepared_crop,
+        )
+        return self._call_with_retries(
+            messages,
+            lambda text: self._parse_interaction_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.interaction_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+            call_metadata=self._call_metadata(
+                call_metadata,
+                call_type="interaction",
+                m=m,
+                countries=countries,
+                memory_lines=memory_lines,
+                prepared_crop=prepared_crop,
+            ),
+        )
+
+    def probe(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: Path,
+        memory_lines: list[str],
+        m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        prompt_module = self._prompt_module()
+        messages = self._multimodal_messages(
+            text=prompt_module.probe_text(
+                countries=countries,
+                memory_lines=memory_lines,
+                m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
+            ),
+            crop_path=prepared_crop,
+        )
+        return self._call_with_retries(
+            messages,
+            lambda text: self._parse_probe_response(text, countries, m),
+            retry_builder=lambda exc: prompt_module.probe_retry_text(
+                countries=countries,
+                m=m,
+                error_text=str(exc),
+            ),
+            call_metadata=self._call_metadata(
+                call_metadata,
+                call_type="probe",
+                m=m,
+                countries=countries,
+                memory_lines=memory_lines,
+                prepared_crop=prepared_crop,
+            ),
+        )
+
+    def _prompt_module(self) -> Any:
+        if self.prompt_style == "closed_country_list":
+            return prompts
+        if self.prompt_style == "open_country":
+            return open_prompts
+        raise ValueError(f"Unsupported prompt_style: {self.prompt_style}")
+
+    def _parse_interaction_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_interaction_response(text, countries, m)
+        return parse_interaction_response(text, countries, m)
+
+    def _parse_probe_response(
+        self,
+        text: str,
+        countries: list[str],
+        m: int,
+    ) -> InteractionMessage:
+        if self.prompt_style == "open_country":
+            return parse_open_country_probe_response(text, countries, m)
+        return parse_probe_response(text, countries, m)
+
+    def _multimodal_messages(
+        self,
+        *,
+        text: str,
+        crop_path: Path,
+    ) -> list[dict[str, Any]]:
+        if self.vlm_family == "llava_next":
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": str(Path(crop_path).resolve())},
+                        {
+                            "type": "text",
+                            "text": f"{self._prompt_module().system_prompt()}\n\n{text}",
+                        },
+                    ],
+                }
+            ]
+        return [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": self._prompt_module().system_prompt()}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": Path(crop_path).resolve().as_uri()},
+                    {"type": "text", "text": text},
+                ],
+            },
+        ]
+
+    def _call(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> str:
+        text = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        inputs = self._prepare_processor_inputs(text=text, messages=messages)
+        device = self._infer_input_device()
+        inputs = {
+            key: value.to(device) if hasattr(value, "to") else value
+            for key, value in inputs.items()
+        }
+        generation_kwargs: dict[str, Any] = {
+            "max_new_tokens": self.max_tokens,
+            "do_sample": self.temperature > 0.0,
+        }
+        if self.temperature > 0.0:
+            generation_kwargs["temperature"] = self.temperature
+            generation_kwargs["top_p"] = self.top_p
+
+        with self._generate_lock:
+            with self.torch.inference_mode():
+                self._capture_activations_if_needed(
+                    inputs=inputs,
+                    messages=messages,
+                    prompt_text=text,
+                    call_metadata=call_metadata,
+                    prompt_length=int(inputs["input_ids"].shape[1]),
+                )
+                generated_ids = self.model_obj.generate(**inputs, **generation_kwargs)
+        prompt_length = inputs["input_ids"].shape[1]
+        generated_trimmed = generated_ids[:, prompt_length:]
+        outputs = self.processor.batch_decode(
+            generated_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
+        self._record_usage(
+            prompt_tokens=int(prompt_length),
+            completion_tokens=int(generated_trimmed.shape[1]),
+        )
+        return (outputs[0] if outputs else "").strip()
+
+    def _record_usage(self, *, prompt_tokens: int, completion_tokens: int) -> None:
+        self.usage_rows.append(
+            {
+                "model": self.model,
+                "provider_model": getattr(response, "model", None),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+                "estimated_cost_usd": 0.0,
+            }
+        )
+
+    def usage_summary(self) -> dict[str, Any]:
+        prompt_tokens = sum(int(row.get("prompt_tokens", 0)) for row in self.usage_rows)
+        completion_tokens = sum(int(row.get("completion_tokens", 0)) for row in self.usage_rows)
+        total_tokens = sum(int(row.get("total_tokens", 0)) for row in self.usage_rows)
+        return {
+            "model": self.model,
+            "api_call_count": len(self.usage_rows),
+            "provider_model_ids": sorted({r["provider_model"] for r in self.usage_rows if r.get("provider_model")}),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": 0.0,
+            "pricing_known": True,
+        }
+
+    def _call_with_retries(
+        self,
+        messages: list[dict[str, Any]],
+        parser: Callable[[str], Any],
+        retry_builder: Callable[[ParseError], str] | None = None,
+        call_metadata: dict[str, Any] | None = None,
+        max_retries: int = 2,
+    ) -> Any:
+        attempts: list[dict[str, Any]] = []
+        current_messages = list(messages)
+        for attempt in range(max_retries + 1):
+            attempt_metadata = {
+                **(call_metadata or {}),
+                "retry_attempt": attempt,
+            }
+            response_text = self._call_with_backoff(
+                current_messages,
+                call_metadata=attempt_metadata,
+            )
+            attempts.append({"messages": current_messages, "response": response_text})
+            try:
+                return parser(response_text)
+            except ParseError as exc:
+                if attempt >= max_retries:
+                    self._write_debug(attempts)
+                    raise
+                retry_text = (
+                    retry_builder(exc)
+                    if retry_builder is not None
+                    else "Format error. Respond with STRICT JSON only matching the required schema. No extra text."
+                )
+                current_messages = list(current_messages) + [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": retry_text}],
+                    }
+                ]
+        self._write_debug(attempts)
+        raise ParseError("Exceeded retry limit")
+
+    def _call_with_backoff(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        call_metadata: dict[str, Any] | None = None,
+        max_retries: int = 3,
+        base_delay: float = 2.0,
+        max_delay: float = 20.0,
+    ) -> str:
+        delay = base_delay
+        for attempt in range(max_retries + 1):
+            try:
+                return self._call(messages, call_metadata=call_metadata)
+            except Exception as exc:
+                if attempt >= max_retries:
+                    raise exc
+                time.sleep(delay)
+                delay = min(delay * 2.0, max_delay)
+        raise RuntimeError("Unreachable backoff state")
+
+    def _write_debug(self, attempts: list[dict[str, Any]]) -> None:
+        timestamp = int(time.time() * 1000)
+        path = self.debug_dir / f"parse_failure_{timestamp}.json"
+        with open(path, "w") as handle:
+            json.dump({"attempts": attempts}, handle, indent=2, default=str)
+
+    def _call_metadata(
+        self,
+        call_metadata: dict[str, Any] | None,
+        *,
+        call_type: str,
+        m: int,
+        countries: list[str],
+        memory_lines: list[str],
+        prepared_crop: Path,
+    ) -> dict[str, Any]:
+        metadata = dict(call_metadata or {})
+        metadata.setdefault("call_type", call_type)
+        metadata.setdefault("m", m)
+        metadata.setdefault("model", self.model)
+        metadata.setdefault("country_count", len(countries))
+        metadata.setdefault("memory_line_count", len(memory_lines))
+        metadata.setdefault("prepared_crop", str(prepared_crop))
+        return metadata
+
+    def _normalize_activation_config(self, config: dict[str, Any] | None) -> dict[str, Any]:
+        config = dict(config or {})
+        return {
+            "enabled": bool(config.get("enabled", False)),
+            "scope": str(config.get("scope", "initial_probe")),
+            "layers": config.get("layers"),
+            "save_full_sequence": bool(config.get("save_full_sequence", False)),
+            "storage_dtype": str(config.get("storage_dtype", "float16")),
+        }
+
+    def _capture_activations_if_needed(
+        self,
+        *,
+        inputs: dict[str, Any],
+        messages: list[dict[str, Any]],
+        prompt_text: str,
+        call_metadata: dict[str, Any] | None,
+        prompt_length: int,
+    ) -> None:
+        if not self._should_capture(call_metadata):
+            return
+        if self.activation_dir is None:
+            raise RuntimeError("Activation capture is enabled but no activation_dir was configured")
+
+        outputs = self.model_obj(**inputs, output_hidden_states=True, return_dict=True)
+        hidden_states = self._hidden_states_from_outputs(outputs)
+        if hidden_states is None:
+            raise RuntimeError("Model did not return hidden_states for activation capture")
+
+        resolved_layers = self._resolve_capture_layers(len(hidden_states))
+        storage_dtype = self._activation_storage_dtype()
+        activation_sequence_length = int(hidden_states[resolved_layers[0]].shape[1])
+        last_prompt_index = max(activation_sequence_length - 1, 0)
+        last_prompt_token = self.torch.stack(
+            [
+                hidden_states[layer][0, last_prompt_index, :].detach().to(storage_dtype).cpu()
+                for layer in resolved_layers
+            ]
+        )
+        mean_prompt = self.torch.stack(
+            [
+                hidden_states[layer][0, :activation_sequence_length, :]
+                .detach()
+                .float()
+                .mean(dim=0)
+                .to(storage_dtype)
+                .cpu()
+                for layer in resolved_layers
+            ]
+        )
+
+        metadata = self._json_safe(dict(call_metadata or {}))
+        call_id = self._activation_call_id(metadata)
+        tensor_relpath = Path("tensors") / f"{call_id}.pt"
+        tensor_path = self.activation_dir / tensor_relpath
+        tensor_path.parent.mkdir(parents=True, exist_ok=True)
+        input_ids = inputs["input_ids"][0].detach().cpu()
+        attention_mask = inputs.get("attention_mask")
+        saved_attention_mask = (
+            attention_mask[0].detach().cpu()
+            if hasattr(attention_mask, "detach")
+            else self.torch.ones_like(input_ids)
+        )
+        payload: dict[str, Any] = {
+            "metadata": metadata,
+            "layers": self.torch.tensor(resolved_layers, dtype=self.torch.int64),
+            "last_prompt_token": last_prompt_token,
+            "mean_prompt": mean_prompt,
+            "input_ids": input_ids,
+            "attention_mask": saved_attention_mask,
+            "prompt_length": prompt_length,
+            "activation_sequence_length": activation_sequence_length,
+            "last_prompt_token_index": last_prompt_index,
+            "prompt_text": prompt_text,
+            "tokens": self._tokens_from_input_ids(input_ids),
+        }
+        if self._activation_config["save_full_sequence"]:
+            payload["hidden_states"] = self.torch.stack(
+                [
+                    hidden_states[layer][0, :activation_sequence_length, :]
+                    .detach()
+                    .to(storage_dtype)
+                    .cpu()
+                    for layer in resolved_layers
+                ]
+            )
+        self.torch.save(payload, tensor_path)
+
+        row = {
+            **metadata,
+            "call_id": call_id,
+            "tensor_path": str(tensor_relpath),
+            "activation_dir": str(self.activation_dir),
+            "feature_keys": ["last_prompt_token", "mean_prompt"],
+            "layers": resolved_layers,
+            "prompt_length": prompt_length,
+            "activation_sequence_length": activation_sequence_length,
+            "last_prompt_token_index": last_prompt_index,
+            "input_shape": list(inputs["input_ids"].shape),
+            "model": self.model,
+            "messages": self._message_summary(messages),
+            "saved_at_unix_ms": int(time.time() * 1000),
+        }
+        if self._activation_config["save_full_sequence"]:
+            row["feature_keys"].append("hidden_states")
+        self._activation_rows.append(row)
+        with open(self.activation_dir / "index.jsonl", "a") as handle:
+            handle.write(json.dumps(self._json_safe(row), ensure_ascii=True) + "\n")
+
+    def _should_capture(self, call_metadata: dict[str, Any] | None) -> bool:
+        if not self._activation_config["enabled"]:
+            return False
+        if call_metadata is None:
+            return False
+        if int(call_metadata.get("retry_attempt", 0) or 0) != 0:
+            return False
+        scope = self._activation_config["scope"]
+        call_type = call_metadata.get("call_type")
+        if scope == "all_calls":
+            return True
+        if scope == "all_probes":
+            return call_type == "probe"
+        if scope == "initial_probe":
+            return call_type == "probe" and int(call_metadata.get("t", -1)) == 0 and int(call_metadata.get("m", 0)) == 3
+        raise ValueError(f"Unsupported activation_capture.scope: {scope!r}")
+
+    def _resolve_capture_layers(self, layer_count: int) -> list[int]:
+        configured = self._activation_config["layers"]
+        if configured is None:
+            return list(range(layer_count))
+        resolved: list[int] = []
+        for raw_layer in configured:
+            layer = int(raw_layer)
+            if layer < 0:
+                layer = layer_count + layer
+            if layer < 0 or layer >= layer_count:
+                raise ValueError(
+                    f"Activation capture layer {raw_layer} is out of range for {layer_count} hidden-state tensors"
+                )
+            resolved.append(layer)
+        return resolved
+
+    def _activation_storage_dtype(self) -> Any:
+        value = self._activation_config["storage_dtype"]
+        if value == "float16":
+            return self.torch.float16
+        if value == "bfloat16":
+            return self.torch.bfloat16
+        if value == "float32":
+            return self.torch.float32
+        raise ValueError("activation_capture.storage_dtype must be one of: float16, bfloat16, float32")
+
+    def _activation_call_id(self, metadata: dict[str, Any]) -> str:
+        prefix_parts = [
+            str(metadata.get("call_type", "call")),
+            f"t{metadata.get('t', 'x')}",
+            f"agent{metadata.get('agent_id', metadata.get('speaker_id', 'x'))}",
+            f"m{metadata.get('m', 'x')}",
+        ]
+        prefix = "_".join(self._safe_slug(part) for part in prefix_parts)
+        payload = json.dumps(metadata, sort_keys=True, default=str)
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:10]
+        return f"{prefix}_{digest}"
+
+    def _tokens_from_input_ids(self, input_ids: Any) -> list[str] | None:
+        tokenizer = getattr(self.processor, "tokenizer", self.processor)
+        if not hasattr(tokenizer, "convert_ids_to_tokens"):
+            return None
+        ids = [int(value) for value in input_ids.tolist()]
+        return list(tokenizer.convert_ids_to_tokens(ids))
+
+    def _message_summary(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        summary: list[dict[str, Any]] = []
+        for message in messages:
+            content_summary: list[dict[str, Any]] = []
+            for block in message.get("content", []):
+                if block.get("type") == "text":
+                    content_summary.append({"type": "text", "char_count": len(str(block.get("text", "")))})
+                elif block.get("type") == "image":
+                    content_summary.append({"type": "image", "image": str(block.get("image", ""))})
+                else:
+                    content_summary.append({"type": str(block.get("type", "unknown"))})
+            summary.append({"role": message.get("role"), "content": content_summary})
+        return summary
+
+    def _infer_vlm_family(self, model: str) -> str:
+        configured = os.environ.get("NND_TRANSFORMERS_VLM_FAMILY", "").strip().lower()
+        if configured:
+            aliases = {
+                "qwen": "qwen2_5",
+                "qwen2.5": "qwen2_5",
+                "qwen2_5": "qwen2_5",
+                "llava": "llava_next",
+                "llava_next": "llava_next",
+                "llava-next": "llava_next",
+            }
+            if configured not in aliases:
+                valid = ", ".join(sorted(aliases))
+                raise ValueError(f"NND_TRANSFORMERS_VLM_FAMILY must be one of: {valid}")
+            return aliases[configured]
+        normalized = model.lower()
+        if "llava" in normalized:
+            return "llava_next"
+        if "qwen" in normalized and "vl" in normalized:
+            return "qwen2_5"
+        raise ValueError(
+            f"Could not infer local VLM family for {model!r}. "
+            "Set NND_TRANSFORMERS_VLM_FAMILY=qwen2_5 or llava_next."
+        )
+
+    def _prepare_processor_inputs(
+        self,
+        *,
+        text: str,
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if self.vlm_family == "qwen2_5":
+            image_inputs, video_inputs = self.process_vision_info(messages)
+            return self.processor(
+                text=[text],
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                return_tensors="pt",
+            )
+        if self.vlm_family == "llava_next":
+            from PIL import Image
+
+            image_path = self._image_path_from_metadata(messages)
+            with Image.open(image_path) as opened:
+                image = opened.convert("RGB")
+            return self.processor(
+                images=image,
+                text=text,
+                padding=True,
+                return_tensors="pt",
+            )
+        raise ValueError(f"Unsupported local VLM family: {self.vlm_family!r}")
+
+    def _image_path_from_metadata(self, messages: list[dict[str, Any]]) -> Path:
+        for message in messages:
+            for block in message.get("content", []):
+                raw_image = block.get("image")
+                if raw_image:
+                    text = str(raw_image)
+                    if text.startswith("file://"):
+                        from urllib.parse import urlparse, unquote
+
+                        return Path(unquote(urlparse(text).path))
+                    return Path(text)
+        for row in reversed(self._activation_rows):
+            prepared_crop = row.get("prepared_crop")
+            if prepared_crop:
+                return Path(str(prepared_crop))
+        raise ValueError("Could not find image path in local VLM messages")
+
+    def _hidden_states_from_outputs(self, outputs: Any) -> Any:
+        hidden_states = getattr(outputs, "hidden_states", None)
+        if hidden_states is not None:
+            return hidden_states
+        language_outputs = getattr(outputs, "language_model_outputs", None)
+        if language_outputs is not None:
+            return getattr(language_outputs, "hidden_states", None)
+        return None
+
+    def _safe_slug(self, value: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_") or "x"
+
+    def _json_safe(self, value: Any) -> Any:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [self._json_safe(item) for item in value]
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        return value
+
+    def _resolve_torch_dtype(self, value: str) -> Any:
+        cleaned = value.strip().lower()
+        if cleaned == "auto":
+            return "auto"
+        if cleaned == "bfloat16":
+            return self.torch.bfloat16
+        if cleaned == "float16":
+            return self.torch.float16
+        if cleaned == "float32":
+            return self.torch.float32
+        raise ValueError(
+            "NND_TRANSFORMERS_DTYPE must be one of: auto, bfloat16, float16, float32"
+        )
+
+    def _infer_input_device(self) -> Any:
+        if hasattr(self.model_obj, "device"):
+            return self.model_obj.device
+        try:
+            return next(self.model_obj.parameters()).device
+        except StopIteration:
+            return self.torch.device("cuda" if self.torch.cuda.is_available() else "cpu")
+
+
+@dataclass
+class ScriptedFlagGameBackend:
+    seed: int = 0
+    social_susceptibility: float = 0.5
+    country_lookup: dict[str, FlagSpec] | None = None
+
+    def __post_init__(self) -> None:
+        self.rng = np.random.default_rng(self.seed)
+
+    def prepare_crop(self, crop_image: np.ndarray) -> np.ndarray:
+        return crop_image
+
+    def interaction(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: np.ndarray,
+        memory_lines: list[str],
+        m: int,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        return self.probe(
+            countries=countries,
+            prepared_crop=prepared_crop,
+            memory_lines=memory_lines,
+            m=m,
+        )
+
+    def probe(
+        self,
+        *,
+        countries: list[str],
+        prepared_crop: np.ndarray,
+        memory_lines: list[str],
+        m: int = 1,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> InteractionMessage:
+        scores = {country: self._country_score(country, prepared_crop, memory_lines) for country in countries}
+        ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+        best_country = ordered[0][0]
+        if m == 1:
+            return InteractionMessage(country=best_country)
+        if m == 2:
+            clue = self._short_clue(best_country, prepared_crop)
+            return InteractionMessage(country=best_country, clue=clue)
+        reason = self._reason(best_country, prepared_crop, memory_lines)
+        return InteractionMessage(country=best_country, reason=reason)
+
+    def _country_score(self, country: str, crop_image: np.ndarray, memory_lines: list[str]) -> float:
+        if self.country_lookup is not None and country in self.country_lookup:
+            flag = self.country_lookup[country]
+        else:
+            flag = get_flag(country)
+        memory_votes = Counter()
+        for line in memory_lines:
+            match = re.match(r"([^|]+)", line)
+            if match:
+                memory_votes[match.group(1).strip()] += 1
+        total_votes = sum(memory_votes.values())
+        social_score = 0.0 if total_votes == 0 else memory_votes.get(country, 0) / float(total_votes)
+        if not isinstance(flag, StripeFlag):
+            return self.social_susceptibility * (4.0 * social_score)
+
+        visible_colors = self._visible_color_names(crop_image)
+        orientation = self._infer_orientation(crop_image)
+        private_score = 0.0
+
+        if orientation is not None:
+            private_score += 1.0 if orientation == flag.orientation else -1.0
+
+        for color in visible_colors:
+            if color in flag.colors or color == flag.triangle_color:
+                private_score += 1.5
+            else:
+                private_score -= 0.5
+
+        ordered_colors = self._ordered_visible_colors(crop_image, orientation)
+        if ordered_colors:
+            if self._is_contiguous_subsequence(flag.colors, ordered_colors):
+                private_score += 2.0
+            else:
+                private_score -= 0.5
+
+        return (1.0 - self.social_susceptibility) * private_score + self.social_susceptibility * (4.0 * social_score)
+
+    def _visible_color_names(self, crop_image: np.ndarray) -> list[str]:
+        unique = {tuple(int(value) for value in pixel) for pixel in crop_image.reshape(-1, 3)}
+        inverse = {rgb: name for name, rgb in COLOR_MAP.items()}
+        names = [inverse[rgb] for rgb in unique if rgb in inverse]
+        return sorted(names)
+
+    def _infer_orientation(self, crop_image: np.ndarray) -> str | None:
+        if crop_image.shape[0] < 2 or crop_image.shape[1] < 2:
+            return None
+        horizontal_change = float(np.mean(np.any(crop_image[:, 1:, :] != crop_image[:, :-1, :], axis=2)))
+        vertical_change = float(np.mean(np.any(crop_image[1:, :, :] != crop_image[:-1, :, :], axis=2)))
+        if horizontal_change > vertical_change * 1.5:
+            return "vertical"
+        if vertical_change > horizontal_change * 1.5:
+            return "horizontal"
+        return None
+
+    def _ordered_visible_colors(self, crop_image: np.ndarray, orientation: str | None) -> tuple[str, ...]:
+        inverse = {rgb: name for name, rgb in COLOR_MAP.items()}
+        names: list[str] = []
+        if orientation == "vertical":
+            for col in range(crop_image.shape[1]):
+                rgb = tuple(int(value) for value in crop_image[:, col, :].mean(axis=0).round().astype(int))
+                if rgb in inverse and (not names or names[-1] != inverse[rgb]):
+                    names.append(inverse[rgb])
+        elif orientation == "horizontal":
+            for row in range(crop_image.shape[0]):
+                rgb = tuple(int(value) for value in crop_image[row, :, :].mean(axis=0).round().astype(int))
+                if rgb in inverse and (not names or names[-1] != inverse[rgb]):
+                    names.append(inverse[rgb])
+        return tuple(names)
+
+    def _is_contiguous_subsequence(self, full: tuple[str, ...], subseq: tuple[str, ...]) -> bool:
+        if not subseq:
+            return False
+        size = len(subseq)
+        for start in range(0, len(full) - size + 1):
+            if full[start : start + size] == subseq:
+                return True
+        return False
+
+    def _short_clue(self, country: str, crop_image: np.ndarray) -> str:
+        colors = self._visible_color_names(crop_image)
+        orientation = self._infer_orientation(crop_image)
+        parts = list(colors[:3])
+        if orientation:
+            parts.append(orientation)
+        if not parts:
+            parts = [country]
+        return " ".join(parts)
+
+    def _reason(self, country: str, crop_image: np.ndarray, memory_lines: list[str]) -> str:
+        colors = self._visible_color_names(crop_image)
+        orientation = self._infer_orientation(crop_image)
+        if memory_lines:
+            partner_hint = memory_lines[-1].split("|", 1)[0].strip()
+            if colors and orientation:
+                return f"I see {' and '.join(colors[:3])} with a {orientation} stripe pattern, and the latest message pointed toward {partner_hint}."
+            return f"My crop is limited, so I am leaning on the latest message toward {partner_hint}."
+        if colors and orientation:
+            return f"I see {' and '.join(colors[:3])} with what looks like a {orientation} stripe pattern."
+        if colors:
+            return f"I can only see {' and '.join(colors[:3])} in my crop."
+        return f"I am choosing {country} from the limited crop evidence."
+
+    def usage_summary(self) -> dict[str, Any]:
+        return {
+            "model": "scripted",
+            "api_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "pricing_known": True,
+        }
+
+
+def _split_data_uri(data_uri: str) -> tuple[str, str]:
+    prefix, separator, payload = data_uri.partition(",")
+    if separator != "," or not prefix.startswith("data:") or ";base64" not in prefix:
+        raise ValueError("Expected a base64 data URI for an Anthropic image block")
+    media_type = prefix.removeprefix("data:").split(";", 1)[0]
+    if not media_type:
+        raise ValueError("Data URI is missing a media type")
+    return media_type, payload
+
+
+def build_backend(
+    *,
+    backend_name: str,
+    model: str,
+    temperature: float,
+    top_p: float,
+    max_tokens: int,
+    debug_dir: Path,
+    image_detail: str,
+    seed: int,
+    social_susceptibility: float,
+    prompt_social_susceptibility: bool,
+    prompt_style: str = "closed_country_list",
+    country_lookup: dict[str, FlagSpec] | None = None,
+    activation_dir: Path | None = None,
+    activation_config: dict[str, Any] | None = None,
+) -> (
+    FlagGameOpenAIBackend
+    | FlagGameAnthropicBackend
+    | FlagGameTransformersVLMBackend
+    | ScriptedFlagGameBackend
+):
+    if backend_name == "scripted":
+        return ScriptedFlagGameBackend(
+            seed=seed,
+            social_susceptibility=social_susceptibility,
+            country_lookup=country_lookup,
+        )
+    if backend_name == "anthropic":
+        return FlagGameAnthropicBackend(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            debug_dir=debug_dir,
+            image_detail=image_detail,
+            social_susceptibility=social_susceptibility,
+            prompt_social_susceptibility=prompt_social_susceptibility,
+            prompt_style=prompt_style,
+        )
+    if backend_name == "transformers_vlm":
+        return FlagGameTransformersVLMBackend(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            debug_dir=debug_dir,
+            image_detail=image_detail,
+            social_susceptibility=social_susceptibility,
+            prompt_social_susceptibility=prompt_social_susceptibility,
+            prompt_style=prompt_style,
+            activation_dir=activation_dir,
+            activation_config=activation_config,
+        )
+    if backend_name == "openai":
+        return FlagGameOpenAIBackend(
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            debug_dir=debug_dir,
+            image_detail=image_detail,
+            social_susceptibility=social_susceptibility,
+            prompt_social_susceptibility=prompt_social_susceptibility,
+            prompt_style=prompt_style,
+        )
+    raise ValueError(f"Unsupported flag-game backend: {backend_name!r}")

@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "canonical_root": "paper/figures",
+  "rebuild_command": "./build.sh",
+  "final_figures": [
+    {
+      "id": "fig1",
+      "file": "final/fig1.png",
+      "sha256": "75c1f3c1bd1e54db60cc47d71b365db99733e8386257739bfbfa3b5b28e67036",
+      "assembly": "manual composite",
+      "panels": {
+        "a": {
+          "type": "manual illustration"
+        },
+        "b": {
+          "component": "population_scaling_slot"
+        },
+        "c": {
+          "component": "broadcast_alpha_slot"
+        },
+        "d": {
+          "component": "broadcast_diversity_slot"
+        },
+        "e": {
+          "component": "protocol_all_gpt4o_slot"
+        }
+      },
+      "paper_figure": 1
+    },
+    {
+      "id": "fig2",
+      "file": "final/fig2.png",
+      "sha256": "fc20dc9b43b0c7e4a952e9dc0807e91ffa344f207c0ff3e3b17a8baa33442d15",
+      "assembly": "manual composite",
+      "panels": {
+        "a": {
+          "type": "manual protocol schematic"
+        },
+        "b": {
+          "component": "protocol_full"
+        }
+      },
+      "paper_figure": 2
+    },
+    {
+      "id": "fig3",
+      "paper_figure": 3,
+      "file": "final/fig3.pdf",
+      "sha256": "0ee77c46f16c861c931f8e5eebce9b02fc6368cf8a40198a12f3d276d89c6b68",
+      "assembly": "preserved vector figure extracted from supplied manuscript",
+      "source": "Flag_Game_final.pdf",
+      "source_pdf_page": 6
+    },
+    {
+      "id": "fig4",
+      "file": "final/fig4.png",
+      "sha256": "71757902bf46e5fd0dfc89e29fc0c8eb90902bae0a5a3c0ab2c2329060acbd6d",
+      "assembly": "manual composite",
+      "panels": {
+        "a": {
+          "component": "broadcast_diversity_full"
+        },
+        "b": {
+          "component": "visual_audit_bars"
+        },
+        "c": {
+          "component": "visual_audit_examples"
+        }
+      },
+      "paper_figure": 4
+    },
+    {
+      "id": "fig5",
+      "file": "final/fig5.pdf",
+      "sha256": "a5abea09a3510c099b0a1eb860775e662157868325c1748957421f721a86f382",
+      "assembly": "preserved vector figure extracted from supplied manuscript",
+      "panels": {
+        "left": {
+          "asset": "assets/memory_probe_schematic.png"
+        },
+        "right": {
+          "component": "memory_conflict_four_models"
+        }
+      },
+      "paper_figure": 5,
+      "source": "Flag_Game_final.pdf",
+      "source_pdf_page": 8
+    },
+    {
+      "id": "fig6",
+      "paper_figure": 6,
+      "file": "final/fig6.pdf",
+      "assembly": "generated complete figure",
+      "build_script": "../../theory/make_social_circuit.py",
+      "note": "Rebuilt in place; Figure 6 includes the requested mean earliest-arrival annotation."
+    },
+    {
+      "id": "fig7",
+      "paper_figure": 7,
+      "file": "final/fig7.pdf",
+      "sha256": "798ced2a9c5c94305147930610cbfe08976060a97ec16bf7b6b8b70daff1909a",
+      "assembly": "preserved vector figure extracted from supplied manuscript",
+      "source": "Flag_Game_final.pdf",
+      "source_pdf_page": 9
+    },
+    {
+      "id": "fig8",
+      "paper_figure": 8,
+      "file": "final/fig8.pdf",
+      "assembly": "generated complete figure",
+      "build_script": "../../theory/make_figure.py",
+      "note": "Accepted four-panel theory figure."
+    }
+  ],
+  "components": {
+    "population_scaling_slot": {
+      "outputs": [
+        "generated/flag_game_slot_pairwise_n_scaling_mean_ciq.png",
+        "generated/flag_game_slot_pairwise_n_scaling_mean_ciq.pdf",
+        "generated/flag_game_slot_pairwise_n_scaling_mean_ciq.svg"
+      ],
+      "code": [
+        "code/make_flag_game_slot_figures.py"
+      ],
+      "data": [
+        "data/flag_game_pairwise_n_scaling_main_v3_summary.csv"
+      ]
+    },
+    "broadcast_alpha_slot": {
+      "outputs": [
+        "generated/flag_game_slot_broadcast_m3_alpha_mean_ciq.png",
+        "generated/flag_game_slot_broadcast_m3_alpha_mean_ciq.pdf",
+        "generated/flag_game_slot_broadcast_m3_alpha_mean_ciq.svg"
+      ],
+      "code": [
+        "code/make_flag_game_slot_figures.py"
+      ],
+      "data": [
+        "data/flag_game_slot_broadcast_compact_summary.json"
+      ]
+    },
+    "broadcast_diversity_slot": {
+      "outputs": [
+        "generated/flag_game_slot_broadcast_m3_diversity_mean_ciq.png",
+        "generated/flag_game_slot_broadcast_m3_diversity_mean_ciq.pdf",
+        "generated/flag_game_slot_broadcast_m3_diversity_mean_ciq.svg"
+      ],
+      "code": [
+        "code/make_flag_game_slot_figures.py"
+      ],
+      "data": [
+        "data/flag_game_slot_broadcast_compact_summary.json"
+      ]
+    },
+    "protocol_all_gpt4o_slot": {
+      "outputs": [
+        "generated/flag_game_slot_protocol_all_gpt4o_observers_ciq.png",
+        "generated/flag_game_slot_protocol_all_gpt4o_observers_ciq.pdf",
+        "generated/flag_game_slot_protocol_all_gpt4o_observers_ciq.svg"
+      ],
+      "code": [
+        "code/make_flag_game_slot_figures.py"
+      ],
+      "data": [
+        "data/flag_gam_protocol_side_by_side_N8_final_ranked_performance.csv",
+        "data/flag_gam_protocol_side_by_side_N8_final_summary.json"
+      ]
+    },
+    "protocol_full": {
+      "outputs": [
+        "generated/flag_gam_protocol_side_by_side_N8_final.png",
+        "generated/flag_gam_protocol_side_by_side_N8_final.pdf"
+      ],
+      "code": [
+        "code/make_flag_protocol_side_by_side_visuals.py",
+        "code/plot_style.py"
+      ],
+      "data": [
+        "data/flag_gam_protocol_side_by_side_N8_final_ranked_performance.csv"
+      ]
+    },
+    "broadcast_diversity_full": {
+      "outputs": [
+        "generated/flag_game_broadcast_m3_diversity_main_with_empirical_metrics.png",
+        "generated/flag_game_broadcast_m3_diversity_main_with_empirical_metrics.pdf"
+      ],
+      "code": [
+        "code/make_flag_broadcast_visuals.py",
+        "code/plot_style.py"
+      ],
+      "data": [
+        "data/flag_broadcast_alpha_mix_N8_m3_summary.csv",
+        "data/flag_game_broadcast_m3_diversity_main_with_empirical_metrics_summary.json"
+      ]
+    },
+    "visual_audit_bars": {
+      "outputs": [
+        "generated/flag_game_visual_only_paired_audit_main_half_height.png",
+        "generated/flag_game_visual_only_paired_audit_main_half_height.pdf",
+        "generated/flag_game_visual_only_paired_audit_main_half_height.svg"
+      ],
+      "code": [
+        "code/make_flag_visual_only_audit_visuals.py",
+        "code/plot_style.py"
+      ],
+      "data": [
+        "data/raw/visual_only_paired_crop_audit/results.csv",
+        "data/visual_audit_manual_adjudication.csv",
+        "data/flag_game_visual_only_paired_audit_model_visual_read_categories.csv",
+        "data/flag_game_visual_only_paired_audit_summary.json"
+      ]
+    },
+    "visual_audit_examples": {
+      "outputs": [
+        "generated/flag_game_visual_only_paired_audit_example_pairs.png",
+        "generated/flag_game_visual_only_paired_audit_example_pairs.pdf",
+        "generated/flag_game_visual_only_paired_audit_example_pairs.svg"
+      ],
+      "code": [
+        "code/make_flag_visual_only_audit_visuals.py",
+        "code/plot_style.py"
+      ],
+      "data": [
+        "data/raw/visual_only_paired_crop_audit/results_with_followups.csv",
+        "data/raw/visual_only_paired_crop_audit/results.jsonl",
+        "data/flag_game_visual_only_paired_audit_example_pairs.csv",
+        "data/flag_game_visual_only_paired_audit_crop_incompatible_rows.csv",
+        "data/raw/visual_only_paired_crop_audit/artifacts/gabon__idx084__t04_l08_h04_w06.png",
+        "data/raw/visual_only_paired_crop_audit/artifacts/guinea__idx232__t12_l04_h04_w06.png",
+        "data/raw/visual_only_paired_crop_audit/artifacts/yemen__idx163__t08_l11_h04_w06.png"
+      ]
+    },
+    "memory_conflict_four_models": {
+      "outputs": [
+        "generated/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment.png",
+        "generated/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment.pdf",
+        "generated/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment.svg"
+      ],
+      "code": [
+        "code/make_flag_memory_conflict_probe_visuals.py",
+        "code/plot_style.py"
+      ],
+      "data": [
+        "data/raw/memory_conflict_probe_pilot/results.csv",
+        "data/raw/memory_conflict_probe_claude/results.csv",
+        "data/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment_summary.csv",
+        "data/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_summary.json"
+      ]
+    },
+    "population_failure_decomposition": {
+      "outputs": [
+        "generated/flag_game_pairwise_n_scaling_empirical_ab_failure_decomposition.png",
+        "generated/flag_game_pairwise_n_scaling_empirical_ab_failure_decomposition.pdf",
+        "generated/flag_game_pairwise_n_scaling_empirical_ab_failure_decomposition.svg"
+      ],
+      "code": [
+        "code/make_flag_game_n_scaling_visuals.py",
+        "code/empirical_panel_helpers.py",
+        "code/plot_style.py"
+      ],
+      "data": [
+        "data/flag_game_pairwise_n_scaling_main_v3_summary.json",
+        "data/flag_game_pairwise_n_scaling_empirical_ab_failure_decomposition_summary.json"
+      ]
+    }
+  }
+}

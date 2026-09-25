@@ -1,0 +1,13 @@
+model,m,crop_condition,private_evidence_strength,lure_relation,social_evidence_type,first_false_memory_count_with_lure_rate_ge_0_5,max_chose_lure_rate
+gpt-4o,1,ambiguous_true,weak_private_evidence,compatible,private_compatible_social_evidence,5.0,1.0
+gpt-4o,1,ambiguous_true,weak_private_evidence,incompatible,contradictory_social_evidence,7.0,1.0
+gpt-4o,1,diagnostic_true,strong_private_evidence,incompatible,contradictory_social_evidence,,0.4166666666666667
+gpt-4o,3,ambiguous_true,weak_private_evidence,compatible,private_compatible_social_evidence,6.0,1.0
+gpt-4o,3,ambiguous_true,weak_private_evidence,incompatible,contradictory_social_evidence,8.0,0.75
+gpt-4o,3,diagnostic_true,strong_private_evidence,incompatible,contradictory_social_evidence,,0.3333333333333333
+gpt-5.4,1,ambiguous_true,weak_private_evidence,compatible,private_compatible_social_evidence,6.0,0.9166666666666666
+gpt-5.4,1,ambiguous_true,weak_private_evidence,incompatible,contradictory_social_evidence,8.0,0.5
+gpt-5.4,1,diagnostic_true,strong_private_evidence,incompatible,contradictory_social_evidence,,0.4166666666666667
+gpt-5.4,3,ambiguous_true,weak_private_evidence,compatible,private_compatible_social_evidence,6.0,1.0
+gpt-5.4,3,ambiguous_true,weak_private_evidence,incompatible,contradictory_social_evidence,,0.16666666666666666
+gpt-5.4,3,diagnostic_true,strong_private_evidence,incompatible,contradictory_social_evidence,,0.25

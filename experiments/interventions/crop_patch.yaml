@@ -1,0 +1,21 @@
+backend: scripted
+model: gpt-4o
+N: 8
+T: 80
+H: 8
+interaction_m: 3
+country_pool: stripe_expanded_24
+fixed_truth_country: Germany
+engineered_crop_agent_id: 4
+engineered_crop_preference: best
+tile_width: 6
+tile_height: 4
+render_scale: 1
+prompt_social_susceptibility: false
+probe_every: 8
+early_stop_probe_window: 0
+consensus_threshold: 0.85
+polarization_threshold: 0.25
+output:
+  make_plots: false
+  include_memory_snapshots: true

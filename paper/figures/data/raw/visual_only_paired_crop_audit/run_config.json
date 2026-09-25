@@ -1,0 +1,30 @@
+{
+  "all_truth_countries": false,
+  "backend": "openai",
+  "canvas_height": 16,
+  "canvas_width": 24,
+  "country_pool": "stripe_plus_real_triangle_28",
+  "image_detail": "high",
+  "limit_pairs": null,
+  "m": 3,
+  "max_tokens": 220,
+  "models": [
+    "gpt-4o",
+    "gpt-5.4"
+  ],
+  "n_stimuli": 33,
+  "out": "results/flag_game/visual_only_paired_crop_audit",
+  "per_label": 3,
+  "render_scale": 25,
+  "seed": 0,
+  "temperature": 0.0,
+  "tile_height": 4,
+  "tile_width": 6,
+  "top_p": 1.0,
+  "truth_countries": [
+    "Bahamas",
+    "Czech Republic",
+    "Guinea",
+    "Peru"
+  ]
+}

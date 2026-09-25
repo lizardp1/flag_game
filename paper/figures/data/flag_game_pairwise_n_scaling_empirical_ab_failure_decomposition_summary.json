@@ -1,0 +1,79 @@
+{
+  "description": "Final empirical population-size and failure-decomposition panels.",
+  "source": "paper/figures/data/flag_game_pairwise_n_scaling_main_v3_summary.json",
+  "condition": "all_gpt_4o",
+  "rows": [
+    {
+      "cut": "population",
+      "x": 4.0,
+      "label": "4",
+      "iiq": 0.2894736842105263,
+      "ciq": 0.5394736842105263,
+      "terminal": 0.5263157894736842,
+      "social_lift": 0.25,
+      "correct_consensus": 0.5,
+      "wrong_consensus": 0.2631578947368421,
+      "polarization": 0.23684210526315788
+    },
+    {
+      "cut": "population",
+      "x": 8.0,
+      "label": "8",
+      "iiq": 0.3618421052631579,
+      "ciq": 0.5855263157894737,
+      "terminal": 0.5263157894736842,
+      "social_lift": 0.22368421052631576,
+      "correct_consensus": 0.47368421052631576,
+      "wrong_consensus": 0.07894736842105263,
+      "polarization": 0.4473684210526316
+    },
+    {
+      "cut": "population",
+      "x": 16.0,
+      "label": "16",
+      "iiq": 0.31414473684210525,
+      "ciq": 0.6266447368421053,
+      "terminal": 0.5789473684210527,
+      "social_lift": 0.31250000000000006,
+      "correct_consensus": 0.5,
+      "wrong_consensus": 0.02631578947368421,
+      "polarization": 0.39473684210526316
+    },
+    {
+      "cut": "population",
+      "x": 32.0,
+      "label": "32",
+      "iiq": 0.33449172325976234,
+      "ciq": 0.6126644736842105,
+      "terminal": 0.6578947368421053,
+      "social_lift": 0.27817275042444817,
+      "correct_consensus": 0.4473684210526316,
+      "wrong_consensus": 0.0,
+      "polarization": 0.5
+    },
+    {
+      "cut": "population",
+      "x": 64.0,
+      "label": "64",
+      "iiq": 0.328125,
+      "ciq": 0.5879934210526315,
+      "terminal": 0.5789473684210527,
+      "social_lift": 0.2598684210526315,
+      "correct_consensus": 0.39473684210526316,
+      "wrong_consensus": 0.05263157894736842,
+      "polarization": 0.5
+    },
+    {
+      "cut": "population",
+      "x": 128.0,
+      "label": "128",
+      "iiq": 0.31087398914662695,
+      "ciq": 0.5899493243243243,
+      "terminal": 0.6216216216216216,
+      "social_lift": 0.2790753351776974,
+      "correct_consensus": 0.3783783783783784,
+      "wrong_consensus": 0.0,
+      "polarization": 0.5945945945945946
+    }
+  ]
+}

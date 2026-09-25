@@ -1,0 +1,11 @@
+run_id,truth_count,rival_count,valid_count,crops,rival_response_share
+N128/all_gpt_4o/seed_0035,450,5950,6400,128,0.9296875
+N128/all_gpt_4o/seed_0048,480,5920,6400,128,0.925
+N16/all_gpt_4o/seed_0048,61,739,800,16,0.92375
+N32/all_gpt_4o/seed_0035,128,1472,1600,32,0.92
+N32/all_gpt_4o/seed_0048,97,1503,1600,32,0.939375
+N4/all_gpt_4o/seed_0014,9,191,200,4,0.955
+N4/all_gpt_4o/seed_0035,33,167,200,4,0.835
+N4/all_gpt_4o/seed_0048,33,167,200,4,0.835
+N64/all_gpt_4o/seed_0035,261,2939,3200,64,0.9184375
+N8/all_gpt_4o/seed_0048,48,352,400,8,0.88

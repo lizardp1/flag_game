@@ -1,0 +1,11 @@
+base: broadcast.yaml
+grid:
+  protocol:
+  - pairwise
+  - broadcast
+  - manager
+  message_bandwidth:
+  - 1
+  - 2
+  - 3
+output_root: runs/bandwidth

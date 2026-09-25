@@ -1,0 +1,235 @@
+{
+  "passed": true,
+  "model_method": "exact_binary_birth_death",
+  "scope": "Exact discrete binary stationary/fixation calculation; no diffusion approximation. Empirical multicountry labels are preserved.",
+  "model_sha256": "c75a732539769ae191bc4dac4e5c643a96ac89f0b8da04d1a5a5b16dc22d7d85",
+  "binary_classification_checks": {
+    "fixed_states_checked": 282,
+    "consensus_threshold": 0.85,
+    "polarization_truth_share_interval": "(0.15, 0.85)",
+    "empirical_categories_unchanged": true
+  },
+  "parameters": {
+    "total_anchor_probability": 0.45,
+    "h0": 0.3,
+    "reference_share": 0.35,
+    "population_sizes": [
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128
+    ]
+  },
+  "outcome_order": [
+    "correct_consensus",
+    "wrong_consensus",
+    "polarization"
+  ],
+  "tolerance": 1e-10,
+  "method": "Exact stationary distributions for both anchors, fixation otherwise, and fair binary initialization without anchors. No fitting or simulation.",
+  "empirical_data_checks": {
+    "source_runs": 227,
+    "source_crop_placements": 9448,
+    "valid_responses_per_crop": 50,
+    "included_runs": 217,
+    "excluded_runs": 10,
+    "max_pooled_share_error": 0.0,
+    "yemen_rival_responses": 4192,
+    "yemen_valid_responses": 6400,
+    "yemen_rival_response_share": 0.655,
+    "exclusion_note": "The ten preserved exclusions were made under the earlier rectified-evidence measure; they do not indicate zero literal truth-response probability."
+  },
+  "structural_checks": {
+    "both_anchor_compositions_checked": 10795,
+    "maximum_errors": {
+      "stationary_mass": 6.661338147750939e-16,
+      "normalized_detailed_balance": 6.765421556309548e-17,
+      "neutral_conditional_mean": 7.771561172376096e-16,
+      "no_anchor_fixation": 5.329070518200751e-15,
+      "neutral_symmetric_mean": 2.1316282072803006e-14,
+      "one_anchor_fixation": 0.0
+    }
+  },
+  "grid_checks": {
+    "grid_shape": [
+      3,
+      7,
+      1001
+    ],
+    "maximum_errors": {
+      "stored_grid": 5.995204332975845e-15,
+      "probability_mass": 4.618527782440651e-14,
+      "reference_slice": 1.5543122344752192e-15,
+      "composition_mass": 4.1300296516055823e-14
+    },
+    "reference_slice": [
+      {
+        "N": 2,
+        "mean_truth_share": 0.6158844306677634,
+        "correct_consensus": 0.5698156806677634,
+        "wrong_consensus": 0.33804681933223646,
+        "polarization": 0.09213749999999998
+      },
+      {
+        "N": 4,
+        "mean_truth_share": 0.6567810520616931,
+        "correct_consensus": 0.46810506540979535,
+        "wrong_consensus": 0.1947701565433293,
+        "polarization": 0.33712477804687485
+      },
+      {
+        "N": 8,
+        "mean_truth_share": 0.6902961248502517,
+        "correct_consensus": 0.4294817555383184,
+        "wrong_consensus": 0.08331502851094902,
+        "polarization": 0.48720321595073124
+      },
+      {
+        "N": 16,
+        "mean_truth_share": 0.7101629887455658,
+        "correct_consensus": 0.28056024958375125,
+        "wrong_consensus": 0.010367737256919016,
+        "polarization": 0.7090720131593303
+      },
+      {
+        "N": 32,
+        "mean_truth_share": 0.7155749645384508,
+        "correct_consensus": 0.14073339844043584,
+        "wrong_consensus": 0.00019729934879176834,
+        "polarization": 0.8590693022107632
+      },
+      {
+        "N": 64,
+        "mean_truth_share": 0.7174191241858143,
+        "correct_consensus": 0.06715575517051989,
+        "wrong_consensus": 2.2325562630342866e-07,
+        "polarization": 0.9328440215738933
+      },
+      {
+        "N": 128,
+        "mean_truth_share": 0.7182465536454453,
+        "correct_consensus": 0.018030165544162622,
+        "wrong_consensus": 4.373221152494075e-13,
+        "polarization": 0.9819698344554111
+      }
+    ]
+  },
+  "run_mixture_checks": {
+    "run_count": 217,
+    "outcome_counts": {
+      "correct_consensus": 101,
+      "wrong_consensus": 15,
+      "polarization": 93,
+      "fragmentation": 8
+    },
+    "max_count_share_error": 0.0,
+    "max_per_run_model_error": 4.6629367034256575e-15,
+    "max_run_mixture_error": 1.6653345369377348e-15,
+    "model_mean_truth_peak_N": 32,
+    "observed_mean_accuracy_peak_N": 32,
+    "comparisons": [
+      {
+        "N": 4,
+        "runs": 35,
+        "mean_rival_response_share": 0.39085714285714285,
+        "model_mean_truth_share": 0.6165449699770773,
+        "observed_mean_accuracy": 0.5571428571428572,
+        "model_prob_correct_consensus": 0.49133175536193585,
+        "model_prob_wrong_consensus": 0.2724355149201127,
+        "model_prob_polarization": 0.2362327297179508,
+        "observed_prob_correct_consensus": 0.5142857142857142,
+        "observed_prob_wrong_consensus": 0.2571428571428571,
+        "observed_prob_polarization": 0.22857142857142856,
+        "observed_prob_fragmentation": 0.0
+      },
+      {
+        "N": 8,
+        "runs": 37,
+        "mean_rival_response_share": 0.41081081081081083,
+        "model_mean_truth_share": 0.6212386137045393,
+        "observed_mean_accuracy": 0.6013513513513513,
+        "model_prob_correct_consensus": 0.42709869088359653,
+        "model_prob_wrong_consensus": 0.1961803711586492,
+        "model_prob_polarization": 0.376720937957753,
+        "observed_prob_correct_consensus": 0.4864864864864865,
+        "observed_prob_wrong_consensus": 0.08108108108108109,
+        "observed_prob_polarization": 0.43243243243243246,
+        "observed_prob_fragmentation": 0.0
+      },
+      {
+        "N": 16,
+        "runs": 37,
+        "mean_rival_response_share": 0.3445608108108108,
+        "model_mean_truth_share": 0.7023188168364509,
+        "observed_mean_accuracy": 0.643581081081081,
+        "model_prob_correct_consensus": 0.4180404684352479,
+        "model_prob_wrong_consensus": 0.059463808498465325,
+        "model_prob_polarization": 0.5224957230662873,
+        "observed_prob_correct_consensus": 0.5135135135135135,
+        "observed_prob_wrong_consensus": 0.02702702702702703,
+        "observed_prob_polarization": 0.3783783783783784,
+        "observed_prob_fragmentation": 0.08108108108108109
+      },
+      {
+        "N": 32,
+        "runs": 36,
+        "mean_rival_response_share": 0.32227430555555553,
+        "model_mean_truth_share": 0.7316179127310032,
+        "observed_mean_accuracy": 0.6467013888888888,
+        "model_prob_correct_consensus": 0.3384083790006197,
+        "model_prob_wrong_consensus": 0.010814226760151332,
+        "model_prob_polarization": 0.6507773942392197,
+        "observed_prob_correct_consensus": 0.4722222222222222,
+        "observed_prob_wrong_consensus": 0.0,
+        "observed_prob_polarization": 0.4722222222222222,
+        "observed_prob_fragmentation": 0.05555555555555555
+      },
+      {
+        "N": 64,
+        "runs": 37,
+        "mean_rival_response_share": 0.3518412162162162,
+        "model_mean_truth_share": 0.7065477463505508,
+        "observed_mean_accuracy": 0.6038851351351351,
+        "model_prob_correct_consensus": 0.28773739609339616,
+        "model_prob_wrong_consensus": 0.009510068978393177,
+        "model_prob_polarization": 0.7027525349282469,
+        "observed_prob_correct_consensus": 0.40540540540540543,
+        "observed_prob_wrong_consensus": 0.05405405405405406,
+        "observed_prob_polarization": 0.4864864864864865,
+        "observed_prob_fragmentation": 0.05405405405405406
+      },
+      {
+        "N": 128,
+        "runs": 35,
+        "mean_rival_response_share": 0.33984375,
+        "model_mean_truth_share": 0.7184063918218393,
+        "observed_mean_accuracy": 0.6236607142857142,
+        "model_prob_correct_consensus": 0.29270545684091387,
+        "model_prob_wrong_consensus": 0.0026461026316843476,
+        "model_prob_polarization": 0.7046484405274127,
+        "observed_prob_correct_consensus": 0.4,
+        "observed_prob_wrong_consensus": 0.0,
+        "observed_prob_polarization": 0.5714285714285714,
+        "observed_prob_fragmentation": 0.02857142857142857
+      }
+    ],
+    "interpretation": "Descriptive equal-weight averaging over each N's measured run-specific shares; retrospective rival selection and differing share distributions across N prevent interpreting the mixture peak as a fixed-distribution model prediction."
+  },
+  "input_sha256": {
+    "model.py": "c75a732539769ae191bc4dac4e5c643a96ac89f0b8da04d1a5a5b16dc22d7d85",
+    "validate.py": "934875d74d4ca644c73ebfbfb467849def235e28d1c669fec5b48e226780b714",
+    "data/crop_probe_counts.csv": "4f52f0631e433f8111b1a903d60efa80dae52b6813712ff79d3e3dd7df4e7ffa",
+    "data/empirical_runs.csv": "6128c3e35232e0596450441796cc1e8886f884ae16a25f0826f31580a51770fb",
+    "data/excluded_runs.csv": "2f1c6fc7ecad561035e8dda2457c5912de647b97da25a041f2ababbee5d6ac5d",
+    "data/main_sweep_endpoints.csv": "ab8b004c600962f95fb4e88fed0c6f6dce5bf177cd17cfd1c285a52a5a3c13a8",
+    "data/model_mixture_reference.csv": "3a65f20bb49ec074445d28f0b02b08a594b4c8a36641440b97d3b0a3f4710469",
+    "data/model_reference_probabilities.csv": "9a1af24fa20dc879c8cf3ca7a0d821f7d3bc096025be2274dfc4916162a102de",
+    "data/model_run_reference.csv": "bfaea0307862ba0c47b7fd7d5e7f441c0c0ad313614fbbc961113a1a8eb1d5f8",
+    "data/yemen_crops.csv": "ff94e5a0fe1b778a54df9ba2364a3940c9116242b22854be73814e17a319ed34",
+    "data/model_probabilities.npz": "8ca3ea871b89c37c36b7e80b41d47cc2001021fd3ab79785c25d855dea06b41c",
+    "data/yemen_example.json": "593369cc11d4fb5cb14554f754c9f72e5ddbff5411108f83f33eee5a7225b750"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "source_summary_csv": "poster/exports/support_visuals/flag_broadcast_alpha_mix_N8_m3_summary.csv",
+  "outputs": [
+    "paper/exports/figures/flag_game_broadcast_m3_alpha_main.png",
+    "paper/exports/figures/flag_game_broadcast_m3_alpha_main.pdf"
+  ],
+  "description": "m=3 prompted social evidence uptake marginal averaged over all GPT-5.4 counts",
+  "final_vote_accuracy_definition": "For broadcast runs, final vote accuracy is 1 when the unique top-voted final country is the truth country; ties receive 0.",
+  "data": [
+    {
+      "alpha": 0.0,
+      "ciq": 0.5430555555555556,
+      "vote_accuracy": 0.7333333333333334,
+      "social_lift": 0.11071428571428571,
+      "success85_rate": 0.16666666666666669,
+      "n_cells": 9.0,
+      "n_trials": 90.0
+    },
+    {
+      "alpha": 0.25,
+      "ciq": 0.672222222222222,
+      "vote_accuracy": 0.7222222222222222,
+      "social_lift": 0.24900793650793654,
+      "success85_rate": 0.4555555555555555,
+      "n_cells": 9.0,
+      "n_trials": 90.0
+    },
+    {
+      "alpha": 0.5,
+      "ciq": 0.725,
+      "vote_accuracy": 0.7555555555555555,
+      "social_lift": 0.3035714285714286,
+      "success85_rate": 0.6333333333333333,
+      "n_cells": 9.0,
+      "n_trials": 90.0
+    },
+    {
+      "alpha": 0.75,
+      "ciq": 0.7999999999999999,
+      "vote_accuracy": 0.8222222222222223,
+      "social_lift": 0.3765873015873016,
+      "success85_rate": 0.7444444444444445,
+      "n_cells": 9.0,
+      "n_trials": 90.0
+    },
+    {
+      "alpha": 1.0,
+      "ciq": 0.6376984126984127,
+      "vote_accuracy": 0.6412698412698412,
+      "social_lift": 0.2834467120181406,
+      "success85_rate": 0.5587301587301587,
+      "n_cells": 9.0,
+      "n_trials": 315.0
+    }
+  ]
+}

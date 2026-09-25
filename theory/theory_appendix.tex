@@ -1,0 +1,87 @@
+\section{Minimal theory: finite-population details}
+\label{app:minimal-theory}
+
+\paragraph{Evidence composition.}
+The counts \((z_T,z_R,z_0)\) are multinomial with probabilities \((a_T,a_R,a_0)\), where \(a_0=1-a_T-a_R\). Their four support compositions have probabilities
+\begin{align}
+ P_{\mathrm{neither}}&=a_0^N,\nonumber\\
+ P_{T\text{-only}}&=(1-a_R)^N-a_0^N,\nonumber\\
+ P_{R\text{-only}}&=(1-a_T)^N-a_0^N,\nonumber\\
+ P_{T,R}&=1-(1-a_T)^N-(1-a_R)^N+a_0^N.
+ \label{eq:evidence-compositions}
+\end{align}
+The appearance scales \(Na_T\sim1\) and \(Na_R\sim1\) organize the population regimes. A broad window with truth evidence but little rival evidence requires substantial separation, \(a_R\ll a_T\); \(a_T>a_R\) alone only orders the scales. Evidence composition does not uniquely determine the collective outcome.
+
+\paragraph{Exact finite-population dynamics.}
+The transition probabilities in Eq.~\eqref{eq:rates} define the process conditional on \((z_T,z_R,z_0)\). Let \(p_t(n)\) be the probability that \(n\) ambiguous agents report truth after \(t\) interaction steps. Then
+\begin{align}
+ p_{t+1}(n)-p_t(n)
+ ={}&W_+(n-1)p_t(n-1)+W_-(n+1)p_t(n+1)\nonumber\\
+ &-[W_+(n)+W_-(n)]p_t(n).
+ \label{eq:master-equation}
+\end{align}
+Terms outside \(0\leq n\leq z_0\) are zero. Selecting the same agent as speaker and listener, or rejecting a message, leaves the state unchanged. The theoretical panels in Fig.~\ref{fig:theory-four-panel} use the stationary and fixation probabilities of this process, with \(q_T=(1+e^{-h_0})^{-1}\), averaged over the sampled evidence compositions.
+
+\paragraph{Mean-field closure.}
+For \(z_0>0\), the exact one-step mean satisfies
+\(\mathbb E[x_{t+1}]-\mathbb E[x_t]=\mathbb E[A(x_t)]/N\), conditional on the evidence composition. Replacing \(\mathbb E[A(x)]\) by \(A(\mathbb E[x])\) gives Eq.~\eqref{eq:meanfield}; when \(h_0\ne0\), this is an approximation because \(A\) is nonlinear. Writing \(\Delta x=x_{t+1}-x_t\), the one-step variance is
+\begin{equation}
+ \operatorname{Var}(\Delta x\mid n)
+ =\frac{W_++W_--(W_+-W_-)^2}{z_0^2}.
+ \label{eq:update-variance}
+\end{equation}
+The drift and fluctuations therefore follow from the same update rule. At fixed type fractions with \(f_0>0\), fluctuations over a fixed interval of \(\tau=t/N\) scale as \(N^{-1/2}\).
+
+\paragraph{Memetic drift and truth spreading.}
+Without zealots, the probability of eventual truth consensus from \(n\) initial truth reports is
+\begin{equation}
+ \Pr(T\text{ fixes}\mid n)=
+ \begin{cases}
+ n/N,&h_0=0,\\[3pt]
+ \displaystyle\frac{1-e^{-h_0n}}{1-e^{-h_0N}},&h_0\ne0.
+ \end{cases}
+ \label{eq:unanchored-fixation}
+\end{equation}
+Under neutral copying, finite populations therefore reach consensus by chance despite \(A(x)=0\). Positive bias raises the truth-fixation probability. We average over independent fair initial beliefs, \(n\sim\operatorname{Binomial}(N,1/2)\).
+
+With truth zealots only and \(0<q_T,q_R<1\), truth consensus is the unique absorbing state, accessible from every other state. Every finite population eventually reaches it; rival-only populations similarly reach wrong consensus. For truth zealots only,
+\(A'(1)=-q_Tf_T+(q_R-q_T)f_0\), giving local attraction when \(q_Tf_T>(q_R-q_T)f_0\). If the inequality is strictly reversed, a stable interior mean-field state can delay absorption, although eventual truth consensus remains certain. A finite interaction budget need not reach this eventual outcome.
+
+\paragraph{Persistent competition.}
+With both zealot types and \(z_0>0\), \(A(0)>0\) and \(A(1)<0\), giving a stable interior fixed point. The exact stationary probabilities satisfy
+\begin{equation}
+ \frac{\pi_{n+1}}{\pi_n}
+ =\frac{W_+(n)}{W_-(n+1)}
+ =e^{h_0}\frac{(z_0-n)(z_T+n)}{(n+1)(z_R+z_0-n-1)}.
+ \label{eq:stationary-recurrence}
+\end{equation}
+Equivalently, the stationary distribution is an exponentially tilted beta-binomial law,
+\begin{equation}
+ \pi_n\propto e^{h_0n}\binom{z_0}{n}
+ \frac{B(n+z_T,z_0-n+z_R)}{B(z_T,z_R)}.
+ \label{eq:stationary-count}
+\end{equation}
+Here \(B\) is the beta function, and the weights are normalized to sum to one. Under neutral copying, its exact moments are \citep{mobilia2007zealotry}
+\begin{equation}
+ \mathbb E[x]=\frac{z_T}{z_T+z_R},\qquad
+ \operatorname{Var}(x)
+ =\frac{z_Tz_RN}{z_0(z_T+z_R)^2(z_T+z_R+1)}.
+ \label{eq:neutral-moments}
+\end{equation}
+At fixed positive fractions, fluctuations shrink as \(N^{-1/2}\). Positive \(h_0\) tilts the stationary weights toward truth and negative \(h_0\) toward the rival. Both zealot types prevent unanimity, but an unequal split can still meet the consensus threshold. If \(z_0=0\), the truth share remains fixed at \(z_T/N\).
+
+\paragraph{Mean accuracy.}
+Under neutral copying, populations with zealots have expected truth share \(z_T/(z_T+z_R)\). Averaging over compositions, with unbiased initial beliefs when no zealots are present, gives
+\begin{equation}
+ \mathbb E[s_\infty]
+ =\frac{a_T}{a_T+a_R}(1-a_0^N)+\frac12a_0^N.
+ \label{eq:neutral-mean-accuracy}
+\end{equation}
+For fixed \(a_T>a_R\), this is nondecreasing with \(N\): evidence coverage alone does not produce a mean-accuracy peak in the neutral model. Mean truth share differs from correct-consensus probability. Figure~\ref{fig:theory-four-panel} uses truth-biased copying, \(h_0=+0.3\), and its fixed-share slice likewise has no mean-accuracy peak. Averaging model expectations at each run's measured share produces a maximum at \(N=32\), as in the empirical cohort. This comparison uses different evidence distributions across population sizes; it does not establish a peak at a fixed evidence distribution.
+
+\paragraph{Figure calculation and empirical comparison.}
+Endpoint probabilities average the conditional stationary, fixation, or fixed-state distributions over the multinomial compositions. They describe eventual outcomes, not the empirical stopping rule. The binary classes are correct consensus for \(s\geq0.85\), wrong consensus for \(s\leq0.15\), and polarization otherwise. The empirical classifier retains its multicountry definition: polarization requires two countries with at least 25\% support each, with remaining non-consensus outcomes classified as fragmentation.
+
+We use \(a_T+a_R=0.45\), \(h_0=0.3\), and panel b's share 0.35. Exact calculations at \(N=2,4,8,16,32,64,128\) are connected by shape-preserving cubic interpolation in \(\log_2N\), normalized across outcomes. Region boundaries mark crossings of outcome probabilities.
+
+Each initial crop is probed 50 times with answers restricted to truth and one rival. Pooled rival responses set \(a_R/(a_T+a_R)\), not the total zealot probability. The rival is selected retrospectively from final non-truth reports; unanimously correct runs use the leading non-truth country from the original initialization probes. We retain 217 runs, excluding ten with no crop producing more truth than rival responses. Panel d estimates local outcome frequencies independently of the theory using Gaussian bandwidth 0.05 in evidence share. Its soft regions are a descriptive smoother, not uncertainty estimates.

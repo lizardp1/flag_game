@@ -1,0 +1,15 @@
+N,endpoint,round,condition,patched_agents,collective_mean_accuracy_percent,ci95_low_percent,ci95_high_percent,observations,observation_unit
+1,isolated,,original,0,0.0,0.0,0.0,10,isolated judgment
+1,isolated,,patched,1,100.0,100.0,100.0,10,isolated judgment
+4,R10,10,original,0,40.0,25.0,62.5,10,game
+4,R10,10,patched,1,82.5,67.5,95.0,10,game
+8,R10,10,original,0,30.0,26.25,33.75,10,game
+8,R10,10,patched,1,70.0,57.5,82.5,10,game
+16,R10,10,original,0,33.125,24.375,45.625,10,game
+16,R10,10,patched,2,61.25,50.0,73.75,10,game
+32,R10,10,original,0,29.6875,26.5625,33.125,10,game
+32,R10,10,patched,4,50.3125,44.6875,56.25,10,game
+64,R10,10,original,0,29.53125,26.5625,32.96875,10,game
+64,R10,10,patched,8,46.875,42.5,52.5,10,game
+128,R10,10,original,0,28.203125,27.109375,29.140625,10,game
+128,R10,10,patched,16,45.3125,42.1875,49.21875,10,game

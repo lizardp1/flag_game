@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="522.477734pt" height="464.796pt" viewBox="0 0 522.477734 464.796" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ 
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 464.796 
+L 522.477734 464.796 
+L 522.477734 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 1.44 93.36575 
+L 108.223593 93.36575 
+L 108.223593 22.176689 
+L 1.44 22.176689 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g clip-path="url(#p0760e39d5c)">
+    <image xlink:href="data:image/png;base64,
+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" id="imagef57dbe2562" transform="scale(1 -1) translate(0 -71.28)" x="1.44" y="-22.08575" width="106.8" height="71.28"/>
+   </g>
+   <g id="matplotlib.axis_1"/>
+   <g id="matplotlib.axis_2"/>
+   <g id="patch_3">
+    <path d="M 1.44 93.36575 
+L 1.44 22.176689 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 108.223593 93.36575 
+L 108.223593 22.176689 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 1.44 93.36575 
+L 108.223593 93.36575 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 1.44 22.176689 
+L 108.223593 22.176689 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 8.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif" transform="translate(29.952031 8.186345)">Truth: Gabon</text>
+    <text style="font-size: 8.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif" transform="translate(31.916992 17.176689)">Unique crop</text>
+   </g>
+  </g>
+  <g id="axes_2">
+   <g id="line2d_1">
+    <path style="fill: none; stroke: #0077bb; stroke-width: 3; stroke-linecap: square"/>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 7.309406)">GPT-4o</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 16.158526)">Answer: Gabon</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 25.007646)"/>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 33.979688)">The flag has horizontal stripes of green and</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 43.047825)">yellow, which are part of Gabon's flag.</text>
+   </g>
+  </g>
+  <g id="axes_3">
+   <g id="line2d_2">
+    <path style="fill: none; stroke: #cc3311; stroke-width: 3; stroke-linecap: square"/>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 7.309406)">GPT-5.4</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 16.158526)">Answer: Lithuania</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 25.007646)"/>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 33.979688)">The flag shows three horizontal stripes of</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 42.924902)">green, yellow, and red, which matches</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 51.870115)">Lithuania.</text>
+   </g>
+  </g>
+  <g id="axes_4">
+   <g id="patch_7">
+    <path d="M 1.44 267.992531 
+L 108.223593 267.992531 
+L 108.223593 196.803469 
+L 1.44 196.803469 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g clip-path="url(#p4c837d5486)">
+    <image xlink:href="data:image/png;base64,
+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" id="image55249eb214" transform="scale(1 -1) translate(0 -71.28)" x="1.44" y="-196.712531" width="106.8" height="71.28"/>
+   </g>
+   <g id="matplotlib.axis_3"/>
+   <g id="matplotlib.axis_4"/>
+   <g id="patch_8">
+    <path d="M 1.44 267.992531 
+L 1.44 196.803469 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 108.223593 267.992531 
+L 108.223593 196.803469 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 1.44 267.992531 
+L 108.223593 267.992531 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 1.44 196.803469 
+L 108.223593 196.803469 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 8.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif" transform="translate(29.007734 182.813125)">Truth: Guinea</text>
+    <text style="font-size: 8.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif" transform="translate(31.916992 191.803469)">Unique crop</text>
+   </g>
+  </g>
+  <g id="axes_5">
+   <g id="line2d_3">
+    <path d="M 147.614874 171.560283 
+L 305.247796 171.560283 
+" style="fill: none; stroke: #0077bb; stroke-width: 3; stroke-linecap: square"/>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 181.936187)">GPT-4o</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 190.785306)">Answer: Guinea</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 199.634426)"/>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 208.606469)">The flag has vertical stripes of red and</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 217.674605)">yellow, matching Guinea's flag colors.</text>
+   </g>
+  </g>
+  <g id="axes_6">
+   <g id="line2d_4">
+    <path d="M 344.639077 171.560283 
+L 502.272 171.560283 
+" style="fill: none; stroke: #cc3311; stroke-width: 3; stroke-linecap: square"/>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 181.936187)">GPT-5.4</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 190.785306)">Answer: Belgium</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 199.73052)"/>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 208.702563)">The crop shows two vertical bands, black/red</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 217.674605)">on the left and yellow on the right, matching</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 226.619819)">Belgium's black-yellow-red vertical tricolor</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 235.565032)">with the black band likely cropped out.</text>
+   </g>
+  </g>
+  <g id="axes_7">
+   <g id="patch_12">
+    <path d="M 1.44 442.619311 
+L 108.223593 442.619311 
+L 108.223593 371.43025 
+L 1.44 371.43025 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g clip-path="url(#p7c5da998fb)">
+    <image xlink:href="data:image/png;base64,
+iVBORw0KGgoAAAANSUhEUgAAAb0AAAEpCAYAAAAH2fwRAAAEiklEQVR4nO3ZMRVEIRAEQbh3wrCOMr4LCLrKwE7Wwc4xxhkAEPB7PQAAbhE9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4AM0QMgQ/QAyBA9ADJED4CM/1rr9QYAuGLuvc+dUwDw1jzniB4ACX56AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgAZogdAhugBkCF6AGSIHgCj4gNeDgtPqTQWXQAAAABJRU5ErkJggg==" id="imageb048fa9c1f" transform="scale(1 -1) translate(0 -71.28)" x="1.44" y="-371.339311" width="106.8" height="71.28"/>
+   </g>
+   <g id="matplotlib.axis_5"/>
+   <g id="matplotlib.axis_6"/>
+   <g id="patch_13">
+    <path d="M 1.44 442.619311 
+L 1.44 371.43025 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 108.223593 442.619311 
+L 108.223593 371.43025 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 1.44 442.619311 
+L 108.223593 442.619311 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 1.44 371.43025 
+L 108.223593 371.43025 
+" style="fill: none; stroke: #1b1b1e; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 8.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif" transform="translate(29.70832 357.439906)">Truth: Yemen</text>
+    <text style="font-size: 8.5px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif" transform="translate(31.688554 366.43025)">Narrow crop</text>
+   </g>
+  </g>
+  <g id="axes_8">
+   <g id="line2d_5">
+    <path d="M 147.614874 346.187063 
+L 305.247796 346.187063 
+" style="fill: none; stroke: #0077bb; stroke-width: 3; stroke-linecap: square"/>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 356.562967)">GPT-4o</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 365.412087)">Answer: Yemen</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 374.261207)"/>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 383.233249)">The flag has horizontal stripes of white and</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(147.614874 392.178463)">black.</text>
+   </g>
+  </g>
+  <g id="axes_9">
+   <g id="line2d_6">
+    <path d="M 344.639077 346.187063 
+L 502.272 346.187063 
+" style="fill: none; stroke: #cc3311; stroke-width: 3; stroke-linecap: square"/>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 356.562967)">GPT-5.4</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 365.53501)">Answer: Germany</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 374.480223)"/>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 383.329343)">The crop shows a horizontal black band beneath</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 392.178463)">a white-looking area, which is most consistent</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 401.246599)">with the black-red-gold tricolor of Germany</text>
+    <text style="font-size: 8.2px; font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif; fill: #1b1b1e" transform="translate(344.639077 410.191813)">when the red is washed out.</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p0760e39d5c">
+   <rect x="1.44" y="22.176689" width="106.783593" height="71.189062"/>
+  </clipPath>
+  <clipPath id="p4c837d5486">
+   <rect x="1.44" y="196.803469" width="106.783593" height="71.189062"/>
+  </clipPath>
+  <clipPath id="p7c5da998fb">
+   <rect x="1.44" y="371.43025" width="106.783593" height="71.189062"/>
+  </clipPath>
+ </defs>
+</svg>
