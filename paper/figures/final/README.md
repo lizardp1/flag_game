@@ -21,4 +21,4 @@ paper. Figure 6 includes the subsequently requested mean-arrival annotation.
 
 Run `bash paper/figures/build.sh` from the repository root. It rebuilds the
 empirical components and complete Figures 6 and 8, then checks the manifest.
-Visual tweaks replace these outputs in place. 
+Visual tweaks replace these outputs in place.

@@ -11,7 +11,7 @@ All eight complete main-paper figures are in [`final/`](final/README.md), named
 Run `bash paper/figures/build.sh` from the repository root. It rebuilds the ten
 empirical components and complete Figures 6 and 8 without model calls. Figures
 with manual layouts remain preserved exports; rebuilding panels does not
-reassemble those layouts. 
+reassemble those layouts.
 
 Theory source code stays in `../../theory/`; its builders write Figures 6 and 8
-directly into `final/`. Do not create dated or versioned figure folders for tweaks.
+directly into `final/`.

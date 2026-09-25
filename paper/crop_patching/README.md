@@ -1,10 +1,7 @@
-# Crop-patching intervention materials
+# Crop-patching intervention
 
-These are the accepted Germany crop-patching insertion, causal-intervention
-text, methods, and figure previously stored among exploratory theory files.
-Use crop_patching_insertion.tex or causal_interventions_revised.tex for the
-corresponding part of the paper, and merge references_additions.bib.
+This folder contains the Germany crop-patching methods, population chart data,
+figure, and manuscript text. See `METHODS_AND_SCOPE.md` for the experimental
+setup and outcome definitions, and `population_chart_data.csv` for plotted values.
 
-The current statistical-mechanics theory is in ../../theory/. The obsolete
-full-section replacement that bundled an older theory is retained only in the
-verified cleanup archive, not as a competing manuscript source here.
+The binary model is documented in `../../theory/`.

@@ -32,7 +32,7 @@ All three bandwidths apply to observer reports **and manager feedback**. m=1 car
 
 With guidance enabled, observer alpha balances **private crop versus manager feedback**. Manager alpha balances **prior decisions versus current observer reports**. High alpha therefore increases each role's uptake of its current social source; it does not pretend the blind manager has visual evidence. At the first round the manager has no previous decisions, so alpha is not a promise of a first-round behavioral difference.
 
-Legacy manager configurations default to guidance disabled and m=3. The historical unprompted prompt text is preserved. Alpha and bandwidth extensions are new experimental conditions, not retroactive changes to published data.
+Manager configurations default to guidance disabled and m=3. Enable social guidance to apply alpha.
 
 ## Outcomes
 

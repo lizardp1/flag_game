@@ -1,9 +1,7 @@
-# Current Flag Game theory
+# Flag Game theory
 
-This folder is the single current theory package. It contains the accepted
-binary model, manuscript text, final four-panel figure, measurements, and
-everything needed to reproduce the figure without accessing older folders or
-making model API calls.
+This folder contains the binary model, manuscript text, measurements, and
+code to reproduce the theory figure without model API calls.
 
 ## Files to use
 
@@ -20,16 +18,15 @@ making model API calls.
 | `model.py` | Exact binary stationary and fixation probabilities |
 | `validate.py` | Numerical and measurement checks |
 | `data/` | Packaged measurements, example flag, and numerical tables |
-| `validation/` | Validation results and source provenance |
+| `validation/` | Numerical validation results |
 
-## Accepted version
+## Model and figure settings
 
 The figure uses the Yemen-Austria example, with pooled rival evidence share
 0.655. Panel (b) is the fixed-share slice 0.35. The model has total anchor
 probability 0.45 and adoption bias h0=0.3. Panel (c) is the theoretical phase
 diagram. Panel (d) shows empirical soft regions with Gaussian bandwidth 0.05
-in evidence share and maximum opacity 0.46, without dots or a separate legend. The latest larger fonts
-and left-shifted titles are retained.
+in evidence share and maximum opacity 0.46, without dots or a separate legend.
 
 The binary theory uses three exhaustive categories: correct consensus at truth
 share >=0.85, wrong consensus at truth share <=0.15, and polarization for every
@@ -49,12 +46,11 @@ Empirical panel (d) retains
 its original multicountry classification, including fragmentation; its
 polarization threshold remains 25% per country. The caption states this distinction.
 
-The empirical map uses the selected 217 runs. Their outcomes are unchanged:
+The empirical map uses the selected 217 runs. The outcomes are:
 101 correct consensus, 15 wrong consensus, 93 polarization, and 8 fragmentation.
 All 9,448 crop placements from the 227-run binary probe sweep are included as
 compact count records so the selected cohort, ten exclusions, and evidence
-shares can be checked locally. Full original model-call logs remain in the
-repository's `results/flag_game/` directory; they are not needed for these builds.
+shares can be checked locally.
 
 ## Reproduce
 
@@ -68,7 +64,7 @@ python3 make_social_circuit.py
 python3 validate.py
 ```
 
-The first command writes the three figure formats to `../paper/figures/final/`. The second
+The first two commands write Figures 8 and 6 to `../paper/figures/final/`. The third
 checks the exact stationary recurrence, absorbing fixation, neutral-copying
 identities, the full stored probability grid, probe counts, cohort, and run-level
 model references. To regenerate the model probability grid:
@@ -80,15 +76,12 @@ python3 model.py --recompute
 The model grid contains the seven population sizes above. All probabilities use
 the exact discrete calculation; PCHIP is applied only when drawing the figure.
 
-For requested visual changes, edit `style.py` or the existing figure script and
-rebuild `../paper/figures/final/fig8.*` in place. Use `python3 make_figure.py --formats png`
-for a quick visual check. Keep the accepted parameters above unless the scientific
-request changes them; do not create dated or version-numbered theory folders.
-Temporary comparisons belong in an ignored output location outside this package.
+For visual changes, edit `style.py` or the figure scripts and rebuild the existing
+outputs. Use `python3 make_figure.py --formats png` for a quick preview.
 
 To compile the reading copy with LaTeX and BibTeX, run `make preview`.
 For manuscript integration, copy the three theory `.tex` files, the figure under
-`figures/`, and merge `references.bib`. Preserve these relative paths, or adjust
+`../paper/figures/final/`, and merge `references.bib`. Preserve these relative paths, or adjust
 the inputs to match the manuscript's directory structure.
 
 

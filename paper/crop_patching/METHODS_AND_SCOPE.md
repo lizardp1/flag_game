@@ -38,12 +38,6 @@ There are ten social runs per condition at each N≥4, using schedule seeds 73�
 
 ## Relationship to the theory
 
-The finite-population model in the pasted section draws evidence types independently with probabilities a_T, a_R, and a_0. Its evidence-appearance probabilities concern the chance of obtaining previously absent types. The repeated-layout experiment does not change evidence diversity this way at N≥8. It shows an empirical change in the finite-horizon response to an intervention while crop proportions and intervention fraction are fixed.
+The finite-population model in the theory section draws evidence types independently with probabilities a_T, a_R, and a_0. Its evidence-appearance probabilities concern the chance of obtaining previously absent types. The repeated-layout experiment does not change evidence diversity this way at N≥8. It shows an empirical change in the finite-horizon response to an intervention while crop proportions and intervention fraction are fixed.
 
 The intervention curve therefore does not quantitatively validate the evidence-coverage mechanism, demonstrate loss of causal identifiability, or establish a threshold beyond which mechanistic interpretability fails. It motivates a complementary population-level analysis of a measured intervention response. Positive patching effects remain at large N. Explaining their magnitude and size dependence would require fitting/testing finite-population dynamics or a richer agent update model.
-
-## Evidence used
-
-All values above come from the accepted v12 publication data and its linked trial sources, recorded in `provenance.json`. The three missing historical derivative references already documented by v12 remain unverified; this revision neither repairs nor makes new provenance claims about them. The accepted figure and data are unchanged.
-
-The full replacement preserves the user's other empirical claims and theory equations. This editing pass does not independently re-audit the France–Peru sweep, memory-probe measurements, or the surrounding theory appendix.

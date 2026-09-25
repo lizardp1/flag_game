@@ -27,22 +27,19 @@ except urllib.error.HTTPError as error:
 PY
 ```
 
-Before a large paid sweep, run a small real-model smoke trial into a fresh output root and inspect prompt examples, per-call `debug/**/calls.jsonl`, protocol logs, memory snapshots, API usage, and trial manifest. No paid calls were needed for repository cleanup.
+Before a large paid sweep, run a small real-model smoke trial into a fresh output root and inspect prompt examples, per-call `debug/**/calls.jsonl`, protocol logs, memory snapshots, API usage, and trial manifest.
 
 ```sh
 flag-game run --config experiments/social/broadcast.yaml --set backend=openai --set N=2 --set 'composition={gpt-4o: 2}' --set rounds=2 --set output_root=runs/openai_smoke
 ```
 
-Use the full alpha/composition sweep and the broadcast-only protocol slice separately. Do not refresh unchanged pairwise or manager data merely to update broadcast figures. Put every scientific rerun in a fresh root; plotting an existing run reuses that run's data.
+Use a fresh output directory for each experiment. Plotting an existing run reuses its saved data.
 
 ## Run products
 
 Each social trial stores `experiment.json` (status, common/resolved settings, seed, source hash), `prompt_examples.json`, the engine's `trial_manifest.json`, protocol logs, summary, and API usage. OpenAI per-call audits retain messages/responses and provider-returned model IDs. Internal logs may identify models; peer-facing prompts must not.
 
-`--resume` skips only identical completed trials. Partial/failed data remains intact for audit; use a fresh output directory to retry. Logs are kept locally in ignored `runs/`; publish selected data through a separately reviewed release/data archive.
-
-## Historical data versus new experiments
-
+`--resume` skips only identical completed trials. Partial/failed data remains intact for audit; use a fresh output directory to retry. Logs are kept locally in ignored `runs/`.
 
 ## Tested dependency environment
 
