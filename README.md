@@ -34,7 +34,7 @@ Scripted runs check software behavior, not scientific model performance.
 - `experiments/`: social experiments, single-agent probes, and intervention examples.
 - `nnd/`: shared code and protocol engines.
 - `prompts/`: readable prompts generated from executable code.
-- `theory/`: accepted model, equations, inputs, and builders.
+- `theory/`: model implementation, inputs, and figure builders.
 - `paper/figures/final/`: complete main-paper figures, numbered fig1–fig8.
 - `paper/figures/generated/`: reproducible chart components.
 
