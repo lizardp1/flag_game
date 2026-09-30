@@ -194,6 +194,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tile-width", type=int, default=6)
     parser.add_argument("--tile-height", type=int, default=4)
     parser.add_argument("--render-scale", type=int, default=25)
+    parser.add_argument("--reasoning-effort", choices=["none"], default=None)
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--max-tokens", type=int, default=200)
@@ -836,6 +837,7 @@ def run_trials(
                 backend_name=backend_name,
                 model=model,
                 temperature=args.temperature,
+                reasoning_effort=args.reasoning_effort,
                 top_p=args.top_p,
                 max_tokens=args.max_tokens,
                 debug_dir=out_dir / "debug" / _safe_model_dir(model),
@@ -1741,6 +1743,8 @@ def plot_evidence_alignment_decomposition(
 
 def main() -> None:
     args = parse_args()
+    if args.reasoning_effort is not None and (args.backend or choose_default_backend()) != "openai":
+        raise ValueError("--reasoning-effort requires the OpenAI backend")
     args.out.mkdir(parents=True, exist_ok=True)
 
     if args.report_only:
@@ -1764,6 +1768,9 @@ def main() -> None:
         "crop_conditions": sorted(set(spec.crop_condition for spec in specs)),
         "lure_relations": sorted(set(spec.lure_relation for spec in specs)),
         "false_memory_counts": sorted(set(spec.false_memory_count for spec in specs)),
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "reasoning_effort": args.reasoning_effort,
         "replicates": args.replicates,
         "h": args.h,
         "backend": args.backend or choose_default_backend(),
