@@ -3,37 +3,73 @@ cases:
 - N: 4
   composition:
     gpt-4o: 4
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 2
 - N: 8
   composition:
     gpt-4o: 8
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 4
 - N: 16
   composition:
     gpt-4o: 16
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 8
 - N: 32
   composition:
     gpt-4o: 32
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 16
 - N: 64
   composition:
     gpt-4o: 64
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 32
 - N: 128
   composition:
     gpt-4o: 128
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 64
 - N: 4
   composition:
     gpt-5.4-2026-03-05: 4
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 2
 - N: 8
   composition:
     gpt-5.4-2026-03-05: 8
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 4
 - N: 16
   composition:
     gpt-5.4-2026-03-05: 16
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 8
 - N: 32
   composition:
     gpt-5.4-2026-03-05: 32
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 16
 - N: 64
   composition:
     gpt-5.4-2026-03-05: 64
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 32
 - N: 128
   composition:
     gpt-5.4-2026-03-05: 128
+  rounds: 32
+  early_stop_window: 5
+  probe_every: 64
 output_root: runs/population

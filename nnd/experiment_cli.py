@@ -28,6 +28,7 @@ class Experiment(BaseModel):
     message_bandwidth: Literal[1, 2, 3] = 3
     memory_capacity: int = Field(default=8, ge=0)
     rounds: int = Field(default=10, ge=1)
+    probe_every: int | None = Field(default=None, ge=1)
     seeds: list[int] = Field(default_factory=lambda: [0], min_length=1)
     randomize_model_slots: bool = True
     country_pool: str = "stripe_plus_real_triangle_28"
@@ -63,6 +64,8 @@ class Experiment(BaseModel):
             raise ValueError("Population protocols require N >= 2; use a single-agent probe for N=1")
         if self.backend == "anthropic" and self.protocol != "pairwise":
             raise ValueError("Anthropic is currently supported by pairwise/probes only")
+        if self.probe_every is not None and self.protocol != "pairwise":
+            raise ValueError("probe_every applies only to pairwise")
         models = list(self.composition) + ([self.manager_model] if self.protocol == "manager" else [])
         if any(not m.strip() for m in models):
             raise ValueError("model names must not be empty")
@@ -95,7 +98,7 @@ class Experiment(BaseModel):
                       output=dict(make_plots=self.make_plots, save_crop_images=self.save_crop_images))
         if self.protocol == "pairwise":
             common["output"].update(include_memory_snapshots=True, include_prompt_audit=True)
-            return FlagGameConfig(**common, T=self.rounds*self.N, probe_every=self.N,
+            return FlagGameConfig(**common, T=self.rounds*self.N, probe_every=self.probe_every or self.N,
                                   early_stop_probe_window=self.early_stop_window, probe_workers=self.workers)
         if self.protocol == "broadcast":
             return BroadcastFlagGameConfig(**common, rounds=self.rounds, agent_workers=self.workers,

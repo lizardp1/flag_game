@@ -685,7 +685,7 @@ def run_flag_game_experiment(
             partial_df if partial_df is not None else pd.DataFrame(),
             config.early_stop_probe_window,
             config.N,
-            config.consensus_threshold,
+            1.0,
         )
         return partial_df, should_stop, stop_country
 

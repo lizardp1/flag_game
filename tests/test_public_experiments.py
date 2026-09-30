@@ -16,6 +16,27 @@ class ExperimentTests(unittest.TestCase):
         return Experiment(protocol=protocol,N=2,composition={'gpt-4o':1,'gpt-5.4-2026-03-05':1},
                           country_pool='stripe_expanded_24',render_scale=1,rounds=2,save_crop_images=False,**kwargs)
 
+    def test_population_budget_and_full_consensus_stop(self):
+        import pandas as pd
+        import yaml
+        from nnd.flag_game.runner import _has_stable_consensus
+        root = Path(__file__).resolve().parents[1]
+        sweep = yaml.safe_load((root/'experiments/social/population.yaml').read_text())
+        base = yaml.safe_load((root/'experiments/social'/sweep['base']).read_text())
+        for case in sweep['cases']:
+            cfg = Experiment.model_validate({**base, **case}).resolve(0)
+            self.assertEqual(cfg.T, 32*cfg.N)
+            self.assertEqual(cfg.probe_every, cfg.N//2)
+            self.assertEqual(cfg.early_stop_probe_window, 5)
+        rows = [{'consensus_country':'France', 'top1_share':1.0, 'valid_probe_count':8} for _ in range(5)]
+        stop = lambda data: _has_stable_consensus(pd.DataFrame(data), 5, 8, 1.0)[0]
+        self.assertTrue(stop(rows))
+        self.assertFalse(stop(rows[:4]))
+        for field, value in [('top1_share', .875), ('consensus_country', 'Peru'), ('valid_probe_count', 7)]:
+            changed = [dict(row) for row in rows]
+            changed[-1][field] = value
+            self.assertFalse(stop(changed))
+
     def test_validation(self):
         with self.assertRaises(ValueError): Experiment(protocol='manager',N=2,composition={'gpt-4o':1})
         with self.assertRaises(ValueError): self.config(social_evidence_alpha=1.1)
