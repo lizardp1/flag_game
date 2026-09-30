@@ -26,7 +26,7 @@ class ExperimentTests(unittest.TestCase):
         for case in sweep['cases']:
             cfg = Experiment.model_validate({**base, **case}).resolve(0)
             self.assertEqual(cfg.T, 32*cfg.N)
-            self.assertEqual(cfg.probe_every, cfg.N//2)
+            self.assertEqual(cfg.probe_every, cfg.N)
             self.assertEqual(cfg.early_stop_probe_window, 5)
         rows = [{'consensus_country':'France', 'top1_share':1.0, 'valid_probe_count':8} for _ in range(5)]
         stop = lambda data: _has_stable_consensus(pd.DataFrame(data), 5, 8, 1.0)[0]
