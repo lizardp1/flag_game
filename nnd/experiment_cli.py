@@ -6,6 +6,7 @@ import itertools
 import json
 import random
 import subprocess
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any, Literal
 
@@ -45,7 +46,8 @@ class Experiment(BaseModel):
     consensus_threshold: float = Field(default=0.85, gt=0, le=1)
     polarization_threshold: float = Field(default=0.25, gt=0, le=1)
     early_stop_window: int = Field(default=0, ge=0)
-    workers: int = Field(default=1, ge=1)
+    workers: int = Field(default=8, ge=1)
+    seed_workers: int = Field(default=2, ge=1)
     make_plots: bool = False
     save_crop_images: bool = True
     output_root: Path = Path("runs/social")
@@ -182,7 +184,8 @@ def execute(config: Experiment, resume: bool=False) -> None:
         if can_skip(out,digest,source_hash,resume):
             continue
         plan.append((seed,out,config.resolve(seed)))
-    for seed,out,resolved in plan:
+    def run_trial(item):
+        seed,out,resolved = item
         out.mkdir(parents=True,exist_ok=False)
         record=dict(status='running', protocol=config.protocol, seed=seed,
                     prompt_contract=f'{config.protocol}-public-v1',configuration_hash=digest,source_hash=source_hash,
@@ -198,6 +201,22 @@ def execute(config: Experiment, resume: bool=False) -> None:
         except Exception as exc:
             record.update(status='failed', error_type=type(exc).__name__);save();raise
         save();typer.echo(f"Completed {config.protocol}: {out}")
+
+    if config.seed_workers == 1 or len(plan) <= 1:
+        for item in plan:
+            run_trial(item)
+        return
+    # Keep only the active trials submitted; a failure prevents further starts.
+    items = iter(plan)
+    with ThreadPoolExecutor(max_workers=config.seed_workers) as executor:
+        pending = {executor.submit(run_trial, item)
+                   for item in itertools.islice(items, config.seed_workers)}
+        while pending:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for future in done:
+                future.result()
+            for item in itertools.islice(items, len(done)):
+                pending.add(executor.submit(run_trial, item))
 
 
 @app.command()

@@ -2,6 +2,8 @@
 
 Run from the repository root. Edit the YAML files to set N, model counts, alpha,
 bandwidth, memory, rounds, and seeds. Model counts must sum to N.
+Defaults: 2 concurrent seeds and 8 workers per seed. Override with
+`--set seed_workers=2 --set workers=8` on `flag-game run`.
 Presets use the scripted backend; see `docs/reproduce.md` for API runs.
 
 ```sh

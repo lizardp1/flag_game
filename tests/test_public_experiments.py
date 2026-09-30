@@ -37,6 +37,49 @@ class ExperimentTests(unittest.TestCase):
             changed[-1][field] = value
             self.assertFalse(stop(changed))
 
+    def test_parallel_seed_limit_and_separate_outputs(self):
+        import threading
+        gate = threading.Barrier(2)
+        lock = threading.Lock()
+        state = {'active': 0, 'peak': 0}
+        def trial(config, *, out_dir, seed):
+            with lock:
+                state['active'] += 1
+                state['peak'] = max(state['peak'], state['active'])
+            gate.wait(timeout=10)
+            with lock:
+                state['active'] -= 1
+            return {'summary': {'seed': seed}}
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self.config('pairwise', seeds=[0,1,2,3], output_root=Path(tmp))
+            self.assertEqual(cfg.workers, 8)
+            self.assertEqual(cfg.seed_workers, 2)
+            self.assertEqual(cfg.resolve(0).probe_workers, 8)
+            with patch('nnd.flag_game.runner.run_flag_game_experiment', side_effect=trial):
+                execute(cfg)
+            self.assertEqual(state['peak'], 2)
+            for seed in cfg.seeds:
+                record = json.loads((Path(tmp)/f'seed_{seed:04d}'/'experiment.json').read_text())
+                self.assertEqual(record['status'], 'complete')
+                self.assertEqual(record['summary']['seed'], seed)
+
+    def test_parallel_failure_does_not_start_remaining_seeds(self):
+        import threading
+        gate = threading.Barrier(2)
+        def trial(config, *, out_dir, seed):
+            gate.wait(timeout=10)
+            raise RuntimeError('provider failure')
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = self.config('pairwise', seeds=[0,1,2,3], output_root=Path(tmp))
+            with patch('nnd.flag_game.runner.run_flag_game_experiment', side_effect=trial):
+                with self.assertRaises(RuntimeError):
+                    execute(cfg)
+            for seed in (0,1):
+                record = json.loads((Path(tmp)/f'seed_{seed:04d}'/'experiment.json').read_text())
+                self.assertEqual(record['status'], 'failed')
+            self.assertFalse((Path(tmp)/'seed_0002').exists())
+            self.assertFalse((Path(tmp)/'seed_0003').exists())
+
     def test_validation(self):
         with self.assertRaises(ValueError): Experiment(protocol='manager',N=2,composition={'gpt-4o':1})
         with self.assertRaises(ValueError): self.config(social_evidence_alpha=1.1)
