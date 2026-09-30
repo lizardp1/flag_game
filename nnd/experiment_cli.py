@@ -40,6 +40,7 @@ class Experiment(BaseModel):
     tile_height: int = 4
     render_scale: int = Field(default=25, ge=1)
     image_detail: Literal["auto", "low", "high", "original"] = "high"
+    reasoning_effort: Literal["none"] | None = None
     temperature: float = 0.2
     top_p: float = 1.0
     max_tokens: int = Field(default=250, ge=1)
@@ -66,6 +67,8 @@ class Experiment(BaseModel):
             raise ValueError("Population protocols require N >= 2; use a single-agent probe for N=1")
         if self.backend == "anthropic" and self.protocol != "pairwise":
             raise ValueError("Anthropic is currently supported by pairwise/probes only")
+        if self.reasoning_effort is not None and (self.protocol != "pairwise" or self.backend != "openai"):
+            raise ValueError("reasoning_effort is supported by OpenAI pairwise runs only")
         if self.probe_every is not None and self.protocol != "pairwise":
             raise ValueError("probe_every applies only to pairwise")
         models = list(self.composition) + ([self.manager_model] if self.protocol == "manager" else [])
@@ -101,6 +104,7 @@ class Experiment(BaseModel):
         if self.protocol == "pairwise":
             common["output"].update(include_memory_snapshots=True, include_prompt_audit=True)
             return FlagGameConfig(**common, T=self.rounds*self.N, probe_every=self.probe_every or self.N,
+                                  reasoning_effort=self.reasoning_effort,
                                   early_stop_probe_window=self.early_stop_window, probe_workers=self.workers)
         if self.protocol == "broadcast":
             return BroadcastFlagGameConfig(**common, rounds=self.rounds, agent_workers=self.workers,

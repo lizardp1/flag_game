@@ -62,6 +62,7 @@ class FlagGameConfig(BaseModel):
     engineered_crop_agent_id: int | None = None
     engineered_crop_preference: Literal["best", "worst"] | None = None
     render_scale: int = 1
+    reasoning_effort: Literal["none"] | None = None
     temperature: float = 0.2
     top_p: float = 1.0
     max_tokens: int = 200

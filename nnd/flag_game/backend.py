@@ -58,6 +58,8 @@ class FlagGameOpenAIBackend:
     prompt_social_susceptibility: bool = True
     prompt_style: str = "closed_country_list"
 
+    reasoning_effort: str | None = None
+
     def __post_init__(self) -> None:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
@@ -172,6 +174,7 @@ class FlagGameOpenAIBackend:
             top_p=self.top_p,
             max_completion_tokens=self.max_tokens,
             response_format={"type": "json_object"},
+            **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort is not None else {}),
         )
         self._record_usage(response)
         content = response.choices[0].message.content
@@ -1422,6 +1425,7 @@ def build_backend(
     seed: int,
     social_susceptibility: float,
     prompt_social_susceptibility: bool,
+    reasoning_effort: str | None = None,
     prompt_style: str = "closed_country_list",
     country_lookup: dict[str, FlagSpec] | None = None,
     activation_dir: Path | None = None,
@@ -1466,6 +1470,7 @@ def build_backend(
         )
     if backend_name == "openai":
         return FlagGameOpenAIBackend(
+            reasoning_effort=reasoning_effort,
             model=model,
             temperature=temperature,
             top_p=top_p,

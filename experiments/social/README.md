@@ -14,3 +14,10 @@ flag-game sweep --config experiments/social/alpha_composition.yaml
 flag-game analyze --runs runs/alpha_composition --out runs/alpha_composition/analysis
 flag-game plot --summary runs/alpha_composition/analysis/summary.csv --out runs/alpha_composition/analysis/accuracy.png --font-size 12
 ```
+
+Paper population seeds and settings (choose `gpt4o` or `gpt54` as the baseline):
+
+```sh
+python scripts/run_paper_population.py --model gpt-5.6-terra --reasoning-effort none --baseline gpt4o --out runs/terra_smoke --smoke
+python scripts/run_paper_population.py --model gpt-5.6-terra --reasoning-effort none --baseline gpt4o --out runs/terra_paper
+```

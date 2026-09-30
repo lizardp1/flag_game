@@ -337,6 +337,7 @@ def _build_agent_backends(
             continue
         backend_cache[model] = build_backend(
             backend_name=config.backend,
+            reasoning_effort=config.reasoning_effort,
             model=model,
             temperature=config.temperature,
             top_p=config.top_p,
