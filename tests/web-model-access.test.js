@@ -36,7 +36,7 @@ test('only GPT-4o is available without a Claude key, including old browser key s
     assert.deepEqual(availableModels(keys).map(m => m.id), ['gpt-4o'])
   }
   assert.deepEqual(availableModels({ anthropic: 'test-only-visitor-credential' }).map(m => m.id), [
-    'gpt-4o', 'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-haiku-4-5',
+    'gpt-4o', 'claude-sonnet-4-6', 'claude-sonnet-4-5',
   ])
   assert.equal(MODELS.filter(m => m.provider === 'openai').length, 1)
 })
@@ -77,7 +77,7 @@ test('each Claude model sends only the visitor key directly to Anthropic', async
 
 test('disabled models and missing Claude credentials fail before a network call', async () => {
   globalThis.fetch = () => { assert.fail('Unexpected network request') }
-  for (const model of ['gpt-5.4', 'gpt-4.1-mini', 'gemini-2.5-flash']) {
+  for (const model of ['gpt-5.4', 'gpt-4.1-mini', 'gemini-2.5-flash', 'claude-haiku-4-5']) {
     await assert.rejects(llmInteraction({ ...turn, model }), /Unknown model/)
   }
   await assert.rejects(llmInteraction({ ...turn, model: 'claude-sonnet-4-6' }), /Claude API key/)
@@ -95,7 +95,7 @@ test('Claude format retries retain the image, memory, and correction transcript'
     assert.match(body.messages[2].content[0].text, /Allowed countries are exactly/)
     return claudeResponse()
   }
-  await llmInteraction({ ...turn, model: 'claude-haiku-4-5', keys: { anthropic: 'test-only-visitor-credential' }, memoryLines: ['France | Blue stripe'], maxRetries: 1 })
+  await llmInteraction({ ...turn, model: 'claude-sonnet-4-5', keys: { anthropic: 'test-only-visitor-credential' }, memoryLines: ['France | Blue stripe'], maxRetries: 1 })
   assert.equal(calls, 2)
 })
 

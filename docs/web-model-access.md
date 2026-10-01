@@ -12,9 +12,9 @@ as `n`, `stream`, or larger token budgets. Provider errors are sanitized so an
 authentication error cannot expose the hosted credential.
 
 Visitors can optionally enter their own Anthropic API key and select **Enable
-Claude**. This unlocks the tested Claude Sonnet 4.6 (`claude-sonnet-4-6`), Sonnet
-4.5 (`claude-sonnet-4-5`), and Haiku 4.5 (`claude-haiku-4-5`) models in all three
-game modes. Claude requests go directly from the browser to Anthropic's Messages
+Claude**. This unlocks the tested Claude Sonnet 4.6 (`claude-sonnet-4-6`) and Sonnet
+4.5 (`claude-sonnet-4-5`) models in all three game modes. Claude requests go
+directly from the browser to Anthropic's Messages
 API and are billed to the visitor's Anthropic account. Keys live only in React
 memory; the app does not write them to browser storage or send them to Vercel.
 Applying, replacing, or clearing a key aborts pending browser requests and resets

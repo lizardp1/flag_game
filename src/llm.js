@@ -16,7 +16,6 @@ export const MODELS = [
   { id: 'gpt-4o',       provider: 'openai', label: 'gpt-4o',       group: 'main', short: '4o',   color: '#5b86c4' },
   { id: 'claude-sonnet-4-6', provider: 'anthropic', label: 'Claude Sonnet 4.6', group: 'main', short: 's46', color: '#c2683e' },
   { id: 'claude-sonnet-4-5', provider: 'anthropic', label: 'Claude Sonnet 4.5', group: 'main', short: 's45', color: '#ab714c' },
-  { id: 'claude-haiku-4-5', provider: 'anthropic', label: 'Claude Haiku 4.5', group: 'fast', short: 'h45', color: '#d9a878' },
 ]
 
 const MODEL_BY_ID = Object.fromEntries(MODELS.map(m => [m.id, m]))
