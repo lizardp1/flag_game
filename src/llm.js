@@ -8,13 +8,15 @@ const SYSTEM_PROMPT =
   'Follow the exact output schema given in the user message.'
 
 export const PROVIDERS = {
-  openai: { label: 'OpenAI', placeholder: 'sk-proj-...' },
+  openai: { label: 'OpenAI' },
+  anthropic: { label: 'Anthropic', placeholder: 'sk-ant-...' },
 }
 
 export const MODELS = [
   { id: 'gpt-4o',       provider: 'openai', label: 'gpt-4o',       group: 'main', short: '4o',   color: '#5b86c4' },
-  { id: 'gpt-5.4',      provider: 'openai', label: 'gpt-5.4',      group: 'main', short: '5.4',  color: '#d4a94b' },
-  { id: 'gpt-4.1-mini', provider: 'openai', label: 'gpt-4.1-mini', group: 'fast', short: '4.1m', color: '#6aa6d4' },
+  { id: 'claude-sonnet-4-6', provider: 'anthropic', label: 'Claude Sonnet 4.6', group: 'main', short: 's46', color: '#c2683e' },
+  { id: 'claude-sonnet-4-5', provider: 'anthropic', label: 'Claude Sonnet 4.5', group: 'main', short: 's45', color: '#ab714c' },
+  { id: 'claude-haiku-4-5', provider: 'anthropic', label: 'Claude Haiku 4.5', group: 'fast', short: 'h45', color: '#d9a878' },
 ]
 
 const MODEL_BY_ID = Object.fromEntries(MODELS.map(m => [m.id, m]))
@@ -23,8 +25,8 @@ export function anyKey() {
   return true
 }
 
-export function availableModels() {
-  return MODELS
+export function availableModels(keys) {
+  return MODELS.filter(m => m.provider === 'openai' || !!keys?.anthropic?.trim())
 }
 
 export function modelMeta(id) {
@@ -153,45 +155,85 @@ function buildOpenAIRequest(model, turns) {
       messages.push({ role: 'assistant', content: t.text })
     }
   }
-  const isReasoning = /^gpt-5(\.|-|$)/.test(model)
-  const body = { model, messages, max_completion_tokens: isReasoning ? 1500 : 500 }
-  if (isReasoning) body.reasoning_effort = 'low'
-  if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
-  return body
+  return { model, messages, max_completion_tokens: 500, response_format: { type: 'json_object' } }
+}
+
+function buildRequest(model, keys, turns) {
+  if (MODEL_BY_ID[model].provider === 'openai') {
+    return {
+      url: '/api/chat',
+      headers: { 'Content-Type': 'application/json' },
+      body: buildOpenAIRequest(model, turns),
+    }
+  }
+  // Visitor credentials go directly to Anthropic, never through our server.
+  const messages = turns.map(t => {
+    if (t.role === 'assistant') return { role: 'assistant', content: t.text }
+    const content = []
+    if (t.image) {
+      const image = t.image.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,(.+)$/)
+      if (!image) throw new Error('Claude requires a base64 image crop.')
+      content.push({ type: 'image', source: { type: 'base64', media_type: image[1], data: image[2] } })
+    }
+    content.push({ type: 'text', text: t.text })
+    return { role: 'user', content }
+  })
+  return {
+    url: 'https://api.anthropic.com/v1/messages',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': keys.anthropic.trim(),
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: { model, max_tokens: 500, system: SYSTEM_PROMPT, messages },
+  }
 }
 
 export async function llmInteraction({
   cropDataUrl,
   memoryLines = [],
   model,
+  keys,
   m = 3,
   catalog,
-  signal,
+  signal = keys?.signal,
   maxRetries = 2,
 }) {
-  if (!MODEL_BY_ID[model]) throw new Error(`Unknown model: ${model}`)
+  const def = MODEL_BY_ID[model]
+  if (!def) throw new Error(`Unknown model: ${model}`)
+  if (def.provider === 'anthropic' && !keys?.anthropic?.trim()) {
+    throw new Error('Enter your Claude API key to use Claude models.')
+  }
+  const providerLabel = PROVIDERS[def.provider].label
+  signal?.throwIfAborted()
 
   const text = userPrompt({ memoryLines, m })
   const turns = [{ role: 'user', text, image: cropDataUrl }]
 
   let lastErr = null
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const body = buildOpenAIRequest(model, turns)
+    signal?.throwIfAborted()
+    const { url, headers, body } = buildRequest(model, keys, turns)
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(new Error('Request timed out after 45s')), 45000)
     const onCallerAbort = () => ctl.abort(signal?.reason)
     if (signal) signal.addEventListener('abort', onCallerAbort, { once: true })
-    let res
+    let res, data, errText
     try {
-      res = await fetch('/api/chat', {
+      res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         signal: ctl.signal,
         body: JSON.stringify(body),
       })
+      // Keep timeout and session cancellation active while the body arrives.
+      if (res.ok) data = await res.json()
+      else errText = await res.text()
     } catch (e) {
       clearTimeout(timer)
       if (signal) signal.removeEventListener('abort', onCallerAbort)
+      signal?.throwIfAborted()
       lastErr = e
       if (attempt >= maxRetries) throw e
       await new Promise(r => setTimeout(r, 300 * (attempt + 1) + Math.random() * 200))
@@ -199,19 +241,20 @@ export async function llmInteraction({
     }
     clearTimeout(timer)
     if (signal) signal.removeEventListener('abort', onCallerAbort)
+    signal?.throwIfAborted()
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '')
       const transient = res.status === 429 || res.status >= 500
       if (transient && attempt < maxRetries) {
-        lastErr = new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+        lastErr = new Error(`${providerLabel} ${res.status}: ${errText.slice(0, 200)}`)
         await new Promise(r => setTimeout(r, 400 * Math.pow(2, attempt) + Math.random() * 200))
         continue
       }
-      throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+      throw new Error(`${providerLabel} ${res.status}: ${errText.slice(0, 200)}`)
     }
-    const data = await res.json()
-    const raw = (data.choices?.[0]?.message?.content || '').trim()
+    const raw = def.provider === 'anthropic'
+      ? (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim()
+      : (data.choices?.[0]?.message?.content || '').trim()
 
     try {
       return parseResponse(raw, catalog, m)

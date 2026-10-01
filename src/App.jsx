@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import REAL_GRIDS_RAW from './realGrids.json';
-import { rasterizeFlag, cropAgentView, llmInteraction, availableModels, anyKey, modelMeta } from './llm';
+import { rasterizeFlag, cropAgentView, llmInteraction, PROVIDERS, availableModels, anyKey, modelMeta } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -1219,16 +1219,27 @@ function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,
 }
 
 /* ═══════ ROOT ═══════ */
-function ApiKeyBar(){
-  return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
-    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,fontSize:11}}>
-      <span style={{color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live API mode</span>
+function ApiKeyBar({keys,onKeyChange}){
+  const[draft,setDraft]=useState('');const[shown,setShown]=useState(false);
+  const apply=e=>{e.preventDefault();const value=draft.trim();if(!value)return;onKeyChange(value);setDraft('');setShown(false);};
+  return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'12px 14px'}}>
+    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',flexWrap:'wrap',alignItems:'center',gap:12,fontSize:14}}>
+      <span style={{color:'#3a8a64',fontWeight:700}}>● GPT-4o included</span>
+      <form onSubmit={apply} style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8}}>
+        <label htmlFor="claude-api-key" style={{color:T.dim}}>Claude API key <span style={{color:T.fnt}}>(optional)</span></label>
+        <input id="claude-api-key" type={shown?'text':'password'} placeholder={PROVIDERS.anthropic.placeholder} value={draft} onChange={e=>setDraft(e.target.value)} autoComplete="off" spellCheck={false} autoCapitalize="none" aria-describedby="claude-key-help"
+          style={{width:200,maxWidth:'100%',boxSizing:'border-box',padding:'7px 9px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:14,fontFamily:'ui-monospace,monospace'}}/>
+        <button type="button" onClick={()=>setShown(s=>!s)} aria-pressed={shown} aria-label={shown?'Hide Claude API key':'Show Claude API key'} style={{...S.btn(false),fontSize:14}}>{shown?'Hide':'Show'}</button>
+        <button type="submit" disabled={!draft.trim()||draft.trim()===keys.anthropic} style={{...S.btn(!!draft.trim(),'#3a8a64'),fontSize:14}}>{keys.anthropic?'Replace key':'Enable Claude'}</button>
+        {keys.anthropic&&<button type="button" onClick={()=>{onKeyChange('');setDraft('');setShown(false);}} style={{...S.btn(false),fontSize:14}}>Clear key</button>}
+      </form>
+      <span role="status" style={{color:keys.anthropic?'#3a8a64':T.mut}}>{keys.anthropic?'Claude models enabled':''}</span>
+      <p id="claude-key-help" style={{width:'100%',margin:0,fontSize:12,color:T.mut,lineHeight:1.5}}>Use your own Anthropic key for Claude Sonnet 4.6, Sonnet 4.5, and Haiku 4.5. Claude usage is billed to your account. Your key stays in this page until you clear it or reload, and is sent only to Anthropic. Changing the key resets current games.</p>
     </div>
   </div>);
 }
 
-/* Per-agent model dropdown. Hides providers without a key; falls back to the
-   scripted heuristic label when no key is set anywhere. */
+/* GPT-4o is always available; Claude models require a visitor's key. */
 function ModelPicker({keys,model,setModel,disabled,label='Next agent'}){
   const avail=availableModels(keys);
   if(!avail.length)return(<><label style={{fontSize:10,color:T.dim}}>{label}</label>
@@ -1292,8 +1303,15 @@ function FlagGameSeries({keys}){
 }
 
 export default function App(){
+  const controller=useRef(new AbortController());
+  const[keys,setKeys]=useState(()=>({anthropic:'',signal:controller.current.signal,version:0}));
+  const changeKey=anthropic=>{
+    controller.current.abort();
+    controller.current=new AbortController();
+    setKeys(k=>({anthropic,signal:controller.current.signal,version:k.version+1}));
+  };
   return(<div style={S.page}>
-    <ApiKeyBar/>
-    <FlagGameSeries/>
+    <ApiKeyBar keys={keys} onKeyChange={changeKey}/>
+    <FlagGameSeries key={keys.version} keys={keys}/>
   </div>);
 }
