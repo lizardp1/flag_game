@@ -1225,16 +1225,16 @@ function ApiKeyBar({keys,onKeyChange}){
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
     <div style={{maxWidth:1400,margin:'0 auto',display:'flex',flexWrap:'wrap',alignItems:'center',gap:10,fontSize:11}}>
       <span style={{width:'100%',color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live GPT API mode</span>
-      <form onSubmit={apply} style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8}}>
+      <form onSubmit={apply} style={{width:'100%',display:'flex',flexWrap:'wrap',alignItems:'center',gap:8}}>
         <label htmlFor="claude-api-key" style={{color:T.dim}}>Claude API key <span style={{color:T.fnt}}>(optional)</span></label>
         <input id="claude-api-key" type={shown?'text':'password'} placeholder={PROVIDERS.anthropic.placeholder} value={draft} onChange={e=>setDraft(e.target.value)} autoComplete="off" spellCheck={false} autoCapitalize="none" aria-describedby="claude-key-help"
           style={{width:154,maxWidth:'100%',boxSizing:'border-box',padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
         <button type="button" onClick={()=>setShown(s=>!s)} aria-pressed={shown} aria-label={shown?'Hide Claude API key':'Show Claude API key'} style={{...S.btn(false),fontSize:11}}>{shown?'Hide':'Show'}</button>
         <button type="submit" disabled={!draft.trim()||draft.trim()===keys.anthropic} style={{...S.btn(!!draft.trim(),'#3a8a64'),fontSize:11}}>{keys.anthropic?'Replace key':'Enable Claude'}</button>
         {keys.anthropic&&<button type="button" onClick={()=>{onKeyChange('');setDraft('');setShown(false);}} style={{...S.btn(false),fontSize:11}}>Clear key</button>}
+        <span role="status" style={{color:keys.anthropic?'#3a8a64':T.mut}}>{keys.anthropic?'Claude models enabled':''}</span>
+        <p id="claude-key-help" style={{flex:'1 1 280px',margin:0,fontSize:10,color:T.mut,lineHeight:1.5}}>You can use your own Anthropic key for Claude. Your key stays in this page until you clear it or reload.</p>
       </form>
-      <span role="status" style={{color:keys.anthropic?'#3a8a64':T.mut}}>{keys.anthropic?'Claude models enabled':''}</span>
-      <p id="claude-key-help" style={{width:'100%',margin:0,fontSize:10,color:T.mut,lineHeight:1.5}}>You can use your own Anthropic key for Claude. Your key stays in this page until you clear it or reload.</p>
     </div>
   </div>);
 }
