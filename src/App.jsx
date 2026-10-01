@@ -1234,7 +1234,7 @@ function ApiKeyBar({keys,onKeyChange}){
         {keys.anthropic&&<button type="button" onClick={()=>{onKeyChange('');setDraft('');setShown(false);}} style={{...S.btn(false),fontSize:14}}>Clear key</button>}
       </form>
       <span role="status" style={{color:keys.anthropic?'#3a8a64':T.mut}}>{keys.anthropic?'Claude models enabled':''}</span>
-      <p id="claude-key-help" style={{width:'100%',margin:0,fontSize:12,color:T.mut,lineHeight:1.5}}>Use your own Anthropic key for Claude Sonnet 4.6, Sonnet 4.5, and Haiku 4.5. Claude usage is billed to your account. Your key stays in this page until you clear it or reload, and is sent only to Anthropic. Changing the key resets current games.</p>
+      <p id="claude-key-help" style={{width:'100%',margin:0,fontSize:12,color:T.mut,lineHeight:1.5}}>You can use your own Anthropic key for Claude. Your key stays in this page until you clear it or reload.</p>
     </div>
   </div>);
 }
