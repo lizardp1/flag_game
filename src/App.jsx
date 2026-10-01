@@ -1224,7 +1224,7 @@ function ApiKeyBar({keys,onKeyChange}){
   const apply=e=>{e.preventDefault();const value=draft.trim();if(!value)return;onKeyChange(value);setDraft('');setShown(false);};
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
     <div style={{maxWidth:1400,margin:'0 auto',display:'flex',flexWrap:'wrap',alignItems:'center',gap:10,fontSize:11}}>
-      <span style={{color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live GPT API mode</span>
+      <span style={{width:'100%',color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live GPT API mode</span>
       <form onSubmit={apply} style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8}}>
         <label htmlFor="claude-api-key" style={{color:T.dim}}>Claude API key <span style={{color:T.fnt}}>(optional)</span></label>
         <input id="claude-api-key" type={shown?'text':'password'} placeholder={PROVIDERS.anthropic.placeholder} value={draft} onChange={e=>setDraft(e.target.value)} autoComplete="off" spellCheck={false} autoCapitalize="none" aria-describedby="claude-key-help"
