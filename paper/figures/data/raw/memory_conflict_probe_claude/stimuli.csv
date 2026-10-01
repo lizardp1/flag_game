@@ -1,0 +1,9 @@
+truth_country,crop_condition,crop_index,top,left,height,width,compatible_country_count,compatible_countries,informativeness_bits,informativeness_label
+Bahamas,ambiguous_true,126,6,12,4,6,9,"[""Belgium"", ""Chad"", ""Gabon"", ""Germany"", ""Guinea"", ""Lithuania"", ""Mali"", ""Ukraine"", ""Bahamas""]",1.6374299206152918,moderate
+Bahamas,diagnostic_true,41,2,3,4,6,1,"[""Bahamas""]",4.807354922057604,unique
+Czech Republic,ambiguous_true,164,8,12,4,6,20,"[""Armenia"", ""Austria"", ""Belgium"", ""Bulgaria"", ""Chad"", ""France"", ""Germany"", ""Guinea"", ""Hungary"", ""Italy"", ""Lithuania"", ""Luxembourg"", ""Mali"", ""Netherlands"", ""Peru"", ""Russia"", ""Yemen"", ""Czech Republic"", ""Palestine"", ""Sudan""]",0.48542682717024166,ambiguous
+Czech Republic,diagnostic_true,100,5,5,4,6,1,"[""Czech Republic""]",4.807354922057604,unique
+Guinea,ambiguous_true,0,0,0,4,6,20,"[""Armenia"", ""Austria"", ""Belgium"", ""Bulgaria"", ""Chad"", ""France"", ""Germany"", ""Guinea"", ""Hungary"", ""Italy"", ""Lithuania"", ""Luxembourg"", ""Mali"", ""Netherlands"", ""Peru"", ""Russia"", ""Yemen"", ""Czech Republic"", ""Palestine"", ""Sudan""]",0.48542682717024166,ambiguous
+Guinea,diagnostic_true,3,0,3,4,6,1,"[""Guinea""]",4.807354922057604,unique
+Peru,ambiguous_true,0,0,0,4,6,20,"[""Armenia"", ""Austria"", ""Belgium"", ""Bulgaria"", ""Chad"", ""France"", ""Germany"", ""Guinea"", ""Hungary"", ""Italy"", ""Lithuania"", ""Luxembourg"", ""Mali"", ""Netherlands"", ""Peru"", ""Russia"", ""Yemen"", ""Czech Republic"", ""Palestine"", ""Sudan""]",0.48542682717024166,ambiguous
+Peru,diagnostic_true,3,0,3,4,6,1,"[""Peru""]",4.807354922057604,unique

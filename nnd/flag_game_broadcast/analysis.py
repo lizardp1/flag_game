@@ -147,14 +147,6 @@ def summarize_broadcast_rounds(
         "decision_alignment_comparison_only_rate": _mean_or_zero(
             decision_frame, "aligns_with_comparison_only_country"
         ),
-        "self_report_mismatch_count": int(
-            sum(
-                1
-                for row in broadcast_rows
-                if bool(row.get("valid", False))
-                and not bool(row.get("self_report_matches_assigned", False))
-            )
-        ),
         "invalid_broadcast_count": int(sum(1 for row in broadcast_rows if not bool(row.get("valid", False)))),
         "invalid_decision_count": int(sum(1 for row in decision_rows if not bool(row.get("valid", False)))),
     }

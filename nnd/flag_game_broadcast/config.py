@@ -18,7 +18,8 @@ class BroadcastFlagGameConfig(BaseModel):
     backend: Literal["openai", "scripted"] = "openai"
     model: str = "gpt-4o"
     agent_models: list[str] | None = None
-    prestige_model_label: str = "gpt-5.4"
+    randomize_agent_model_slots: bool = False
+    prestige_model_label: str = "gpt-5.4-2026-03-05"
     comparison_model_label: str = "gpt-4o"
     image_detail: Literal["auto", "low", "high", "original"] = "high"
     N: int = 8

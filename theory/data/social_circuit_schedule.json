@@ -1,0 +1,409 @@
+{
+  "N": 8,
+  "source_agent": 4,
+  "communication_seed": 73,
+  "source_path": "rebuttal/results/causal_trace_crop_v4_2026-09-08/trials/openai/original/repeat_050/interactions.jsonl",
+  "source_sha256": "0d24edede906dcaeec5d5995701fbe515af94a09b5f771d7cc3eb41cb4867343",
+  "events": [
+    {
+      "t": 1,
+      "speaker_id": 4,
+      "listener_id": 0
+    },
+    {
+      "t": 2,
+      "speaker_id": 7,
+      "listener_id": 4
+    },
+    {
+      "t": 3,
+      "speaker_id": 2,
+      "listener_id": 4
+    },
+    {
+      "t": 4,
+      "speaker_id": 4,
+      "listener_id": 5
+    },
+    {
+      "t": 5,
+      "speaker_id": 1,
+      "listener_id": 4
+    },
+    {
+      "t": 6,
+      "speaker_id": 6,
+      "listener_id": 4
+    },
+    {
+      "t": 7,
+      "speaker_id": 3,
+      "listener_id": 4
+    },
+    {
+      "t": 8,
+      "speaker_id": 1,
+      "listener_id": 0
+    },
+    {
+      "t": 9,
+      "speaker_id": 4,
+      "listener_id": 3
+    },
+    {
+      "t": 10,
+      "speaker_id": 0,
+      "listener_id": 4
+    },
+    {
+      "t": 11,
+      "speaker_id": 5,
+      "listener_id": 4
+    },
+    {
+      "t": 12,
+      "speaker_id": 6,
+      "listener_id": 3
+    },
+    {
+      "t": 13,
+      "speaker_id": 6,
+      "listener_id": 1
+    },
+    {
+      "t": 14,
+      "speaker_id": 0,
+      "listener_id": 3
+    },
+    {
+      "t": 15,
+      "speaker_id": 3,
+      "listener_id": 7
+    },
+    {
+      "t": 16,
+      "speaker_id": 1,
+      "listener_id": 4
+    },
+    {
+      "t": 17,
+      "speaker_id": 5,
+      "listener_id": 2
+    },
+    {
+      "t": 18,
+      "speaker_id": 2,
+      "listener_id": 1
+    },
+    {
+      "t": 19,
+      "speaker_id": 0,
+      "listener_id": 2
+    },
+    {
+      "t": 20,
+      "speaker_id": 4,
+      "listener_id": 2
+    },
+    {
+      "t": 21,
+      "speaker_id": 0,
+      "listener_id": 7
+    },
+    {
+      "t": 22,
+      "speaker_id": 3,
+      "listener_id": 5
+    },
+    {
+      "t": 23,
+      "speaker_id": 2,
+      "listener_id": 5
+    },
+    {
+      "t": 24,
+      "speaker_id": 6,
+      "listener_id": 0
+    },
+    {
+      "t": 25,
+      "speaker_id": 1,
+      "listener_id": 7
+    },
+    {
+      "t": 26,
+      "speaker_id": 1,
+      "listener_id": 6
+    },
+    {
+      "t": 27,
+      "speaker_id": 3,
+      "listener_id": 1
+    },
+    {
+      "t": 28,
+      "speaker_id": 2,
+      "listener_id": 4
+    },
+    {
+      "t": 29,
+      "speaker_id": 7,
+      "listener_id": 6
+    },
+    {
+      "t": 30,
+      "speaker_id": 7,
+      "listener_id": 6
+    },
+    {
+      "t": 31,
+      "speaker_id": 3,
+      "listener_id": 2
+    },
+    {
+      "t": 32,
+      "speaker_id": 4,
+      "listener_id": 1
+    },
+    {
+      "t": 33,
+      "speaker_id": 0,
+      "listener_id": 4
+    },
+    {
+      "t": 34,
+      "speaker_id": 1,
+      "listener_id": 7
+    },
+    {
+      "t": 35,
+      "speaker_id": 6,
+      "listener_id": 3
+    },
+    {
+      "t": 36,
+      "speaker_id": 0,
+      "listener_id": 6
+    },
+    {
+      "t": 37,
+      "speaker_id": 1,
+      "listener_id": 3
+    },
+    {
+      "t": 38,
+      "speaker_id": 6,
+      "listener_id": 1
+    },
+    {
+      "t": 39,
+      "speaker_id": 5,
+      "listener_id": 7
+    },
+    {
+      "t": 40,
+      "speaker_id": 7,
+      "listener_id": 0
+    },
+    {
+      "t": 41,
+      "speaker_id": 2,
+      "listener_id": 1
+    },
+    {
+      "t": 42,
+      "speaker_id": 1,
+      "listener_id": 7
+    },
+    {
+      "t": 43,
+      "speaker_id": 4,
+      "listener_id": 7
+    },
+    {
+      "t": 44,
+      "speaker_id": 6,
+      "listener_id": 3
+    },
+    {
+      "t": 45,
+      "speaker_id": 4,
+      "listener_id": 6
+    },
+    {
+      "t": 46,
+      "speaker_id": 6,
+      "listener_id": 0
+    },
+    {
+      "t": 47,
+      "speaker_id": 7,
+      "listener_id": 0
+    },
+    {
+      "t": 48,
+      "speaker_id": 1,
+      "listener_id": 0
+    },
+    {
+      "t": 49,
+      "speaker_id": 4,
+      "listener_id": 5
+    },
+    {
+      "t": 50,
+      "speaker_id": 7,
+      "listener_id": 4
+    },
+    {
+      "t": 51,
+      "speaker_id": 1,
+      "listener_id": 6
+    },
+    {
+      "t": 52,
+      "speaker_id": 3,
+      "listener_id": 2
+    },
+    {
+      "t": 53,
+      "speaker_id": 0,
+      "listener_id": 2
+    },
+    {
+      "t": 54,
+      "speaker_id": 1,
+      "listener_id": 0
+    },
+    {
+      "t": 55,
+      "speaker_id": 4,
+      "listener_id": 1
+    },
+    {
+      "t": 56,
+      "speaker_id": 2,
+      "listener_id": 4
+    },
+    {
+      "t": 57,
+      "speaker_id": 0,
+      "listener_id": 6
+    },
+    {
+      "t": 58,
+      "speaker_id": 6,
+      "listener_id": 4
+    },
+    {
+      "t": 59,
+      "speaker_id": 2,
+      "listener_id": 0
+    },
+    {
+      "t": 60,
+      "speaker_id": 3,
+      "listener_id": 7
+    },
+    {
+      "t": 61,
+      "speaker_id": 2,
+      "listener_id": 5
+    },
+    {
+      "t": 62,
+      "speaker_id": 3,
+      "listener_id": 7
+    },
+    {
+      "t": 63,
+      "speaker_id": 6,
+      "listener_id": 1
+    },
+    {
+      "t": 64,
+      "speaker_id": 6,
+      "listener_id": 7
+    },
+    {
+      "t": 65,
+      "speaker_id": 1,
+      "listener_id": 0
+    },
+    {
+      "t": 66,
+      "speaker_id": 6,
+      "listener_id": 2
+    },
+    {
+      "t": 67,
+      "speaker_id": 6,
+      "listener_id": 2
+    },
+    {
+      "t": 68,
+      "speaker_id": 3,
+      "listener_id": 2
+    },
+    {
+      "t": 69,
+      "speaker_id": 7,
+      "listener_id": 2
+    },
+    {
+      "t": 70,
+      "speaker_id": 2,
+      "listener_id": 4
+    },
+    {
+      "t": 71,
+      "speaker_id": 6,
+      "listener_id": 3
+    },
+    {
+      "t": 72,
+      "speaker_id": 6,
+      "listener_id": 1
+    },
+    {
+      "t": 73,
+      "speaker_id": 7,
+      "listener_id": 2
+    },
+    {
+      "t": 74,
+      "speaker_id": 5,
+      "listener_id": 4
+    },
+    {
+      "t": 75,
+      "speaker_id": 1,
+      "listener_id": 3
+    },
+    {
+      "t": 76,
+      "speaker_id": 5,
+      "listener_id": 6
+    },
+    {
+      "t": 77,
+      "speaker_id": 1,
+      "listener_id": 0
+    },
+    {
+      "t": 78,
+      "speaker_id": 7,
+      "listener_id": 4
+    },
+    {
+      "t": 79,
+      "speaker_id": 5,
+      "listener_id": 4
+    },
+    {
+      "t": 80,
+      "speaker_id": 1,
+      "listener_id": 6
+    }
+  ]
+}

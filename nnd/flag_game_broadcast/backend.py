@@ -26,8 +26,6 @@ from nnd.flag_game_broadcast.prompts import (
 
 @dataclass
 class BroadcastFlagGameOpenAIBackend(FlagGameOpenAIBackend):
-    assigned_model_identity: str = ""
-
     def broadcast_statement(
         self,
         *,
@@ -41,23 +39,19 @@ class BroadcastFlagGameOpenAIBackend(FlagGameOpenAIBackend):
                 countries=countries,
                 memory_lines=memory_lines,
                 m=m,
-                model_identity=self.assigned_model_identity or self.model,
             ),
             crop_data_uri=prepared_crop,
             image_detail=self.image_detail,
         )
-        expected_model_identity = self.assigned_model_identity or self.model
         return self._call_with_retries(
             messages,
             lambda text: parse_broadcast_statement(
                 text,
                 countries=countries,
                 m=m,
-                expected_model_identity=expected_model_identity,
             ),
             retry_builder=lambda exc: statement_retry_text(
                 countries=countries,
-                model_identity=expected_model_identity,
                 m=m,
                 error_text=str(exc),
             ),
@@ -107,8 +101,6 @@ class BroadcastFlagGameOpenAIBackend(FlagGameOpenAIBackend):
 
 @dataclass
 class BroadcastFlagGameScriptedBackend(ScriptedFlagGameBackend):
-    assigned_model_identity: str = ""
-
     def broadcast_statement(
         self,
         *,
@@ -125,7 +117,6 @@ class BroadcastFlagGameScriptedBackend(ScriptedFlagGameBackend):
             if m == 2:
                 reason = _clip_to_short_phrase(reason)
         return BroadcastStatement(
-            model_identity=self.assigned_model_identity or "scripted",
             country=best_country,
             reason=reason,
         )
@@ -142,8 +133,8 @@ class BroadcastFlagGameScriptedBackend(ScriptedFlagGameBackend):
         valid_agent_ids: set[int],
     ) -> FinalDecision:
         base_scores = {country: self._country_score(country, prepared_crop, memory_lines) for country in countries}
-        broadcast_votes = _parse_broadcast_vote_lines(round_broadcast_lines, valid_agent_ids=valid_agent_ids)
-        for agent_id, payload in broadcast_votes.items():
+        broadcast_votes = _parse_broadcast_vote_lines(round_broadcast_lines)
+        for payload in broadcast_votes:
             country = payload["country"]
             if country not in base_scores:
                 continue
@@ -151,14 +142,12 @@ class BroadcastFlagGameScriptedBackend(ScriptedFlagGameBackend):
 
         ordered = sorted(base_scores.items(), key=lambda item: (-item[1], item[0]))
         best_country = ordered[0][0]
-        matching_influential_ids = [
-            agent_id
-            for agent_id, payload in broadcast_votes.items()
-            if payload["country"] == best_country
-        ][:max_influential_agents]
         reason = None
         if m > 1:
-            if matching_influential_ids:
+            if any(
+                payload["country"] == best_country
+                for payload in broadcast_votes
+            ):
                 reason = f"I updated toward the broadcast support for {best_country}."
             else:
                 reason = self._reason(best_country, prepared_crop, memory_lines)
@@ -166,7 +155,7 @@ class BroadcastFlagGameScriptedBackend(ScriptedFlagGameBackend):
                 reason = _clip_to_short_phrase(reason)
         return FinalDecision(
             country=best_country,
-            influential_agent_ids=tuple(matching_influential_ids),
+            influential_agent_ids=(),
             reason=reason,
         )
 
@@ -180,24 +169,14 @@ def _clip_to_short_phrase(text: str) -> str:
 
 def _parse_broadcast_vote_lines(
     lines: list[str],
-    *,
-    valid_agent_ids: set[int],
-) -> dict[int, dict[str, str]]:
-    payloads: dict[int, dict[str, str]] = {}
+) -> list[dict[str, str]]:
+    payloads: list[dict[str, str]] = []
     for line in lines:
-        parts = [part.strip() for part in line.split("|")]
-        if len(parts) < 3:
+        parts = [part.strip() for part in line.split("|", maxsplit=1)]
+        country = parts[0]
+        if not country or country == "invalid broadcast":
             continue
-        try:
-            agent_id = int(parts[0].removeprefix("agent "))
-        except ValueError:
-            continue
-        if agent_id not in valid_agent_ids:
-            continue
-        payloads[agent_id] = {
-            "model_identity": parts[1].removeprefix("model ").strip(),
-            "country": parts[2].removeprefix("country ").strip(),
-        }
+        payloads.append({"country": country})
     return payloads
 
 
@@ -205,7 +184,6 @@ def build_backend(
     *,
     backend_name: str,
     model: str,
-    assigned_model_identity: str,
     temperature: float,
     top_p: float,
     max_tokens: int,
@@ -221,11 +199,9 @@ def build_backend(
             seed=seed,
             social_susceptibility=social_susceptibility,
             country_lookup=country_lookup,
-            assigned_model_identity=assigned_model_identity,
         )
     return BroadcastFlagGameOpenAIBackend(
         model=model,
-        assigned_model_identity=assigned_model_identity,
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_tokens,

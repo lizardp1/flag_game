@@ -1,0 +1,28 @@
+base: broadcast.yaml
+grid:
+  social_evidence_alpha:
+  - 0
+  - 0.25
+  - 0.5
+  - 0.75
+  - 1
+  social_guidance_enabled:
+  - true
+  composition:
+  - gpt-4o: 8
+  - gpt-4o: 7
+    gpt-5.4-2026-03-05: 1
+  - gpt-4o: 6
+    gpt-5.4-2026-03-05: 2
+  - gpt-4o: 5
+    gpt-5.4-2026-03-05: 3
+  - gpt-4o: 4
+    gpt-5.4-2026-03-05: 4
+  - gpt-4o: 3
+    gpt-5.4-2026-03-05: 5
+  - gpt-4o: 2
+    gpt-5.4-2026-03-05: 6
+  - gpt-4o: 1
+    gpt-5.4-2026-03-05: 7
+  - gpt-5.4-2026-03-05: 8
+output_root: runs/alpha_composition

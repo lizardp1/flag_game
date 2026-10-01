@@ -1,0 +1,14 @@
+{
+  "run_id": "N128/all_gpt_4o/seed_0020",
+  "truth": "Yemen",
+  "rival": "Austria",
+  "N": 128,
+  "seed": 20,
+  "B": 50,
+  "mixed_crops": 44,
+  "truth_count": 2208,
+  "rival_count": 4192,
+  "valid_count": 6400,
+  "rival_response_share": 0.655,
+  "flag_file": "yemen_flag.png"
+}

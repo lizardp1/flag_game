@@ -24,6 +24,8 @@ class OrgFlagGameConfig(BaseModel):
     rounds: int = 10
     H: int = 8
     interaction_m: int = 3
+    social_susceptibility: float = Field(default=0.5, ge=0, le=1)
+    prompt_social_susceptibility: bool = False
     country_pool: str = "stripe_expanded_24"
     fixed_truth_country: str | None = None
     canvas_width: int = 24
@@ -70,8 +72,8 @@ class OrgFlagGameConfig(BaseModel):
     @field_validator("interaction_m")
     @classmethod
     def _check_interaction_m(cls, value: int) -> int:
-        if value != 3:
-            raise ValueError("flag_game_org currently uses interaction_m=3")
+        if value not in (1, 2, 3):
+            raise ValueError("interaction_m must be one of {1, 2, 3}")
         return value
 
     @field_validator("observation_overlap")

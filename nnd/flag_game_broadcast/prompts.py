@@ -9,8 +9,7 @@ def system_prompt() -> str:
         "You must output only valid JSON. No extra keys, no markdown, "
         "and no text outside the JSON object.\n"
         "You are one player in a flag identification game.\n"
-        "Treat gpt-5.4 as the latest state-of-the-art model and gpt-4o as an older model.\n"
-        #"Choose exactly one country from the allowed countries listed in the user message.\n"
+        "Choose exactly one country from the allowed countries listed in the user message.\n"
         "Follow the exact output schema given in the user message."
     )
 
@@ -31,16 +30,16 @@ def _broadcast_block(round_broadcast_lines: list[str]) -> str:
 
 def _susceptibility_line(social_susceptibility: float) -> str:
     if social_susceptibility <= 0.2:
-        guidance = "Rely mostly on your own evidence; treat other agents' country guesses as weak evidence."
+        guidance = "Rely mostly on your own crop and treat transcript memory as weak evidence."
     elif social_susceptibility <= 0.4:
-        guidance = "Give somewhat more weight to your own evidence than to other agents' country guesses."
+        guidance = "Give somewhat more weight to your own crop than to transcript memory."
     elif social_susceptibility <= 0.6:
-        guidance = "Balance your own evidence with other agents' country guesses, using their guesses as real evidence."
+        guidance = "Balance your own crop and transcript memory."
     elif social_susceptibility <= 0.8:
-        guidance = "Give somewhat more weight to other agents' country guesses than to your own evidence."
+        guidance = "Give somewhat more weight to transcript memory than to your own crop."
     else:
-        guidance = "Treat other agents' country guesses as strong evidence and update readily toward them."
-    return f"Social susceptibility a = {social_susceptibility:.2f}. {guidance}"
+        guidance = "Treat transcript memory as strong evidence and update readily toward it."
+    return guidance
 
 
 def _base_header(*, countries: list[str], memory_lines: list[str]) -> str:
@@ -48,53 +47,38 @@ def _base_header(*, countries: list[str], memory_lines: list[str]) -> str:
         "All players are identifying the country from the same flag.\n"
         "You only see a small part of the flag.\n"
         "Your memory contains your own past final country guesses from earlier rounds.\n\n"
-        #f"Allowed countries: {json.dumps(countries, ensure_ascii=True)}\n"
+        f"Allowed countries: {json.dumps(countries, ensure_ascii=True)}\n"
         f"{_memory_block(memory_lines)}\n"
     )
 
 def _statement_schema(m: int) -> str:
     if m == 1:
-        return (
-            'Output JSON exactly: '
-            '{"model_identity":"<your model identity>","country":"<one country>"}'
-        )
+        return 'Output JSON exactly: {"country":"<one country>"}'
     if m == 2:
         return (
             'Output JSON exactly: '
-            '{"model_identity":"<your model identity>",'
-            '"country":"<one country>","reason":"<short phrase>"}'
+            '{"country":"<one country>","reason":"<short phrase>"}'
         )
     if m == 3:
         return (
             'Output JSON exactly: '
-            '{"model_identity":"<your model identity>",'
-            '"country":"<one country>","reason":"<one sentence>"}'
+            '{"country":"<one country>","reason":"<one sentence>"}'
         )
     raise ValueError("interaction m must be in {1, 2, 3}")
 
 
-def _decision_schema(m: int, max_influential_agents: int) -> str:
-    id_hint = f"[<up to {max_influential_agents} agent ids from the other agents' guesses above, or []>]"
+def _decision_schema(m: int) -> str:
     if m == 1:
-        return (
-            'Output JSON exactly: '
-            '{"country":"<one country>",'
-            f'"influential_agent_ids":{id_hint}'
-            "}"
-        )
+        return 'Output JSON exactly: {"country":"<one country>"}'
     if m == 2:
         return (
             'Output JSON exactly: '
-            '{"country":"<one country>","reason":"<short phrase>",'
-            f'"influential_agent_ids":{id_hint}'
-            "}"
+            '{"country":"<one country>","reason":"<short phrase>"}'
         )
     if m == 3:
         return (
             'Output JSON exactly: '
-            '{"country":"<one country>","reason":"<one sentence>",'
-            f'"influential_agent_ids":{id_hint}'
-            "}"
+            '{"country":"<one country>","reason":"<one sentence>"}'
         )
     raise ValueError("interaction m must be in {1, 2, 3}")
 
@@ -104,15 +88,8 @@ def statement_text(
     countries: list[str],
     memory_lines: list[str],
     m: int,
-    model_identity: str,
 ) -> str:
-    lines = [
-        _base_header(countries=countries, memory_lines=memory_lines),
-        (
-            f'Your model identity for this experiment is exactly "{model_identity}". '
-            'You must copy this exact string into the "model_identity" field.'
-        ),
-    ]
+    lines = [_base_header(countries=countries, memory_lines=memory_lines)]
     lines.append(
         "State your current country guess before seeing the other agents' guesses."
     )
@@ -137,23 +114,21 @@ def decision_text(
     if prompt_social_susceptibility:
         lines.append(_susceptibility_line(social_susceptibility))
     lines.append(
-        "You have now seen the other agents' country guesses for this round. Choose your final country guess and list which agent ids influenced you most. "
-        "If none influenced you, use an empty list."
+        "You have now seen the other agents' country guesses for this round. "
+        "Choose your final country guess."
     )
-    lines.append(_decision_schema(m, max_influential_agents))
+    lines.append(_decision_schema(m))
     return "\n".join(lines)
 
 
 def statement_retry_text(
     *,
     countries: list[str],
-    model_identity: str,
     m: int,
     error_text: str,
 ) -> str:
     return (
         f"Invalid answer: {error_text}\n"
-        f'Your model_identity must be exactly "{model_identity}".\n'
         f"Allowed countries are exactly: {json.dumps(countries, ensure_ascii=True)}\n"
         "Choose exactly one allowed country from that list. Any other country is invalid.\n"
         f"{_statement_schema(m)}"
@@ -171,7 +146,7 @@ def decision_retry_text(
         f"Invalid answer: {error_text}\n"
         f"Allowed countries are exactly: {json.dumps(countries, ensure_ascii=True)}\n"
         "Choose exactly one allowed country from that list. Any other country is invalid.\n"
-        f"{_decision_schema(m, max_influential_agents)}"
+        f"{_decision_schema(m)}"
     )
 
 

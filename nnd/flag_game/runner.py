@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import random
 import re
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from nnd.backends.parsing import ParseError
@@ -163,10 +165,11 @@ def oracle_summary_from_crop_diagnostics(
     }
 
 
-def _has_stable_full_consensus(
+def _has_stable_consensus(
     per_round_df: pd.DataFrame,
     window: int,
     expected_probe_count: int,
+    consensus_threshold: float,
 ) -> tuple[bool, str | None]:
     if window <= 0 or per_round_df.empty or len(per_round_df) < window:
         return False, None
@@ -176,11 +179,79 @@ def _has_stable_full_consensus(
         return False, None
     if len(set(countries)) != 1:
         return False, None
-    if not all(abs(float(value) - 1.0) < 1e-9 for value in recent["top1_share"]):
+    if not all(float(value) >= consensus_threshold for value in recent["top1_share"]):
         return False, None
     if not all(int(value) == expected_probe_count for value in recent["valid_probe_count"]):
         return False, None
     return True, countries[0]
+
+
+def _image_sha256(image: Any) -> str:
+    array = np.ascontiguousarray(image)
+    digest = hashlib.sha256()
+    digest.update(str(array.shape).encode("ascii"))
+    digest.update(array.tobytes())
+    return digest.hexdigest()
+
+
+def _sample_distinct_image_crops(
+    *,
+    full_image: Any,
+    canvas_width: int,
+    canvas_height: int,
+    tile_width: int,
+    tile_height: int,
+    render_scale: int,
+    n_agents: int,
+    rng: random.Random,
+    target_overlap: float | None,
+    search_trials: int,
+) -> list[CropBox]:
+    buckets: dict[str, list[CropBox]] = {}
+    for box in all_crop_boxes(
+        canvas_width=canvas_width,
+        canvas_height=canvas_height,
+        tile_width=tile_width,
+        tile_height=tile_height,
+    ):
+        scaled = scale_crop_box(box, render_scale)
+        image_hash = _image_sha256(crop_image(full_image, scaled))
+        buckets.setdefault(image_hash, []).append(box)
+
+    if len(buckets) < n_agents:
+        raise ValueError(
+            "require_distinct_crop_images=True but fewer distinct crop images "
+            f"are available than agents: distinct={len(buckets)}, N={n_agents}"
+        )
+
+    hashes = sorted(buckets)
+    trials = max(int(search_trials), 1)
+    best_selection: list[CropBox] | None = None
+    best_distance = float("inf")
+    for _ in range(trials):
+        selected_hashes = rng.sample(hashes, n_agents)
+        selected = [rng.choice(buckets[image_hash]) for image_hash in selected_hashes]
+        reindexed = [
+            CropBox(
+                crop_index=agent_id,
+                top=box.top,
+                left=box.left,
+                height=box.height,
+                width=box.width,
+            )
+            for agent_id, box in enumerate(selected)
+        ]
+        if target_overlap is None:
+            return reindexed
+        overlap = mean_pairwise_overlap(reindexed)
+        distance = abs(float(overlap) - float(target_overlap))
+        if distance < best_distance:
+            best_distance = distance
+            best_selection = reindexed
+            if distance <= 1e-9:
+                break
+    assert best_selection is not None
+    return best_selection
 
 
 def _resolve_agent_models(config: FlagGameConfig) -> list[str]:
@@ -266,6 +337,7 @@ def _build_agent_backends(
             continue
         backend_cache[model] = build_backend(
             backend_name=config.backend,
+            reasoning_effort=config.reasoning_effort,
             model=model,
             temperature=config.temperature,
             top_p=config.top_p,
@@ -277,6 +349,8 @@ def _build_agent_backends(
             prompt_social_susceptibility=config.prompt_social_susceptibility,
             prompt_style=config.prompt_style,
             country_lookup=country_lookup,
+            activation_dir=out_dir / "activations",
+            activation_config=config.activation_capture.model_dump(),
         )
     return [backend_cache[model] for model in agent_models]
 
@@ -427,8 +501,6 @@ def run_flag_game_experiment(
         search_trials=config.overlap_search_trials,
         overlap_mode=config.observation_overlap_mode,
     )
-    actual_overlap = mean_pairwise_overlap(assignments)
-    assignment_position_counts = Counter((box.top, box.left, box.height, box.width) for box in assignments)
     if compute_crop_diagnostics and not use_fast_crop_diagnostics:
         compatibility_cache = build_crop_compatibility_cache(
             pool,
@@ -456,8 +528,26 @@ def run_flag_game_experiment(
             "diagnostic": engineered_diagnostic,
         }
 
+    if config.require_distinct_crop_images and config.engineered_crop_agent_id is None:
+        assignments = _sample_distinct_image_crops(
+            full_image=full_image,
+            canvas_width=config.canvas_width,
+            canvas_height=config.canvas_height,
+            tile_width=config.tile_width,
+            tile_height=config.tile_height,
+            render_scale=config.render_scale,
+            n_agents=config.N,
+            rng=rng,
+            target_overlap=config.observation_overlap,
+            search_trials=config.overlap_search_trials,
+        )
+
+    actual_overlap = mean_pairwise_overlap(assignments)
+    assignment_position_counts = Counter((box.top, box.left, box.height, box.width) for box in assignments)
     scaled_assignments = [scale_crop_box(box, config.render_scale) for box in assignments]
     crop_images = [crop_image(full_image, box) for box in scaled_assignments]
+    crop_image_hashes = [_image_sha256(image) for image in crop_images]
+    crop_image_counts = Counter(crop_image_hashes)
 
     if config.output.save_crop_images:
         save_png(out_dir / "artifacts" / "truth_flag.png", full_image)
@@ -486,6 +576,8 @@ def run_flag_game_experiment(
                     "agent_id": agent_id,
                     "model": agent_models[agent_id],
                     "truth_country": truth_flag.country,
+                    "crop_image_sha256": crop_image_hashes[agent_id],
+                    "crop_image_duplicate_count": crop_image_counts[crop_image_hashes[agent_id]],
                     "truth_compatible": truth_flag.country in diagnostic["compatible_countries"],
                     **diagnostic,
                 }
@@ -506,6 +598,7 @@ def run_flag_game_experiment(
 
     interaction_rows: list[dict[str, Any]] = []
     probe_rows: list[dict[str, Any]] = []
+    memory_snapshot_rows: list[dict[str, Any]] = []
     probe_executor = ThreadPoolExecutor(max_workers=config.probe_workers) if config.probe_workers > 1 else None
     stopped_early = False
     early_stop_country: str | None = None
@@ -513,6 +606,8 @@ def run_flag_game_experiment(
 
     def run_probe(t: int) -> tuple[pd.DataFrame | None, bool, str | None]:
         memory_snapshots = [list(memories[agent_id]) for agent_id in range(config.N)]
+        if config.output.include_memory_snapshots:
+            memory_snapshot_rows.extend({"t": t, "agent_id": i, "memory_lines": lines} for i, lines in enumerate(memory_snapshots))
 
         def _probe_one(agent_id: int) -> dict[str, Any]:
             backend = agent_backends[agent_id]
@@ -523,6 +618,24 @@ def run_flag_game_experiment(
                     prepared_crop=prepared_crops[agent_id],
                     memory_lines=memory_snapshots[agent_id],
                     m=probe_m,
+                    call_metadata={
+                        "call_type": "probe",
+                        "t": t,
+                        "agent_id": agent_id,
+                        "model": agent_models[agent_id],
+                        "m": probe_m,
+                        "truth_country": truth_flag.country,
+                        "countries": countries,
+                        "crop_path": str(out_dir / "artifacts" / f"agent_{agent_id:02d}_crop.png")
+                        if config.output.save_crop_images
+                        else None,
+                        "crop_box": assignments[agent_id].to_dict(),
+                        "pixel_crop_box": scaled_assignments[agent_id].to_dict(),
+                        "crop_diagnostic": crop_diagnostics[agent_id]
+                        if agent_id < len(crop_diagnostics)
+                        else None,
+                        "memory_line_count": len(memory_snapshots[agent_id]),
+                    },
                 )
                 if isinstance(message, str):
                     message = InteractionMessage(country=message)
@@ -569,10 +682,11 @@ def run_flag_game_experiment(
             )
         if config.output.make_plots and not SKIP_PLOTS and partial_df is not None:
             plot_country_share_trajectories(partial_df, out_dir)
-        should_stop, stop_country = _has_stable_full_consensus(
+        should_stop, stop_country = _has_stable_consensus(
             partial_df if partial_df is not None else pd.DataFrame(),
             config.early_stop_probe_window,
             config.N,
+            1.0,
         )
         return partial_df, should_stop, stop_country
 
@@ -599,6 +713,28 @@ def run_flag_game_experiment(
                     prepared_crop=prepared_crops[speaker_id],
                     memory_lines=list(memories[speaker_id]),
                     m=config.interaction_m,
+                    call_metadata={
+                        "call_type": "interaction",
+                        "t": t,
+                        "agent_id": speaker_id,
+                        "speaker_id": speaker_id,
+                        "listener_id": listener_id,
+                        "speaker_model": agent_models[speaker_id],
+                        "listener_model": agent_models[listener_id],
+                        "model": agent_models[speaker_id],
+                        "m": config.interaction_m,
+                        "truth_country": truth_flag.country,
+                        "countries": countries,
+                        "crop_path": str(out_dir / "artifacts" / f"agent_{speaker_id:02d}_crop.png")
+                        if config.output.save_crop_images
+                        else None,
+                        "crop_box": assignments[speaker_id].to_dict(),
+                        "pixel_crop_box": scaled_assignments[speaker_id].to_dict(),
+                        "crop_diagnostic": crop_diagnostics[speaker_id]
+                        if speaker_id < len(crop_diagnostics)
+                        else None,
+                        "memory_line_count": len(memories[speaker_id]),
+                    },
                 )
             except ParseError as exc:
                 interaction_rows.append(
@@ -690,15 +826,22 @@ def run_flag_game_experiment(
             "prompt_style": config.prompt_style,
             "render_scale": config.render_scale,
             "image_detail": config.image_detail,
+            "activation_capture": config.activation_capture.model_dump(),
             "observation_overlap_target": config.observation_overlap,
             "observation_overlap_mode": config.observation_overlap_mode,
             "observation_overlap_realized": actual_overlap,
+            "require_distinct_crop_images": config.require_distinct_crop_images,
             "distinct_crop_location_count": len(assignment_position_counts),
             "max_agents_per_crop_location": max(assignment_position_counts.values())
             if assignment_position_counts
             else 0,
             "duplicate_crop_location_count": sum(
                 count - 1 for count in assignment_position_counts.values() if count > 1
+            ),
+            "distinct_crop_image_count": len(crop_image_counts),
+            "max_agents_per_crop_image": max(crop_image_counts.values()) if crop_image_counts else 0,
+            "duplicate_crop_image_count": sum(
+                count - 1 for count in crop_image_counts.values() if count > 1
             ),
             "speaker_weights": config.speaker_weights,
             "engineered_crop_agent_id": config.engineered_crop_agent_id,
@@ -727,6 +870,8 @@ def run_flag_game_experiment(
 
     _write_jsonl(out_dir / "interactions.jsonl", interaction_rows)
     _write_jsonl(out_dir / "probes.jsonl", probe_rows)
+    if config.output.include_memory_snapshots:
+        _write_jsonl(out_dir / "memory_snapshots.jsonl", memory_snapshot_rows)
     per_round_df.to_csv(out_dir / "per_round.csv", index=False)
     t0_probe_df.to_csv(out_dir / "t0_probe_diagnostics.csv", index=False)
     with open(out_dir / "summary.json", "w") as handle:
@@ -751,18 +896,25 @@ def run_flag_game_experiment(
                 "canvas": {"width": config.canvas_width, "height": config.canvas_height},
                 "render": {"scale": config.render_scale, "width": render_width, "height": render_height},
                 "image_detail": config.image_detail,
+                "activation_capture": config.activation_capture.model_dump(),
                 "social_susceptibility": config.social_susceptibility,
                 "prompt_social_susceptibility": config.prompt_social_susceptibility,
                 "prompt_style": config.prompt_style,
                 "observation_overlap_target": config.observation_overlap,
                 "observation_overlap_mode": config.observation_overlap_mode,
                 "observation_overlap_realized": actual_overlap,
+                "require_distinct_crop_images": config.require_distinct_crop_images,
                 "distinct_crop_location_count": len(assignment_position_counts),
                 "max_agents_per_crop_location": max(assignment_position_counts.values())
                 if assignment_position_counts
                 else 0,
                 "duplicate_crop_location_count": sum(
                     count - 1 for count in assignment_position_counts.values() if count > 1
+                ),
+                "distinct_crop_image_count": len(crop_image_counts),
+                "max_agents_per_crop_image": max(crop_image_counts.values()) if crop_image_counts else 0,
+                "duplicate_crop_image_count": sum(
+                    count - 1 for count in crop_image_counts.values() if count > 1
                 ),
                 "speaker_weights": config.speaker_weights,
                 "engineered_crop_agent_id": config.engineered_crop_agent_id,
@@ -779,11 +931,21 @@ def run_flag_game_experiment(
                     for idx, (speaker_id, listener_id) in enumerate(schedule)
                 ],
                 "assignments": [
-                    {"agent_id": idx, **box.to_dict()}
+                    {
+                        "agent_id": idx,
+                        **box.to_dict(),
+                        "crop_image_sha256": crop_image_hashes[idx],
+                        "crop_image_duplicate_count": crop_image_counts[crop_image_hashes[idx]],
+                    }
                     for idx, box in enumerate(assignments)
                 ],
                 "pixel_assignments": [
-                    {"agent_id": idx, **box.to_dict()}
+                    {
+                        "agent_id": idx,
+                        **box.to_dict(),
+                        "crop_image_sha256": crop_image_hashes[idx],
+                        "crop_image_duplicate_count": crop_image_counts[crop_image_hashes[idx]],
+                    }
                     for idx, box in enumerate(scaled_assignments)
                 ],
             },

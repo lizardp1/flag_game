@@ -1,0 +1,7 @@
+base: broadcast.yaml
+grid:
+  protocol:
+  - pairwise
+  - broadcast
+  - manager
+output_root: runs/protocols

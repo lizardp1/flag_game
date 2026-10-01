@@ -199,6 +199,8 @@ def _build_agent_backends(
             image_detail=config.image_detail,
             seed=seed,
             country_lookup=country_lookup,
+            social_susceptibility=config.social_susceptibility,
+            prompt_social_susceptibility=config.prompt_social_susceptibility,
         )
     return [backend_cache[model] for model in agent_models]
 
@@ -208,7 +210,7 @@ def _observation_line_from_row(row: dict[str, Any]) -> str:
         return json.dumps(
             {
                 "country": row["country"],
-                "reason": row.get("reason") or "",
+                **({"reason": row.get("reason") or ""} if int(row.get("m", 3)) != 1 else {}),
             },
             ensure_ascii=True,
         )
@@ -587,6 +589,8 @@ def run_org_flag_game_experiment(
             "shared_manager_memory": True,
             "H": config.H,
             "interaction_m": config.interaction_m,
+            "social_susceptibility": config.social_susceptibility,
+            "prompt_social_susceptibility": config.prompt_social_susceptibility,
             "render_scale": config.render_scale,
             "image_detail": config.image_detail,
             "observation_overlap_target": config.observation_overlap,

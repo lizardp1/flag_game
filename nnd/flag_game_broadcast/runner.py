@@ -47,8 +47,6 @@ class BroadcastRecord:
     round: int
     agent_id: int
     model: str
-    self_reported_model: str | None
-    self_report_matches_assigned: bool
     m: int
     valid: bool
     country: str | None
@@ -64,8 +62,6 @@ class InitialDecisionRecord:
     t: int
     agent_id: int
     model: str
-    self_reported_model: str | None
-    self_report_matches_assigned: bool
     m: int
     valid: bool
     country: str | None
@@ -112,8 +108,6 @@ def _broadcast_row_from_initial_decision(
             round=round_idx,
             agent_id=int(initial_row["agent_id"]),
             model=str(initial_row["model"]),
-            self_reported_model=initial_row.get("self_reported_model"),
-            self_report_matches_assigned=bool(initial_row.get("self_report_matches_assigned", False)),
             m=int(initial_row["m"]),
             valid=bool(initial_row.get("valid", False)),
             country=initial_row.get("country"),
@@ -125,10 +119,14 @@ def _broadcast_row_from_initial_decision(
     )
 
 
-def _resolve_agent_models(config: BroadcastFlagGameConfig) -> list[str]:
+def _resolve_agent_models(config: BroadcastFlagGameConfig, *, seed: int) -> list[str]:
     if config.agent_models is not None:
-        return list(config.agent_models)
-    return [config.model for _ in range(config.N)]
+        agent_models = list(config.agent_models)
+    else:
+        agent_models = [config.model for _ in range(config.N)]
+    if config.randomize_agent_model_slots and len(set(agent_models)) > 1:
+        random.Random(f"broadcast-agent-slot:{seed}:{'|'.join(agent_models)}").shuffle(agent_models)
+    return agent_models
 
 
 def _ordered_model_counts(agent_models: list[str]) -> dict[str, int]:
@@ -209,7 +207,6 @@ def _build_agent_backends(
         backend_cache[model] = build_backend(
             backend_name=config.backend,
             model=model,
-            assigned_model_identity=model,
             temperature=config.temperature,
             top_p=config.top_p,
             max_tokens=config.max_tokens,
@@ -224,15 +221,25 @@ def _build_agent_backends(
 
 
 def _broadcast_line_from_row(row: dict[str, Any]) -> str:
-    model = row.get("self_reported_model") or row.get("model")
     if bool(row.get("valid", False)) and row.get("country"):
         if row.get("reason"):
-            return (
-                f"agent {row['agent_id']} | model {model} | country {row['country']} | "
-                f"reason {row['reason']}"
-            )
-        return f"agent {row['agent_id']} | model {model} | country {row['country']}"
-    return f"agent {row['agent_id']} | model {model} | invalid broadcast"
+            return f"{row['country']} | {row['reason']}"
+        return str(row["country"])
+    return "invalid broadcast"
+
+
+def _peer_visible_broadcast_rows(
+    rows: list[dict[str, Any]],
+    *,
+    receiving_agent_id: int,
+) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if int(row["agent_id"]) != receiving_agent_id
+        and bool(row.get("valid", False))
+        and bool(row.get("country"))
+    ]
 
 
 def _majority_country(rows: list[dict[str, Any]], model_label: str) -> str | None:
@@ -241,7 +248,7 @@ def _majority_country(rows: list[dict[str, Any]], model_label: str) -> str | Non
         for row in rows
         if bool(row.get("valid", False))
         and row.get("country")
-        and (row.get("self_reported_model") or row.get("model")) == model_label
+        and row.get("model") == model_label
     )
     if not counts:
         return None
@@ -261,14 +268,14 @@ def _exclusive_country_sets(
         for row in rows
         if bool(row.get("valid", False))
         and row.get("country")
-        and (row.get("self_reported_model") or row.get("model")) == prestige_label
+        and row.get("model") == prestige_label
     }
     comparison_countries = {
         str(row["country"])
         for row in rows
         if bool(row.get("valid", False))
         and row.get("country")
-        and (row.get("self_reported_model") or row.get("model")) == comparison_label
+        and row.get("model") == comparison_label
     }
     return prestige_countries - comparison_countries, comparison_countries - prestige_countries
 
@@ -335,7 +342,7 @@ def run_broadcast_flag_game_experiment(
         for agent_id, image in enumerate(crop_images):
             save_png(out_dir / "artifacts" / f"agent_{agent_id:02d}_crop.png", image)
 
-    agent_models = _resolve_agent_models(config)
+    agent_models = _resolve_agent_models(config, seed=seed)
     compute_crop_diagnostics = True
     compatibility_cache: dict[str, set[bytes]] = {}
     use_fast_crop_diagnostics = all(
@@ -416,8 +423,6 @@ def run_broadcast_flag_game_experiment(
                     t=0,
                     agent_id=agent_id,
                     model=agent_models[agent_id],
-                    self_reported_model=statement.model_identity,
-                    self_report_matches_assigned=statement.model_identity == agent_models[agent_id],
                     m=config.interaction_m,
                     valid=True,
                     country=statement.country,
@@ -433,8 +438,6 @@ def run_broadcast_flag_game_experiment(
                     t=0,
                     agent_id=agent_id,
                     model=agent_models[agent_id],
-                    self_reported_model=None,
-                    self_report_matches_assigned=False,
                     m=config.interaction_m,
                     valid=False,
                     country=None,
@@ -469,8 +472,6 @@ def run_broadcast_flag_game_experiment(
                             round=round_idx,
                             agent_id=agent_id,
                             model=agent_models[agent_id],
-                            self_reported_model=statement.model_identity,
-                            self_report_matches_assigned=statement.model_identity == agent_models[agent_id],
                             m=config.interaction_m,
                             valid=True,
                             country=statement.country,
@@ -485,8 +486,6 @@ def run_broadcast_flag_game_experiment(
                             round=round_idx,
                             agent_id=agent_id,
                             model=agent_models[agent_id],
-                            self_reported_model=None,
-                            self_report_matches_assigned=False,
                             m=config.interaction_m,
                             valid=False,
                             country=None,
@@ -522,9 +521,10 @@ def run_broadcast_flag_game_experiment(
                 backend = agent_backends[agent_id]
                 initial_row = round_broadcast_map[agent_id]
                 initial_country = str(initial_row["country"]) if initial_row.get("country") else None
-                visible_broadcast_rows = [
-                    row for row in sorted_round_broadcast_rows if int(row["agent_id"]) != agent_id
-                ]
+                visible_broadcast_rows = _peer_visible_broadcast_rows(
+                    sorted_round_broadcast_rows,
+                    receiving_agent_id=agent_id,
+                )
                 visible_broadcast_lines = [
                     _broadcast_line_from_row(row)
                     for row in visible_broadcast_rows
@@ -544,7 +544,7 @@ def run_broadcast_flag_game_experiment(
                     )
                     influential_ids = list(decision.influential_agent_ids)
                     influential_models = [
-                        str(round_broadcast_map[idx].get("self_reported_model") or round_broadcast_map[idx]["model"])
+                        str(round_broadcast_map[idx]["model"])
                         for idx in influential_ids
                         if idx in round_broadcast_map
                     ]
@@ -563,12 +563,12 @@ def run_broadcast_flag_game_experiment(
                     final_support_prestige_count = sum(
                         1
                         for row in visible_support_rows
-                        if (row.get("self_reported_model") or row.get("model")) == config.prestige_model_label
+                        if row.get("model") == config.prestige_model_label
                     )
                     final_support_comparison_count = sum(
                         1
                         for row in visible_support_rows
-                        if (row.get("self_reported_model") or row.get("model")) == config.comparison_model_label
+                        if row.get("model") == config.comparison_model_label
                     )
                     changed_mind = decision.country != initial_country if initial_country is not None else None
                     switched_toward_prestige_majority = bool(
@@ -730,6 +730,7 @@ def run_broadcast_flag_game_experiment(
             "backend": config.backend,
             "model": config.model,
             "heterogeneous_models": len(set(agent_models)) > 1,
+            "randomize_agent_model_slots": config.randomize_agent_model_slots,
             "agent_model_signature": _agent_model_signature(agent_models),
             "n_unique_models": len(set(agent_models)),
             "prestige_model_label": config.prestige_model_label,
@@ -784,6 +785,7 @@ def run_broadcast_flag_game_experiment(
                 "fixed_truth_country": config.fixed_truth_country,
                 "backend": config.backend,
                 "default_model": config.model,
+                "randomize_agent_model_slots": config.randomize_agent_model_slots,
                 "agent_model_signature": _agent_model_signature(agent_models),
                 "agent_models": [{"agent_id": idx, "model": model} for idx, model in enumerate(agent_models)],
                 "prestige_model_label": config.prestige_model_label,

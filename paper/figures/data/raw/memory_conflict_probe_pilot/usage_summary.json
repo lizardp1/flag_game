@@ -1,0 +1,20 @@
+{
+  "gpt-4o": {
+    "model": "gpt-4o",
+    "api_call_count": 216,
+    "prompt_tokens": 124530,
+    "completion_tokens": 3217,
+    "total_tokens": 127747,
+    "estimated_cost_usd": 0.343495,
+    "pricing_known": true
+  },
+  "gpt-5.4": {
+    "model": "gpt-5.4",
+    "api_call_count": 216,
+    "prompt_tokens": 74850,
+    "completion_tokens": 5590,
+    "total_tokens": 80440,
+    "estimated_cost_usd": 0.270975,
+    "pricing_known": true
+  }
+}

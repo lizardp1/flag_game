@@ -1,0 +1,23 @@
+protocol: broadcast
+backend: scripted
+N: 8
+composition:
+  gpt-4o: 4
+  gpt-5.4-2026-03-05: 4
+social_evidence_alpha: 0.5
+social_guidance_enabled: false
+message_bandwidth: 3
+memory_capacity: 8
+rounds: 10
+seeds:
+- 0
+randomize_model_slots: true
+country_pool: stripe_plus_real_triangle_28
+tile_width: 6
+tile_height: 4
+render_scale: 25
+image_detail: high
+consensus_threshold: 0.85
+polarization_threshold: 0.25
+early_stop_window: 0
+output_root: runs/broadcast

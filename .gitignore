@@ -40,3 +40,10 @@ dist/
 .env.local
 test/results-*.json
 
+
+.env.*
+.pytest_cache/
+.mypy_cache/
+output/
+build/
+.cache/

@@ -44,21 +44,33 @@ def _observer_block(observer_statement_lines: list[str]) -> str:
 
 
 def _observer_schema(m: int) -> str:
-    if m != 3:
-        raise ValueError("flag_game_org currently uses interaction m=3")
-    return (
-        'Output JSON exactly: '
-        '{"country":"<one allowed country>","reason":"<one sentence describing what you see>"}'
-    )
+    if m == 1:
+        return 'Output JSON exactly: {"country":"<one allowed country>"}'
+    if m == 2:
+        return 'Output JSON exactly: {"country":"<one allowed country>","reason":"<short phrase describing what you see>"}'
+    if m == 3:
+        return 'Output JSON exactly: {"country":"<one allowed country>","reason":"<one sentence describing what you see>"}'
+    raise ValueError("interaction m must be one of {1, 2, 3}")
 
 
 def _decision_schema(m: int) -> str:
-    if m != 3:
-        raise ValueError("flag_game_org currently uses interaction m=3")
-    return (
-        'Output JSON exactly: '
-        '{"country":"<one allowed country>","reason":"<one sentence>"}'
-    )
+    return _observer_schema(m).replace(" describing what you see", "")
+
+
+def social_guidance(alpha: float, *, manager: bool = False) -> str:
+    if not 0 <= alpha <= 1:
+        raise ValueError("alpha must be in [0, 1]")
+    private = "your prior decisions" if manager else "your own crop"
+    social = "current observer reports" if manager else "the manager's past decisions"
+    if alpha <= 0.2:
+        return f"Rely mostly on {private} and treat {social} as weak evidence."
+    if alpha <= 0.4:
+        return f"Give somewhat more weight to {private} than to {social}."
+    if alpha <= 0.6:
+        return f"Balance {private} and {social}."
+    if alpha <= 0.8:
+        return f"Give somewhat more weight to {social} than to {private}."
+    return f"Treat {social} as strong evidence and update readily toward them."
 
 
 def observer_statement_text(
@@ -66,6 +78,8 @@ def observer_statement_text(
     countries: list[str],
     memory_lines: list[str],
     m: int,
+    social_susceptibility: float = 0.5,
+    prompt_social_susceptibility: bool = False,
 ) -> str:
     lines = [
         "All observers are looking at private crops from the same underlying flag.",
@@ -75,8 +89,10 @@ def observer_statement_text(
         "Report your best country guess.",
         f"Allowed countries: {json.dumps(countries, ensure_ascii=True)}",
         _memory_block(memory_lines, label="Manager's country decisions"),
-        _observer_schema(m),
     ]
+    if prompt_social_susceptibility:
+        lines.append(social_guidance(social_susceptibility))
+    lines.append(_observer_schema(m))
     return "\n".join(lines)
 
 
@@ -86,6 +102,8 @@ def aggregator_decision_text(
     memory_lines: list[str],
     observer_statement_lines: list[str],
     m: int,
+    social_susceptibility: float = 0.5,
+    prompt_social_susceptibility: bool = False,
 ) -> str:
     lines = [
         "You are the manager and final decision maker.",
@@ -96,6 +114,8 @@ def aggregator_decision_text(
         "Observer JSON:",
         f"{_observer_block(observer_statement_lines)}",
     ]
+    if prompt_social_susceptibility:
+        lines.append(social_guidance(social_susceptibility, manager=True))
     lines.append(_decision_schema(m))
     return "\n".join(lines)
 

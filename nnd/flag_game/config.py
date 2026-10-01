@@ -12,10 +12,28 @@ from nnd.flag_game.catalog import COUNTRY_POOLS
 class OutputConfig(BaseModel):
     save_crop_images: bool = True
     make_plots: bool = True
+    include_memory_snapshots: bool = False
+    include_prompt_audit: bool = False
+
+
+class ActivationCaptureConfig(BaseModel):
+    enabled: bool = False
+    scope: Literal["initial_probe", "all_probes", "all_calls"] = "initial_probe"
+    layers: list[int] | None = None
+    save_full_sequence: bool = False
+    storage_dtype: Literal["float16", "bfloat16", "float32"] = "float16"
+
+    @field_validator("layers")
+    @classmethod
+    def _check_layers(cls, value: list[int] | None) -> list[int] | None:
+        if value is None:
+            return None
+        cleaned = [int(item) for item in value]
+        return cleaned or None
 
 
 class FlagGameConfig(BaseModel):
-    backend: Literal["openai", "anthropic", "scripted"] = "openai"
+    backend: Literal["openai", "anthropic", "transformers_vlm", "scripted"] = "openai"
     model: str = "gpt-4o-mini"
     agent_models: list[str] | None = None
     speaker_weights: list[float] | None = None
@@ -39,10 +57,12 @@ class FlagGameConfig(BaseModel):
         "legacy_clustered",
         "distinct_geometric",
     ] = "duplicated_redundancy"
+    require_distinct_crop_images: bool = False
     overlap_search_trials: int = 200
     engineered_crop_agent_id: int | None = None
     engineered_crop_preference: Literal["best", "worst"] | None = None
     render_scale: int = 1
+    reasoning_effort: Literal["none"] | None = None
     temperature: float = 0.2
     top_p: float = 1.0
     max_tokens: int = 200
@@ -55,6 +75,7 @@ class FlagGameConfig(BaseModel):
     seed_workers: int = 1
     condition_workers: int = 1
     output: OutputConfig = Field(default_factory=OutputConfig)
+    activation_capture: ActivationCaptureConfig = Field(default_factory=ActivationCaptureConfig)
 
     @field_validator("N")
     @classmethod

@@ -1,0 +1,10 @@
+{
+  "system": "You must output only valid JSON. No extra keys, no markdown, and no text outside the JSON object.\nYou are one player in a flag identification game.\nChoose exactly one country from the allowed countries listed in the user message.\nFollow the exact output schema given in the user message.",
+  "old_user": "All players are identifying the same underlying flag.\nYou always see the same private crop.\nTranscript memory shows messages you observed from previous interactions with other players.\nAllowed countries: [\"Armenia\", \"Austria\", \"Belgium\", \"Bulgaria\", \"Chad\", \"Cote d'Ivoire\", \"Estonia\", \"France\", \"Gabon\", \"Germany\", \"Guinea\", \"Hungary\", \"Ireland\", \"Italy\", \"Lithuania\", \"Luxembourg\", \"Mali\", \"Netherlands\", \"Nigeria\", \"Peru\", \"Russia\", \"Sierra Leone\", \"Ukraine\", \"Yemen\"]\nTranscript memory (oldest -> newest): []\nOutput JSON exactly: {\"country\":\"<one allowed country>\"}",
+  "new_user_template": "All players are identifying the same underlying flag.\nYou always see the same private crop.\nTranscript memory shows messages you observed from previous interactions with other players.\nAllowed countries: [\"TRUTH_OR_RIVAL_1\", \"TRUTH_OR_RIVAL_2\"]\nTranscript memory (oldest -> newest): []\nOutput JSON exactly: {\"country\":\"<one allowed country>\"}",
+  "image_detail": "high",
+  "response_format": {
+    "type": "json_object"
+  },
+  "actual_lists": "Each context in plan.json has its exact two-country list in original order."
+}

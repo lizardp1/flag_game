@@ -1,0 +1,20 @@
+{
+  "claude-haiku-4-5-20251001": {
+    "model": "claude-haiku-4-5-20251001",
+    "api_call_count": 677,
+    "prompt_tokens": 244735,
+    "completion_tokens": 24407,
+    "total_tokens": 269142,
+    "estimated_cost_usd": 0.36677,
+    "pricing_known": true
+  },
+  "claude-sonnet-4-6": {
+    "model": "claude-sonnet-4-6",
+    "api_call_count": 660,
+    "prompt_tokens": 235626,
+    "completion_tokens": 22896,
+    "total_tokens": 258522,
+    "estimated_cost_usd": 1.050318,
+    "pricing_known": true
+  }
+}

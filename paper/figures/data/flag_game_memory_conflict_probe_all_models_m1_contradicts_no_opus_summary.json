@@ -1,0 +1,57 @@
+{
+  "source_csv": [
+    "paper/figures/data/raw/memory_conflict_probe_pilot/results.csv",
+    "paper/figures/data/raw/memory_conflict_probe_claude/results.csv"
+  ],
+  "n_valid_trials": 2592,
+  "models": [
+    "gpt-4o",
+    "gpt-5.4",
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6"
+  ],
+  "outputs": {
+    "alignment_png": "paper/figures/generated/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment.png",
+    "alignment_pdf": "paper/figures/generated/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment.pdf",
+    "alignment_summary_csv": "paper/figures/data/flag_game_memory_conflict_probe_all_models_m1_contradicts_no_opus_alignment_summary.csv"
+  },
+  "key_rates": {
+    "gpt-4o": {
+      "other_compatible_weak_agrees_m1": 0.0,
+      "other_compatible_weak_agrees_m3": 0.0,
+      "social_overall_m1": 0.2191358024691358,
+      "social_overall_m3": 0.1728395061728395,
+      "incompatible_strong_contradicts_m1": 0.018518518518518517,
+      "incompatible_strong_contradicts_m3": 0.018518518518518517
+    },
+    "gpt-5.4": {
+      "other_compatible_weak_agrees_m1": 0.2222222222222222,
+      "other_compatible_weak_agrees_m3": 0.24074074074074073,
+      "social_overall_m1": 0.1574074074074074,
+      "social_overall_m3": 0.1111111111111111,
+      "incompatible_strong_contradicts_m1": 0.07407407407407407,
+      "incompatible_strong_contradicts_m3": 0.06481481481481481
+    },
+    "claude-haiku-4-5-20251001": {
+      "other_compatible_weak_agrees_m1": 0.009259259259259259,
+      "other_compatible_weak_agrees_m3": 0.05555555555555555,
+      "social_overall_m1": 0.4567901234567901,
+      "social_overall_m3": 0.20679012345679013,
+      "incompatible_strong_contradicts_m1": 0.009259259259259259,
+      "incompatible_strong_contradicts_m3": 0.07407407407407407
+    },
+    "claude-sonnet-4-6": {
+      "other_compatible_weak_agrees_m1": 0.0,
+      "other_compatible_weak_agrees_m3": 0.0,
+      "social_overall_m1": 0.2932098765432099,
+      "social_overall_m3": 0.16666666666666666,
+      "incompatible_strong_contradicts_m1": 0.0,
+      "incompatible_strong_contradicts_m3": 0.05555555555555555
+    }
+  },
+  "interpretation_notes": [
+    "The paper-facing alignment figure merges third-country answers into private-compatible versus incompatible outcomes.",
+    "The m=1 versus m=3 contrast is label-only social memory versus social memory with reasons.",
+    "The incompatible band should be framed as unsupported choices, not as evidence integration."
+  ]
+}

@@ -42,6 +42,8 @@ class OrgFlagGameOpenAIBackend(FlagGameOpenAIBackend):
                 countries=countries,
                 memory_lines=memory_lines,
                 m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
             ),
             crop_data_uri=prepared_crop,
             image_detail=self.image_detail,
@@ -74,6 +76,8 @@ class OrgFlagGameOpenAIBackend(FlagGameOpenAIBackend):
                 memory_lines=memory_lines,
                 observer_statement_lines=observer_statement_lines,
                 m=m,
+                social_susceptibility=self.social_susceptibility,
+                prompt_social_susceptibility=self.prompt_social_susceptibility,
             )
         )
         return self._call_with_retries(
@@ -93,6 +97,8 @@ class OrgFlagGameOpenAIBackend(FlagGameOpenAIBackend):
 
 @dataclass
 class OrgFlagGameScriptedBackend(ScriptedFlagGameBackend):
+    prompt_social_susceptibility: bool = False
+
     def observer_statement(
         self,
         *,
@@ -101,13 +107,13 @@ class OrgFlagGameScriptedBackend(ScriptedFlagGameBackend):
         memory_lines: list[str],
         m: int,
     ) -> ObserverStatement:
-        if m != 3:
-            raise ValueError("flag_game_org currently uses interaction m=3")
+        if m not in (1, 2, 3):
+            raise ValueError("interaction m must be one of {1, 2, 3}")
         scores = {country: self._country_score(country, prepared_crop, memory_lines) for country in countries}
         best_country = sorted(scores.items(), key=lambda item: (-item[1], item[0]))[0][0]
         return ObserverStatement(
             country=best_country,
-            reason=self._reason(best_country, prepared_crop, memory_lines),
+            reason="" if m == 1 else ("Crop support" if m == 2 else self._reason(best_country, prepared_crop, memory_lines)),
         )
 
     def organization_decision(
@@ -118,8 +124,8 @@ class OrgFlagGameScriptedBackend(ScriptedFlagGameBackend):
         observer_statement_lines: list[str],
         m: int,
     ) -> OrganizationDecision:
-        if m != 3:
-            raise ValueError("flag_game_org currently uses interaction m=3")
+        if m not in (1, 2, 3):
+            raise ValueError("interaction m must be one of {1, 2, 3}")
         observer_votes = _parse_observer_vote_lines(observer_statement_lines)
         vote_counts = Counter(
             payload["country"]
@@ -128,9 +134,11 @@ class OrgFlagGameScriptedBackend(ScriptedFlagGameBackend):
         )
         memory_votes = _memory_vote_counts(memory_lines)
         scores: dict[str, float] = {}
-        memory_weight = 0.5
+        # Scripted backend is a plumbing fixture, not a behavioral model.
+        memory_weight = (1.0 - self.social_susceptibility) if self.prompt_social_susceptibility else 0.5
+        report_weight = self.social_susceptibility if self.prompt_social_susceptibility else 1.0
         for country in countries:
-            scores[country] = float(vote_counts.get(country, 0))
+            scores[country] = report_weight * float(vote_counts.get(country, 0))
             if memory_votes:
                 scores[country] += memory_weight * memory_votes.get(country, 0)
         best_country = sorted(scores.items(), key=lambda item: (-item[1], item[0]))[0][0]
@@ -147,7 +155,7 @@ class OrgFlagGameScriptedBackend(ScriptedFlagGameBackend):
             reason = f"No observer majority was clear, so I chose {best_country} deterministically."
         return OrganizationDecision(
             country=best_country,
-            reason=reason,
+            reason="" if m == 1 else ("Observer support" if m == 2 else reason),
         )
 
 
@@ -189,11 +197,15 @@ def build_backend(
     image_detail: str,
     seed: int,
     country_lookup: dict[str, FlagSpec] | None = None,
+    social_susceptibility: float = 0.5,
+    prompt_social_susceptibility: bool = False,
 ) -> OrgFlagGameOpenAIBackend | OrgFlagGameScriptedBackend:
     if backend_name == "scripted":
         return OrgFlagGameScriptedBackend(
             seed=seed,
             country_lookup=country_lookup,
+            social_susceptibility=social_susceptibility,
+            prompt_social_susceptibility=prompt_social_susceptibility,
         )
     return OrgFlagGameOpenAIBackend(
         model=model,
@@ -202,4 +214,6 @@ def build_backend(
         max_tokens=max_tokens,
         debug_dir=debug_dir,
         image_detail=image_detail,
+        social_susceptibility=social_susceptibility,
+        prompt_social_susceptibility=prompt_social_susceptibility,
     )

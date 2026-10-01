@@ -1,38 +1,46 @@
-# Reproduce
+# Reproduction
 
-## Environment
+## Offline path
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+Install with `python -m pip install -e '.[dev,paper]'`. Run `python -m unittest discover -s tests -v`, then the README's figure and theory commands. Social presets use scripted inference, so no credentials are required.
+
+Use `flag-game prompts --config experiments/social/broadcast.yaml` to inspect executable prompt templates and `flag-game run ... --dry-run` to inspect resolved settings before execution.
+
+## Paid runs
+
+Store the OpenAI key only in local ignored `.env.local`, with mode 0600. Do not commit or print keys. Load it only in the shell command that needs it:
+
+```sh
+set -a; source .env.local; set +a
 ```
 
-## Baseline tests
+Before a paid rerun, make a no-inference authentication request and print only its HTTP status:
 
-```bash
-python -m unittest discover -s tests
+```sh
+python - <<'PY'
+import os, urllib.request, urllib.error
+request = urllib.request.Request('https://api.openai.com/v1/models', headers={'Authorization': 'Bearer '+os.environ['OPENAI_API_KEY']})
+try:
+    with urllib.request.urlopen(request) as response: print(response.status)
+except urllib.error.HTTPError as error:
+    print(error.code)
+PY
 ```
 
-## Final Paper Charts
+Before a large paid sweep, run a small real-model smoke trial into a fresh output root and inspect prompt examples, per-call `debug/**/calls.jsonl`, protocol logs, memory snapshots, API usage, and trial manifest.
 
-Exact final-paper run metadata is recorded in `configs/final_paper_reproduction.yaml`. It includes model IDs, API settings, trial counts, seed inventories, data sources, and figure reproduction commands. The prompt template snapshot is in `configs/final_paper_prompt_templates.md`.
-
-The final chart bundle is self-contained under `paper/final_charts/`:
-
-```bash
-cd paper/final_charts
-./scripts/rebuild_final_charts.sh
+```sh
+flag-game run --config experiments/social/broadcast.yaml --set backend=openai --set N=2 --set 'composition={gpt-4o: 2}' --set rounds=2 --set output_root=runs/openai_smoke
 ```
 
-The bundle contains final figure files in `paper/exports/figures/`, source tables in `paper/exports/data/`, slimmed run data in `results/`, and the plotting scripts in `paper/`. Full per-seed image artifact dumps are not part of the bundle; only the stimulus PNGs and compact plotted summaries needed by final panels are retained.
+Use a fresh output directory for each experiment. Plotting an existing run reuses its saved data.
 
-## Pairwise control run
+## Run products
 
-```bash
-python -m nnd.cli run --config configs/pairwise_control.yaml --out runs/pairwise_control --trials 1
-```
+Each social trial stores `experiment.json` (status, common/resolved settings, seed, source hash), `prompt_examples.json`, the engine's `trial_manifest.json`, protocol logs, summary, and API usage. OpenAI per-call audits retain messages/responses and provider-returned model IDs. Internal logs may identify models; peer-facing prompts must not.
 
-## Group-wise development status
+`--resume` skips only identical completed trials. Partial/failed data remains intact for audit; use a fresh output directory to retry. Logs are kept locally in ignored `runs/`.
 
-Group-wise helper modules exist under `nnd/groupwise/`, but full CLI integration is still pending.
+## Tested dependency environment
+
+`requirements-lock.txt` records the successful clean Python 3.10/macOS installation. For that tested dependency set, install `python -m pip install -r requirements-lock.txt` followed by `python -m pip install --no-deps -e .`. Other platforms may resolve different compatible wheels. `pyproject.toml` remains the supported dependency specification.
