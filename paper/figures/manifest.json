@@ -6,7 +6,7 @@
     {
       "id": "fig1",
       "file": "final/fig1.png",
-      "sha256": "75c1f3c1bd1e54db60cc47d71b365db99733e8386257739bfbfa3b5b28e67036",
+      "sha256": "ea06a3503e214afcf59d58abd724813c3cec79753ae14174eb7cc6c3c9d70bd9",
       "assembly": "manual composite",
       "panels": {
         "a": {
@@ -46,10 +46,17 @@
       "id": "fig3",
       "paper_figure": 3,
       "file": "final/fig3.pdf",
-      "sha256": "0ee77c46f16c861c931f8e5eebce9b02fc6368cf8a40198a12f3d276d89c6b68",
-      "assembly": "preserved vector figure extracted from supplied manuscript",
+      "sha256": "f13a0c88827c3d3f314ea5302d4b64602c8483d7a836c94c37452d17dd63603c",
+      "assembly": "Population panels regenerated from bundled GPT-4o trial records; France-Peru example artwork preserved.",
       "source": "Flag_Game_final.pdf",
-      "source_pdf_page": 6
+      "source_pdf_page": 6,
+      "preview": "final/fig3.png",
+      "preview_sha256": "ca9b80987b1f0742af69e7ee65db09a5873179077317361162842aa18f864abf",
+      "data": [
+        "data/flag_game_pairwise_n_scaling_gpt4o_runs.csv",
+        "data/flag_game_pairwise_n_scaling_main_v3_summary.json"
+      ],
+      "population_seeds": "1-41 except 31 (Armenia); 40 runs per N"
     },
     {
       "id": "fig4",
@@ -120,10 +127,12 @@
         "generated/flag_game_slot_pairwise_n_scaling_mean_ciq.svg"
       ],
       "code": [
-        "code/make_flag_game_slot_figures.py"
+        "code/make_flag_game_slot_figures.py",
+        "code/make_flag_game_n_scaling_visuals.py"
       ],
       "data": [
-        "data/flag_game_pairwise_n_scaling_main_v3_summary.csv"
+        "data/flag_game_pairwise_n_scaling_main_v3_summary.csv",
+        "data/flag_game_pairwise_n_scaling_gpt4o_runs.csv"
       ]
     },
     "broadcast_alpha_slot": {
@@ -260,7 +269,8 @@
       ],
       "data": [
         "data/flag_game_pairwise_n_scaling_main_v3_summary.json",
-        "data/flag_game_pairwise_n_scaling_empirical_ab_failure_decomposition_summary.json"
+        "data/flag_game_pairwise_n_scaling_empirical_ab_failure_decomposition_summary.json",
+        "data/flag_game_pairwise_n_scaling_gpt4o_runs.csv"
       ]
     }
   }

@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import sys
 from collections import Counter
 from itertools import combinations
 from pathlib import Path
@@ -51,6 +52,7 @@ SOURCE_ROOT = (
 )
 FIGURE_DIR = BUNDLE_ROOT / "generated"
 DATA_DIR = BUNDLE_ROOT / "data"
+BUNDLED_GPT4O_RUNS = DATA_DIR / "flag_game_pairwise_n_scaling_gpt4o_runs.csv"
 
 
 N_VALUES = [4, 8, 16, 32, 64, 128]
@@ -221,6 +223,7 @@ def save_figure(fig: plt.Figure, stem: str, *, alias_stems: tuple[str, ...] = ()
     fig.savefig(png_path, dpi=300, bbox_inches="tight")
     fig.savefig(pdf_path, bbox_inches="tight")
     fig.savefig(svg_path, bbox_inches="tight")
+    svg_path.write_text("\n".join(line.rstrip() for line in svg_path.read_text().splitlines()) + "\n")
     for alias_stem in alias_stems:
         fig.savefig(FIGURE_DIR / f"{alias_stem}.png", dpi=300, bbox_inches="tight")
         fig.savefig(FIGURE_DIR / f"{alias_stem}.pdf", bbox_inches="tight")
@@ -462,6 +465,49 @@ def seed_number(seed_name: str) -> int:
     return int(seed_name.removeprefix("seed_"))
 
 
+def refresh_bundled_population_summary() -> list[dict[str, Any]]:
+    """Recompute GPT-4o aggregates from the complete bundled trial table."""
+    with BUNDLED_GPT4O_RUNS.open(newline="") as handle:
+        seed_rows = list(csv.DictReader(handle))
+    for row in seed_rows:
+        row["N"] = int(row["N"])
+    keys = [(row["N"], seed_number(row["seed"])) for row in seed_rows]
+    expected = {(n, seed) for n in N_VALUES for seed in range(1, 42) if seed != 31}
+    if len(keys) != len(set(keys)) or set(keys) != expected:
+        raise ValueError("Bundled GPT-4o data must contain exactly 40 unique seeds at every N.")
+    if any(row["condition"] != "all_gpt_4o" for row in seed_rows):
+        raise ValueError("Unexpected model in bundled GPT-4o trial table.")
+    seed_rows.sort(key=lambda row: (row["N"], seed_number(row["seed"])))
+    json_path = DATA_DIR / f"{MAIN_V3_STEM}_summary.json"
+    csv_path = DATA_DIR / f"{MAIN_V3_STEM}_summary.csv"
+    payload = json.loads(json_path.read_text())
+    # Preserve other model series, including their original bootstrap intervals.
+    other_rows = [row for row in payload["summary_rows"] if row["condition"] != "all_gpt_4o"]
+    summary_rows = summarize_seed_rows(seed_rows) + other_rows
+    with csv_path.open(newline="") as handle:
+        fields = csv.DictReader(handle).fieldnames
+    with csv_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(summary_rows)
+    old_exclusions = payload.pop("excluded_seeds", None)
+    if old_exclusions is not None:
+        payload["legacy_other_model_exclusions"] = {"all_gpt_5_4": old_exclusions}
+    payload["source_root"] = "paper/figures/data"
+    payload["gpt4o_run_data"] = "data/flag_game_pairwise_n_scaling_gpt4o_runs.csv"
+    payload["seed_rows"] = len(seed_rows) + sum(int(row["seeds"]) for row in other_rows)
+    payload["summary_rows"] = summary_rows
+    payload["seed_count_note"] = "GPT-4o: seeds 1-41 except Armenia (31); 40 runs at every N."
+    payload["all_condition_seed_count_note"] = format_seed_count_note(summary_rows)
+    payload["bootstrap"] = {"replicates": 8000, "rng_seed": 20260428}
+    payload["version_note"] = (
+        "GPT-4o aggregates recomputed from bundled per-run data; "
+        "other model aggregates retain their original values."
+    )
+    json_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return summary_rows
+
+
 def filter_main_v3_seed_rows(seed_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     excluded = set(MAIN_V3_EXCLUDED_SEEDS)
     return [row for row in seed_rows if seed_number(str(row["seed"])) not in excluded]
@@ -585,6 +631,7 @@ def draw_main_figure(
         title="a) Collective mean accuracy",
         ylabel="Accuracy rate" if include_vote_accuracy else "Collective mean accuracy",
     )
+    axes[0].set_ylim(0.35, 0.70)
     if include_vote_accuracy:
         vote_values = np.array([lookup(summary_rows, condition, n, "final_vote_accuracy_rate") for n in N_VALUES])
         vote_lows = np.array([lookup(summary_rows, condition, n, "final_vote_accuracy_ci_low") for n in N_VALUES])
@@ -1402,6 +1449,7 @@ def draw_empirical_ab_panels(
         xlabel="Population size N",
         ymax=0.75,
     )
+    ax_population.set_ylim(0.35, 0.70)
     ax_population.set_xscale("log", base=2)
     ax_population.set_xticks(x)
     ax_population.set_xticklabels([row["label"] for row in population])
@@ -1496,7 +1544,7 @@ def draw_empirical_ab_standalone() -> tuple[Path, Path, Path]:
         json.dumps(
             {
                 "description": "Final empirical population-size and failure-decomposition panels.",
-                "source": str(DATA_DIR / "flag_game_pairwise_n_scaling_main_v3_summary.json"),
+                "source": "data/flag_game_pairwise_n_scaling_main_v3_summary.json",
                 "condition": "all_gpt_4o",
                 "rows": population,
             },
@@ -1765,6 +1813,16 @@ def draw_empirical_ab_main_text_mechanism_figure(
 
 
 def main() -> None:
+    if "--refresh-population-summary" in sys.argv:
+        refresh_bundled_population_summary()
+        return
+    if BUNDLED_GPT4O_RUNS.exists():
+        summary_rows = refresh_bundled_population_summary()
+        draw_main_figure(summary_rows, stem=MAIN_V3_STEM)
+        for path in draw_empirical_ab_standalone():
+            print(f"Wrote {path}")
+        return
+
     if os.environ.get("FINAL_CHARTS_DERIVED_ONLY") == "1":
         for path in draw_empirical_ab_standalone():
             print(f"Wrote {path}")
