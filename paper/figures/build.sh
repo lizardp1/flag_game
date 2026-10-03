@@ -6,6 +6,8 @@ export MPLCONFIGDIR="${TMPDIR:-/tmp}/flag-game-mplconfig"
 export XDG_CACHE_HOME="${TMPDIR:-/tmp}/flag-game-cache"
 mkdir -p "$MPLCONFIGDIR" "$XDG_CACHE_HOME" "$FIGURE_ROOT/generated" "$FIGURE_ROOT/data"
 
+python3 "$FIGURE_ROOT/code/make_flag_game_n_scaling_visuals.py" --refresh-population-summary
+
 python3 "$FIGURE_ROOT/code/make_flag_game_slot_figures.py"
 
 python3 "$FIGURE_ROOT/code/make_flag_broadcast_visuals.py"

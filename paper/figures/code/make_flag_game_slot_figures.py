@@ -264,6 +264,8 @@ def save(fig: plt.Figure, stem: str) -> list[Path]:
     paths = [FIGURE_DIR / f"{stem}.{ext}" for ext in ("png", "pdf", "svg")]
     for path in paths:
         fig.savefig(path, bbox_inches="tight", pad_inches=0.035)
+        if path.suffix == ".svg" and stem == SLOT_STEMS["pairwise_n_scaling"]:
+            path.write_text("\n".join(line.rstrip() for line in path.read_text().splitlines()) + "\n")
     plt.close(fig)
     return paths
 
@@ -295,7 +297,7 @@ def plot_pairwise_n_scaling(
     ax.set_xticks(x)
     ax.set_xticklabels([str(int(v)) for v in x])
     ax.set_xlabel("Population size")
-    style_axis(ax, y_min=0.35, y_max=0.75)
+    style_axis(ax, y_min=0.35, y_max=0.70)
     ax.margins(x=0.04)
     fig.subplots_adjust(left=0.17, right=0.985, top=0.965, bottom=0.24)
     return save(fig, stem)
