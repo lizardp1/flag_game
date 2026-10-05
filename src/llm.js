@@ -9,12 +9,15 @@ const SYSTEM_PROMPT =
 
 export const PROVIDERS = {
   openai: { label: 'OpenAI', placeholder: 'sk-proj-...' },
+  anthropic: { label: 'Claude', placeholder: 'sk-ant-...' },
 }
 
 export const MODELS = [
   { id: 'gpt-4o',       provider: 'openai', label: 'gpt-4o',       group: 'main', short: '4o',   color: '#5b86c4' },
   { id: 'gpt-5.4',      provider: 'openai', label: 'gpt-5.4',      group: 'main', short: '5.4',  color: '#d4a94b' },
+  { id: 'claude-sonnet-4-6', provider: 'anthropic', label: 'claude-sonnet-4-6', group: 'main', short: 's46', color: '#c2683e' },
   { id: 'gpt-4.1-mini', provider: 'openai', label: 'gpt-4.1-mini', group: 'fast', short: '4.1m', color: '#6aa6d4' },
+  { id: 'claude-haiku-4-5', provider: 'anthropic', label: 'claude-haiku-4-5', group: 'fast', short: 'h45', color: '#d9a878' },
 ]
 
 const MODEL_BY_ID = Object.fromEntries(MODELS.map(m => [m.id, m]))
@@ -160,6 +163,36 @@ function buildOpenAIRequest(model, turns) {
   return body
 }
 
+function imageSource(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+  if (!match) throw new Error('Expected a base64 image data URL')
+  return { type: 'base64', media_type: match[1], data: match[2] }
+}
+
+function buildAnthropicRequest(model, turns) {
+  const messages = turns.map(turn => {
+    if (turn.role === 'assistant') return { role: 'assistant', content: turn.text }
+
+    const content = []
+    if (turn.image) content.push({ type: 'image', source: imageSource(turn.image) })
+    content.push({ type: 'text', text: turn.text })
+    return { role: 'user', content }
+  })
+
+  return { model, max_tokens: 500, system: SYSTEM_PROMPT, messages }
+}
+
+function responseText(provider, data) {
+  if (provider === 'anthropic') {
+    return (data.content || [])
+      .filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('')
+      .trim()
+  }
+  return (data.choices?.[0]?.message?.content || '').trim()
+}
+
 export async function llmInteraction({
   cropDataUrl,
   memoryLines = [],
@@ -169,14 +202,17 @@ export async function llmInteraction({
   signal,
   maxRetries = 2,
 }) {
-  if (!MODEL_BY_ID[model]) throw new Error(`Unknown model: ${model}`)
+  const metadata = MODEL_BY_ID[model]
+  if (!metadata) throw new Error(`Unknown model: ${model}`)
 
   const text = userPrompt({ memoryLines, m })
   const turns = [{ role: 'user', text, image: cropDataUrl }]
 
   let lastErr = null
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const body = buildOpenAIRequest(model, turns)
+    const body = metadata.provider === 'anthropic'
+      ? buildAnthropicRequest(model, turns)
+      : buildOpenAIRequest(model, turns)
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(new Error('Request timed out after 45s')), 45000)
     const onCallerAbort = () => ctl.abort(signal?.reason)
@@ -204,14 +240,14 @@ export async function llmInteraction({
       const errText = await res.text().catch(() => '')
       const transient = res.status === 429 || res.status >= 500
       if (transient && attempt < maxRetries) {
-        lastErr = new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+        lastErr = new Error(`${PROVIDERS[metadata.provider].label} ${res.status}: ${errText.slice(0, 200)}`)
         await new Promise(r => setTimeout(r, 400 * Math.pow(2, attempt) + Math.random() * 200))
         continue
       }
-      throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+      throw new Error(`${PROVIDERS[metadata.provider].label} ${res.status}: ${errText.slice(0, 200)}`)
     }
     const data = await res.json()
-    const raw = (data.choices?.[0]?.message?.content || '').trim()
+    const raw = responseText(metadata.provider, data)
 
     try {
       return parseResponse(raw, catalog, m)
