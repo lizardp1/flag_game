@@ -33,3 +33,23 @@ class OpenAISamplingTests(unittest.TestCase):
                     self.assertNotIn('reasoning_effort', args)
                 else:
                     self.assertEqual(args['reasoning_effort'], 'none')
+
+            backend.model = 'gpt-6-astra'
+            backend.reasoning_effort = 'low'
+            backend.temperature = None
+            backend.top_p = None
+            backend._call([])
+            args = create.call_args.kwargs
+            self.assertNotIn('temperature', args)
+            self.assertNotIn('top_p', args)
+            self.assertEqual(args['reasoning_effort'], 'low')
+
+    def test_astra_config(self):
+        from nnd.experiment_cli import Experiment
+        kwargs = dict(backend='openai', protocol='pairwise', N=4, composition={'gpt-6-astra':4})
+        with self.assertRaises(ValueError): Experiment(**kwargs)
+        with self.assertRaises(ValueError): Experiment(**kwargs, temperature=None, top_p=None, reasoning_effort='none')
+        cfg = Experiment(**kwargs, temperature=None, top_p=None, reasoning_effort='low').resolve(3)
+        self.assertIsNone(cfg.temperature)
+        self.assertIsNone(cfg.top_p)
+        self.assertEqual(cfg.reasoning_effort, 'low')

@@ -40,9 +40,9 @@ class Experiment(BaseModel):
     tile_height: int = 4
     render_scale: int = Field(default=25, ge=1)
     image_detail: Literal["auto", "low", "high", "original"] = "high"
-    reasoning_effort: Literal["none"] | None = None
-    temperature: float = 0.2
-    top_p: float = 1.0
+    reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] | None = None
+    temperature: float | None = 0.2
+    top_p: float | None = 1.0
     max_tokens: int = Field(default=250, ge=1)
     consensus_threshold: float = Field(default=0.85, gt=0, le=1)
     polarization_threshold: float = Field(default=0.25, gt=0, le=1)
@@ -69,6 +69,11 @@ class Experiment(BaseModel):
             raise ValueError("Anthropic is currently supported by pairwise/probes only")
         if self.reasoning_effort is not None and (self.protocol != "pairwise" or self.backend != "openai"):
             raise ValueError("reasoning_effort is supported by OpenAI pairwise runs only")
+        if (self.temperature is None or self.top_p is None) and (self.protocol != "pairwise" or self.backend != "openai"):
+            raise ValueError("Omitting sampling parameters is supported by OpenAI pairwise runs only")
+        if any(m.startswith("gpt-6-astra") for m in self.composition):
+            if self.reasoning_effort == "none" or self.temperature is not None or self.top_p is not None:
+                raise ValueError("GPT-6 Astra requires reasoning and temperature=null, top_p=null")
         if self.probe_every is not None and self.protocol != "pairwise":
             raise ValueError("probe_every applies only to pairwise")
         models = list(self.composition) + ([self.manager_model] if self.protocol == "manager" else [])

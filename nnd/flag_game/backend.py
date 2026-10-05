@@ -49,8 +49,8 @@ def _env_flag(name: str, default: bool) -> bool:
 @dataclass
 class FlagGameOpenAIBackend:
     model: str
-    temperature: float
-    top_p: float
+    temperature: float | None
+    top_p: float | None
     max_tokens: int
     debug_dir: Path
     image_detail: str = "original"
@@ -170,8 +170,8 @@ class FlagGameOpenAIBackend:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=self.temperature,
-            top_p=self.top_p,
+            **({"temperature": self.temperature} if self.temperature is not None else {}),
+            **({"top_p": self.top_p} if self.top_p is not None else {}),
             max_completion_tokens=self.max_tokens,
             response_format={"type": "json_object"},
             **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort is not None else {}),
