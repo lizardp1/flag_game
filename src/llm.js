@@ -9,22 +9,30 @@ const SYSTEM_PROMPT =
 
 export const PROVIDERS = {
   openai: { label: 'OpenAI', placeholder: 'sk-proj-...' },
+  anthropic: { label: 'Claude', placeholder: 'sk-ant-...' },
 }
 
 export const MODELS = [
   { id: 'gpt-4o',       provider: 'openai', label: 'gpt-4o',       group: 'main', short: '4o',   color: '#5b86c4' },
   { id: 'gpt-5.4',      provider: 'openai', label: 'gpt-5.4',      group: 'main', short: '5.4',  color: '#d4a94b' },
+  { id: 'claude-sonnet-4-6', provider: 'anthropic', label: 'claude-sonnet-4-6', group: 'main', short: 's46', color: '#c2683e' },
   { id: 'gpt-4.1-mini', provider: 'openai', label: 'gpt-4.1-mini', group: 'fast', short: '4.1m', color: '#6aa6d4' },
+  { id: 'claude-haiku-4-5', provider: 'anthropic', label: 'claude-haiku-4-5', group: 'fast', short: 'h45', color: '#d9a878' },
 ]
 
 const MODEL_BY_ID = Object.fromEntries(MODELS.map(m => [m.id, m]))
 
-export function anyKey() {
-  return true
+export function anyKey(keys) {
+  return !!(keys && (keys.openai || keys.anthropic))
 }
 
-export function availableModels() {
+export function availableModels(keys) {
   return MODELS
+}
+
+export function hasModelKey(model, keys) {
+  const definition = MODEL_BY_ID[model]
+  return !!(definition && keys?.[definition.provider])
 }
 
 export function modelMeta(id) {
@@ -142,52 +150,107 @@ function parseResponse(raw, catalog, m) {
   return { country: matched, clue, reason, memoryLine }
 }
 
-function buildOpenAIRequest(model, turns) {
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }]
-  for (const t of turns) {
-    if (t.role === 'user') {
-      const content = [{ type: 'text', text: t.text }]
-      if (t.image) content.push({ type: 'image_url', image_url: { url: t.image, detail: 'low' } })
-      messages.push({ role: 'user', content })
-    } else {
-      messages.push({ role: 'assistant', content: t.text })
-    }
-  }
-  const isReasoning = /^gpt-5(\.|-|$)/.test(model)
-  const body = { model, messages, max_completion_tokens: isReasoning ? 1500 : 500 }
-  if (isReasoning) body.reasoning_effort = 'low'
-  if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
-  return body
+function dataUrlBase64(url) {
+  const comma = url.indexOf(',')
+  return comma >= 0 ? url.slice(comma + 1) : url
+}
+
+function dataUrlMediaType(url) {
+  const match = url.match(/^data:([^;]+)/)
+  return match ? match[1] : 'image/png'
+}
+
+const ADAPTERS = {
+  openai: {
+    build(model, key, turns) {
+      const messages = [{ role: 'system', content: SYSTEM_PROMPT }]
+      for (const turn of turns) {
+        if (turn.role === 'user') {
+          const content = [{ type: 'text', text: turn.text }]
+          if (turn.image) content.push({ type: 'image_url', image_url: { url: turn.image, detail: 'low' } })
+          messages.push({ role: 'user', content })
+        } else {
+          messages.push({ role: 'assistant', content: turn.text })
+        }
+      }
+      const isReasoning = /^gpt-5(\.|-|$)/.test(model)
+      const body = { model, messages, max_completion_tokens: isReasoning ? 1500 : 500 }
+      if (isReasoning) body.reasoning_effort = 'low'
+      if (!isReasoning && model !== 'gpt-4.1-mini') body.response_format = { type: 'json_object' }
+      return {
+        url: 'https://api.openai.com/v1/chat/completions',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body,
+      }
+    },
+    read: data => (data.choices?.[0]?.message?.content || '').trim(),
+  },
+  anthropic: {
+    build(model, key, turns) {
+      const messages = turns.map(turn => {
+        if (turn.role === 'assistant') return { role: 'assistant', content: turn.text }
+        const content = []
+        if (turn.image) {
+          content.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: dataUrlMediaType(turn.image),
+              data: dataUrlBase64(turn.image),
+            },
+          })
+        }
+        content.push({ type: 'text', text: turn.text })
+        return { role: 'user', content }
+      })
+      return {
+        url: 'https://api.anthropic.com/v1/messages',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: { model, max_tokens: 500, system: SYSTEM_PROMPT, messages },
+      }
+    },
+    read: data => (data.content || []).filter(part => part.type === 'text').map(part => part.text).join('').trim(),
+  },
 }
 
 export async function llmInteraction({
   cropDataUrl,
   memoryLines = [],
   model,
+  keys,
   m = 3,
   catalog,
   signal,
   maxRetries = 2,
 }) {
-  if (!MODEL_BY_ID[model]) throw new Error(`Unknown model: ${model}`)
+  const definition = MODEL_BY_ID[model]
+  if (!definition) throw new Error(`Unknown model: ${model}`)
+  const key = keys?.[definition.provider]
+  if (!key) throw new Error(`${PROVIDERS[definition.provider].label} API key required for ${model}.`)
+  const adapter = ADAPTERS[definition.provider]
 
   const text = userPrompt({ memoryLines, m })
   const turns = [{ role: 'user', text, image: cropDataUrl }]
 
   let lastErr = null
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const body = buildOpenAIRequest(model, turns)
+    const request = adapter.build(model, key, turns)
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(new Error('Request timed out after 45s')), 45000)
     const onCallerAbort = () => ctl.abort(signal?.reason)
     if (signal) signal.addEventListener('abort', onCallerAbort, { once: true })
     let res
     try {
-      res = await fetch('/api/chat', {
+      res = await fetch(request.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: request.headers,
         signal: ctl.signal,
-        body: JSON.stringify(body),
+        body: JSON.stringify(request.body),
       })
     } catch (e) {
       clearTimeout(timer)
@@ -204,14 +267,14 @@ export async function llmInteraction({
       const errText = await res.text().catch(() => '')
       const transient = res.status === 429 || res.status >= 500
       if (transient && attempt < maxRetries) {
-        lastErr = new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+        lastErr = new Error(`${PROVIDERS[definition.provider].label} ${res.status}: ${errText.slice(0, 200)}`)
         await new Promise(r => setTimeout(r, 400 * Math.pow(2, attempt) + Math.random() * 200))
         continue
       }
-      throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`)
+      throw new Error(`${PROVIDERS[definition.provider].label} ${res.status}: ${errText.slice(0, 200)}`)
     }
     const data = await res.json()
-    const raw = (data.choices?.[0]?.message?.content || '').trim()
+    const raw = adapter.read(data)
 
     try {
       return parseResponse(raw, catalog, m)

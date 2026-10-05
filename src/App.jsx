@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import REAL_GRIDS_RAW from './realGrids.json';
-import { rasterizeFlag, cropAgentView, llmInteraction, availableModels, anyKey, modelMeta } from './llm';
+import { rasterizeFlag, cropAgentView, llmInteraction, PROVIDERS, availableModels, anyKey, hasModelKey, modelMeta } from './llm';
 
 /* ═══════ EMBEDDED REAL FLAG SVGs (from flag-icons, optimized with svgo) ═══════ */
 const FLAG_SVG={
@@ -182,6 +182,7 @@ function genPal(n){const o=[];for(let i=0;i<n;i++){const h=(i*137.508)%360;o.pus
 /* ═══════ CONFIG ═══════ */
 const GW=24,GH=16,TW=6,TH=4;
 const MAX_A=10,H_MEM=8,ALPHA=0.5,CON_T=0.85,CON_RUNS=3,POL_T=0.25;
+const RUN_STEP_DELAY=350;
 function mkRng(seed){let s=seed|0;return()=>{s=(s*1664525+1013904223)&0x7fffffff;return s/0x7fffffff;};}
 
 /* ═══════ INTERNAL RENDERING (for agent scoring only — never displayed) ═══════ */
@@ -691,8 +692,8 @@ function OutcomePanel({shares,truthC,agents,guesses}){if(!shares)return null;con
 
 /* ═══════ MAIN ═══════ */
 function FlagGame({keys}){
-  const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[lvl,setLvl]=useState(1);const[truth,setTruth]=useState('Japan');const[agents,setAgents]=useState([]);const[model,setModel]=useState('gpt-4o');
+  const live=hasModelKey(model,keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);const nid=useRef(1);
@@ -771,7 +772,7 @@ function FlagGame({keys}){
       if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-      await new Promise(r=>setTimeout(r,25));}})();
+      await new Promise(r=>setTimeout(r,RUN_STEP_DELAY));}})();
     return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
@@ -839,13 +840,14 @@ function runStepAdv(ag,grid,rng,advTarget){if(ag.length<2)return;const si=Math.f
 function probeAllAdv(ag,grid,advTarget){return ag.map(a=>a.adv?advTarget:bestGuess(analyzeCrop(grid,a.top,a.left),a.memory,a));}
 
 function AdversarialGame({keys}){
-  const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
+  const[model,setModel]=useState('gpt-4o');
+  const live=hasModelKey(model,keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[lvl,setLvl]=useState(0);
   const[truth,setTruth]=useState(()=>{const ts=LEVELS[0].truth;return ts[Math.floor(Math.random()*ts.length)];});
   const[advTarget,setAdvTarget]=useState(()=>{const ts=LEVELS[0].truth;return ts.find(c=>c!==ts[0])||ts[0];});
   const[advReason,setAdvReason]=useState(()=>describeFlag(LEVELS[0].truth[1]||LEVELS[0].truth[0]));
   useEffect(()=>{setAdvReason(describeFlag(advTarget));},[advTarget]);
-  const[model,setModel]=useState('gpt-4o');const[agents,setAgents]=useState(()=>makeAdvAgents('gpt-4o'));
+  const[agents,setAgents]=useState(()=>makeAdvAgents('gpt-4o'));
   const[phase,setPhase]=useState('setup');const[guesses,setGuesses]=useState([]);const[allG,setAllG]=useState([]);const[traj,setTraj]=useState([]);
   const[step,setStep]=useState(0);const[pr,setPr]=useState(0);const[cons,setCons]=useState(false);const[active,setActive]=useState([]);
   const[hovIdx,setHovIdx]=useState(null);const[fShares,setFS]=useState(null);const[apiError,setApiError]=useState(null);const iRef=useRef(null);const sim=useRef(null);
@@ -931,7 +933,7 @@ function AdversarialGame({keys}){
       if(isFinal){const sh=compShares(g);s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setFS(sh);setPhase('done');return;}
       if(isProbeTick){s.pr++;const sh=compShares(g);const dp={round:s.pr};F.forEach(f=>{dp[f.c]=sh[f.c]||0;if(sh[f.c])s.ac.add(f.c);});s.traj=[...s.traj,dp];s.allG=[...s.allG,g];setGuesses([...g]);setAllG([...s.allG]);setTraj([...s.traj]);setActive([...s.ac]);setPr(s.pr);
         const mx=Math.max(...Object.values(sh));if(mx>=CON_T){s.conRuns++;if(s.conRuns>=CON_RUNS){s.done=true;if(!ctl.cancelled){setCons(true);setFS(sh);setPhase('done');}return;}}else{s.conRuns=0;}}
-      await new Promise(r=>setTimeout(r,25));}})();
+      await new Promise(r=>setTimeout(r,RUN_STEP_DELAY));}})();
     return()=>{ctl.cancelled=true;};},[phase,grid,maxT,pe,advTarget,advReason,live,keys,getCrop]);
 
   useEffect(()=>{if(phase==='done'&&!fShares&&guesses.length>0)setFS(compShares(guesses));},[phase,fShares,guesses]);
@@ -984,8 +986,8 @@ function AdversarialGame({keys}){
 /* ═══════ FIRST-PERSON GAME ═══════ */
 const FP_TOTAL_ROUNDS=8;
 function FirstPersonGame({keys}){
-  const live=anyKey(keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[model,setModel]=useState('gpt-4o');
+  const live=hasModelKey(model,keys);const avail=useMemo(()=>availableModels(keys),[keys]);
   const[lvl,setLvl]=useState(0);
   const[truth,setTruth]=useState(()=>F[0].c);
   const[playerTop,setPlayerTop]=useState(0);
@@ -1219,22 +1221,31 @@ function ResultPanel({truth,playerGuess,playerTop,playerLeft,aiAgents,aiGuesses,
 }
 
 /* ═══════ ROOT ═══════ */
-function ApiKeyBar(){
+const KEY_PROVIDERS=['openai','anthropic'];
+const KEY_FIELD_LABELS={openai:'OpenAI API key',anthropic:'Claude API key'};
+function ApiKeyBar({keys,setKeys}){
+  const[shown,setShown]=useState(false);
+  const live=anyKey(keys);
+  const set=(provider,value)=>setKeys(current=>({...current,[provider]:value.trim()}));
   return(<div style={{borderBottom:`1px solid ${T.bdr}`,background:T.pan,padding:'7px 14px'}}>
-    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,fontSize:11}}>
-      <span style={{color:'#3a8a64',fontWeight:700,whiteSpace:'nowrap'}}>● Live API mode</span>
+    <div style={{maxWidth:1400,margin:'0 auto',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:11}}>
+      <span style={{color:live?'#3a8a64':T.fnt,fontWeight:live?700:400,whiteSpace:'nowrap'}}>{live?'● Live API mode':'○ Ready to play'}</span>
+      {KEY_PROVIDERS.map(provider=>(<span key={provider} style={{display:'flex',alignItems:'center',gap:6}}>
+        <span style={{color:T.dim,whiteSpace:'nowrap'}}>{KEY_FIELD_LABELS[provider]}</span>
+        <input type={shown?'text':'password'} placeholder={PROVIDERS[provider].placeholder} value={keys[provider]} onChange={event=>set(provider,event.target.value)} style={{width:154,padding:'4px 8px',borderRadius:5,border:`1px solid ${keys[provider]?'#3a8a64':T.blt}`,background:T.card,color:T.txt,fontSize:11,fontFamily:'ui-monospace,monospace'}}/>
+        {keys[provider]&&<button onClick={()=>set(provider,'')} title={`Clear ${PROVIDERS[provider].label} key`} style={{padding:'4px 7px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:'#e87b6f',cursor:'pointer',fontSize:10}}>×</button>}
+      </span>))}
+      <button onClick={()=>setShown(value=>!value)} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.blt}`,background:T.card,color:T.mut,cursor:'pointer',fontSize:10}}>{shown?'hide':'show'}</button>
+      <span style={{color:T.fnt,fontStyle:'italic',fontSize:10}}>Saved only in this browser (localStorage).</span>
     </div>
   </div>);
 }
 
-/* Per-agent model dropdown. Hides providers without a key; falls back to the
-   scripted heuristic label when no key is set anywhere. */
+/* Models remain selectable; a missing provider key runs that choice locally. */
 function ModelPicker({keys,model,setModel,disabled,label='Next agent'}){
   const avail=availableModels(keys);
-  if(!avail.length)return(<><label style={{fontSize:10,color:T.dim}}>{label}</label>
-    <select style={{...S.sel,maxWidth:200}} disabled value="scripted"><option value="scripted">Scripted heuristic</option></select></>);
   const main=avail.filter(m=>m.group==='main'),fast=avail.filter(m=>m.group==='fast');
-  const opt=m=><option key={m.id} value={m.id}>{m.label}</option>;
+  const opt=m=><option key={m.id} value={m.id}>{m.label}{keys?.[m.provider]?'':' (scripted)'}</option>;
   return(<><label style={{fontSize:10,color:T.dim}}>{label}</label>
     <select value={model} onChange={e=>setModel(e.target.value)} style={{...S.sel,maxWidth:320}} disabled={disabled}>
       {main.length>0&&<optgroup label="Models">{main.map(opt)}</optgroup>}
@@ -1292,8 +1303,13 @@ function FlagGameSeries({keys}){
 }
 
 export default function App(){
+  const[keys,setKeys]=useState(()=>({
+    openai:localStorage.getItem('flag_game_key_openai')||localStorage.getItem('flag_game_api_key')||'',
+    anthropic:localStorage.getItem('flag_game_key_anthropic')||'',
+  }));
+  useEffect(()=>{KEY_PROVIDERS.forEach(provider=>{if(keys[provider])localStorage.setItem(`flag_game_key_${provider}`,keys[provider]);else localStorage.removeItem(`flag_game_key_${provider}`);});},[keys]);
   return(<div style={S.page}>
-    <ApiKeyBar/>
-    <FlagGameSeries/>
+    <ApiKeyBar keys={keys} setKeys={setKeys}/>
+    <FlagGameSeries keys={keys}/>
   </div>);
 }
